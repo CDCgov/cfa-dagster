@@ -4,9 +4,13 @@ from typing import TYPE_CHECKING, Optional, cast
 import dagster._check as check
 import docker
 import docker.errors
+from azure.identity import DefaultAzureCredential
+from azure.mgmt.appcontainers import ContainerAppsAPIClient
+from azure.mgmt.resource.subscriptions import SubscriptionClient
 from dagster import Field, IntSource, executor
-from dagster._annotations import beta
-from dagster._core.definitions.executor_definition import multiple_process_executor_requirements
+from dagster._core.definitions.executor_definition import (
+    multiple_process_executor_requirements,
+)
 from dagster._core.events import DagsterEvent, EngineEventData
 from dagster._core.execution.retries import RetryMode, get_retries_config
 from dagster._core.execution.tags import get_tag_concurrency_limits_config
@@ -20,20 +24,23 @@ from dagster._core.executor.step_delegating.step_handler.base import (
 )
 from dagster._core.utils import parse_env_var
 from dagster._utils.merger import merge_dicts
-from dagster_shared.serdes.utils import hash_str
-
 from dagster_docker.container_context import DockerContainerContext
-from dagster_docker.utils import DOCKER_CONFIG_SCHEMA, validate_docker_config, validate_docker_image
-from azure.identity import DefaultAzureCredential
-from azure.mgmt.appcontainers import ContainerAppsAPIClient
-from azure.mgmt.resource.subscriptions import SubscriptionClient
+from dagster_docker.utils import (
+    DOCKER_CONFIG_SCHEMA,
+    validate_docker_config,
+    validate_docker_image,
+)
+from dagster_shared.serdes.utils import hash_str
 
 
 def pretty_print(obj):
     return obj
     import json
+
     serializable_object = {
-        k: str(v) if not isinstance(v, (str, int, float, bool, list, dict)) else v
+        k: str(v)
+        if not isinstance(v, (str, int, float, bool, list, dict))
+        else v
         for k, v in vars(obj).items()
     }
 
@@ -66,7 +73,9 @@ if TYPE_CHECKING:
     requirements=multiple_process_executor_requirements(),
 )
 # @beta
-def azure_container_app_job_executor(init_context: InitExecutorContext) -> Executor:
+def azure_container_app_job_executor(
+    init_context: InitExecutorContext,
+) -> Executor:
     """Executor which launches steps as Docker containers.
 
     To use the `azure_container_app_job_executor`, set it as the `executor_def` when defining a job:
@@ -100,10 +109,14 @@ def azure_container_app_job_executor(init_context: InitExecutorContext) -> Execu
     env_vars = check.opt_list_elem(config, "env_vars", of_type=str)
     network = check.opt_str_elem(config, "network")
     networks = check.opt_list_elem(config, "networks", of_type=str)
-    container_kwargs = check.opt_dict_elem(config, "container_kwargs", key_type=str)
+    container_kwargs = check.opt_dict_elem(
+        config, "container_kwargs", key_type=str
+    )
     retries = check.dict_elem(config, "retries", key_type=str)
     max_concurrent = check.opt_int_elem(config, "max_concurrent")
-    tag_concurrency_limits = check.opt_list_elem(config, "tag_concurrency_limits")
+    tag_concurrency_limits = check.opt_list_elem(
+        config, "tag_concurrency_limits"
+    )
 
     validate_docker_config(network, networks, container_kwargs)
 
@@ -143,7 +156,10 @@ class AzureContainerAppJobStepHandler(StepHandler):
 
         # Get first subscription for logged-in credential
         first_subscription_id = (
-            SubscriptionClient(credential).subscriptions.list().next().subscription_id
+            SubscriptionClient(credential)
+            .subscriptions.list()
+            .next()
+            .subscription_id
         )
 
         self._azure_caj_client = ContainerAppsAPIClient(
@@ -189,10 +205,15 @@ class AzureContainerAppJobStepHandler(StepHandler):
         image = step_image
 
         if not image:
-            raise Exception("No docker image specified by the executor config or repository")
+            raise Exception(
+                "No docker image specified by the executor config or repository"
+            )
 
         return image
-    def _get_docker_container_context(self, step_handler_context: StepHandlerContext):
+
+    def _get_docker_container_context(
+        self, step_handler_context: StepHandlerContext
+    ):
         # This doesn't vary per step: would be good to have a hook where it can be set once
         # for the whole StepHandler but we need access to the DagsterRun for that
 
@@ -201,7 +222,9 @@ class AzureContainerAppJobStepHandler(StepHandler):
         run_launcher = step_handler_context.instance.run_launcher
         run_target = DockerContainerContext.create_for_run(
             step_handler_context.dagster_run,
-            run_launcher if isinstance(run_launcher, DockerRunLauncher) else None,
+            run_launcher
+            if isinstance(run_launcher, DockerRunLauncher)
+            else None,
         )
 
         merged_container_context = run_target.merge(self._container_context)
@@ -233,9 +256,12 @@ class AzureContainerAppJobStepHandler(StepHandler):
             step_handler_context.execute_step_args.step_keys_to_execute
         )
         step_keys_to_execute = cast(
-            "list[str]", step_handler_context.execute_step_args.step_keys_to_execute
+            "list[str]",
+            step_handler_context.execute_step_args.step_keys_to_execute,
         )
-        assert len(step_keys_to_execute) == 1, "Launching/Terminating multiple steps is not currently supported"
+        assert len(step_keys_to_execute) == 1, (
+            "Launching/Terminating multiple steps is not currently supported"
+        )
         return step_keys_to_execute[0]
 
     def _get_container_name(self, step_handler_context: StepHandlerContext):
@@ -268,8 +294,12 @@ class AzureContainerAppJobStepHandler(StepHandler):
         container_kwargs = {**container_context.container_kwargs}
         container_kwargs.pop("stop_timeout", None)
 
-        env_vars = dict([parse_env_var(env_var) for env_var in container_context.env_vars])
-        env_vars["DAGSTER_RUN_JOB_NAME"] = step_handler_context.dagster_run.job_name
+        env_vars = dict(
+            [parse_env_var(env_var) for env_var in container_context.env_vars]
+        )
+        env_vars["DAGSTER_RUN_JOB_NAME"] = (
+            step_handler_context.dagster_run.job_name
+        )
         env_vars["DAGSTER_RUN_STEP_KEY"] = step_key
 
         # Download existing job template
@@ -285,7 +315,9 @@ class AzureContainerAppJobStepHandler(StepHandler):
         print(f"container.command: '{container.command}'")
 
         job_execution = client.jobs.begin_start(
-            resource_group_name=self._resource_group, job_name=self._job_name, template=job_template
+            resource_group_name=self._resource_group,
+            job_name=self._job_name,
+            template=job_template,
         ).result()
         job_execution_id = job_execution.id.split("/").pop()
         print(f"Started container app job with id: '{job_execution_id}'")
@@ -307,22 +339,32 @@ class AzureContainerAppJobStepHandler(StepHandler):
         container_kwargs = {**container_context.container_kwargs}
         container_kwargs.pop("stop_timeout", None)
 
-        env_vars = dict([parse_env_var(env_var) for env_var in container_context.env_vars])
-        env_vars["DAGSTER_RUN_JOB_NAME"] = step_handler_context.dagster_run.job_name
+        env_vars = dict(
+            [parse_env_var(env_var) for env_var in container_context.env_vars]
+        )
+        env_vars["DAGSTER_RUN_JOB_NAME"] = (
+            step_handler_context.dagster_run.job_name
+        )
         env_vars["DAGSTER_RUN_STEP_KEY"] = step_key
 
         return client.containers.create(
             step_image,
             name=self._get_container_name(step_handler_context),
             detach=True,
-            network=container_context.networks[0] if len(container_context.networks) else None,
+            network=container_context.networks[0]
+            if len(container_context.networks)
+            else None,
             command=execute_step_args.get_command_args(),
             environment=env_vars,
             **container_kwargs,
         )
 
-    def launch_step(self, step_handler_context: StepHandlerContext) -> Iterator[DagsterEvent]:
-        container_context = self._get_docker_container_context(step_handler_context)
+    def launch_step(
+        self, step_handler_context: StepHandlerContext
+    ) -> Iterator[DagsterEvent]:
+        container_context = self._get_docker_container_context(
+            step_handler_context
+        )
 
         step_image = self._get_image(step_handler_context)
 
@@ -334,7 +376,8 @@ class AzureContainerAppJobStepHandler(StepHandler):
             self._azure_caj_client,
             container_context,
             step_image,
-            step_handler_context)
+            step_handler_context,
+        )
 
         yield DagsterEvent.step_worker_starting(
             step_handler_context.get_step_context(step_key),
@@ -344,8 +387,12 @@ class AzureContainerAppJobStepHandler(StepHandler):
             },
         )
 
-    def OLD_launch_step(self, step_handler_context: StepHandlerContext) -> Iterator[DagsterEvent]:
-        container_context = self._get_docker_container_context(step_handler_context)
+    def OLD_launch_step(
+        self, step_handler_context: StepHandlerContext
+    ) -> Iterator[DagsterEvent]:
+        container_context = self._get_docker_container_context(
+            step_handler_context
+        )
 
         client = self._get_client(container_context)
 
@@ -371,7 +418,9 @@ class AzureContainerAppJobStepHandler(StepHandler):
         step_keys_to_execute = check.not_none(
             step_handler_context.execute_step_args.step_keys_to_execute
         )
-        assert len(step_keys_to_execute) == 1, "Launching multiple steps is not currently supported"
+        assert len(step_keys_to_execute) == 1, (
+            "Launching multiple steps is not currently supported"
+        )
         step_key = self._get_step_key(step_handler_context)
 
         yield DagsterEvent.step_worker_starting(
@@ -385,7 +434,9 @@ class AzureContainerAppJobStepHandler(StepHandler):
         self._step_container_ids[step_key] = step_container.id
         step_container.start()
 
-    def check_step_health(self, step_handler_context: StepHandlerContext) -> CheckStepHealthResult:
+    def check_step_health(
+        self, step_handler_context: StepHandlerContext
+    ) -> CheckStepHealthResult:
         step_key = self._get_step_key(step_handler_context)
         job_execution_id = self._step_caj_execution_ids[step_key]
         print(f"job_execution_id: '{job_execution_id}'")
@@ -398,22 +449,24 @@ class AzureContainerAppJobStepHandler(StepHandler):
         execution = client.jobs_executions.list(
             resource_group_name=resource_group,
             job_name=job_name,
-            filter=f"Name eq '{job_execution_id}'"
+            filter=f"Name eq '{job_execution_id}'",
         ).next()  # only expecting one execution since we have the exact name
 
         # print(f"execution: '{execution}'")
         # Check status
         # TODO: try and get container exit code
-        # Status represented by enum, but property acces converts to Capital case 
+        # Status represented by enum, but property acces converts to Capital case
         # https://learn.microsoft.com/en-us/python/api/azure-mgmt-appcontainers/azure.mgmt.appcontainers.models.jobexecutionrunningstate?view=azure-python
         status = execution.status  # e.g., "Running", "Succeeded", "Failed"
         match status:
-            case ("Running" |
-                    "Succeeded" |
-                    "Processing" |
-                    "Processing" |
-                    "Stopped" |
-                    "Unknown"):
+            case (
+                "Running"
+                | "Succeeded"
+                | "Processing"
+                | "Processing"
+                | "Stopped"
+                | "Unknown"
+            ):
                 return CheckStepHealthResult.healthy()
             case "Failed" | "Degraded":
                 return CheckStepHealthResult.unhealthy(
@@ -424,12 +477,15 @@ class AzureContainerAppJobStepHandler(StepHandler):
                     reason=f"Container app execution {job_execution_id} for step {step_key} could not be found."
                 )
 
-
-    def OLD_check_step_health(self, step_handler_context: StepHandlerContext) -> CheckStepHealthResult:
+    def OLD_check_step_health(
+        self, step_handler_context: StepHandlerContext
+    ) -> CheckStepHealthResult:
         step_key = self._get_step_key(step_handler_context)
         print(f"container_id: '{self._step_container_ids[step_key]}'")
 
-        container_context = self._get_docker_container_context(step_handler_context)
+        container_context = self._get_docker_container_context(
+            step_handler_context
+        )
 
         client = self._get_client(container_context)
 
@@ -462,7 +518,9 @@ class AzureContainerAppJobStepHandler(StepHandler):
             reason=f"Container status is {container.status}. Return code is {ret_code}."
         )
 
-    def terminate_step(self, step_handler_context: StepHandlerContext) -> Iterator[DagsterEvent]:
+    def terminate_step(
+        self, step_handler_context: StepHandlerContext
+    ) -> Iterator[DagsterEvent]:
         step_key = self._get_step_key(step_handler_context)
         job_execution_id = self._step_caj_execution_ids[step_key]
         print(f"job_execution_id: '{job_execution_id}'")
@@ -478,13 +536,15 @@ class AzureContainerAppJobStepHandler(StepHandler):
     Content: "Reason: Not Found. Body: {\"error\":\"Requested job execution cfa-dagster-l70spvu not found\",\"success\":false}"
         """
         self._azure_caj_client.jobs.begin_stop_execution(
-                self._resource_group,
-                self._job_name,
-                job_execution_id)
+            self._resource_group, self._job_name, job_execution_id
+        )
 
-
-    def OLD_terminate_step(self, step_handler_context: StepHandlerContext) -> Iterator[DagsterEvent]:
-        container_context = self._get_docker_container_context(step_handler_context)
+    def OLD_terminate_step(
+        self, step_handler_context: StepHandlerContext
+    ) -> Iterator[DagsterEvent]:
+        container_context = self._get_docker_container_context(
+            step_handler_context
+        )
         # step_keys_to_execute = check.not_none(
         #     step_handler_context.execute_step_args.step_keys_to_execute
         # )

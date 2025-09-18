@@ -1,33 +1,37 @@
+import asyncio
+import json
 import os
 import shutil
-from pathlib import Path
-from typing import Union, List, Iterator, Any
 import tempfile
 from contextlib import contextmanager
-import asyncio
-import aiofiles
-import json
+from pathlib import Path
+from typing import Any, Iterator, List, Union
 
-from dagster._core.storage.upath_io_manager import UPathIOManager
-from dagster._config.pythonic_config import ConfigurableIOManager
-from dagster._core.execution.context.init import InitResourceContext
-from upath import UPath
-# from dagster._core.storage.dagster_type_storage import File, Directory
-from dagster._utils.cached_method import cached_method
-from pydantic import Field
+import aiofiles
+from azure.core.exceptions import ResourceNotFoundError
+from azure.storage.blob import BlobLeaseClient, BlobServiceClient
+from azure.storage.filedatalake import (
+    DataLakeLeaseClient,
+    DataLakeServiceClient,
+)
 from dagster import (
     InputContext,
     OutputContext,
     ResourceDependency,
-    _check as check,
     io_manager,
 )
+from dagster import (
+    _check as check,
+)
+from dagster._config.pythonic_config import ConfigurableIOManager
+from dagster._core.execution.context.init import InitResourceContext
+from dagster._core.storage.upath_io_manager import UPathIOManager
 
+# from dagster._core.storage.dagster_type_storage import File, Directory
+from dagster._utils.cached_method import cached_method
 from dagster_azure.adls2.resources import ADLS2Resource
-
-from azure.storage.filedatalake import DataLakeServiceClient, DataLakeLeaseClient
-from azure.storage.blob import BlobServiceClient, BlobLeaseClient
-from azure.core.exceptions import ResourceNotFoundError
+from pydantic import Field
+from upath import UPath
 
 
 class FileOrDirectoryADLS2IOManager(UPathIOManager):
@@ -36,27 +40,37 @@ class FileOrDirectoryADLS2IOManager(UPathIOManager):
         file_system: str,
         adls2_client: DataLakeServiceClient,
         blob_client: BlobServiceClient,
-        lease_client_constructor: Union[type[DataLakeLeaseClient], type[BlobLeaseClient]],
+        lease_client_constructor: Union[
+            type[DataLakeLeaseClient], type[BlobLeaseClient]
+        ],
         prefix: str = "dagster",
         lease_duration: int = 60,
     ):
         self.adls2_client = adls2_client
-        self.file_system_client = self.adls2_client.get_file_system_client(file_system)
+        self.file_system_client = self.adls2_client.get_file_system_client(
+            file_system
+        )
         self.blob_client = blob_client
-        self.blob_container_client = self.blob_client.get_container_client(file_system)
+        self.blob_container_client = self.blob_client.get_container_client(
+            file_system
+        )
         self.prefix = prefix
         self.lease_client_constructor = lease_client_constructor
         self.lease_duration = lease_duration
         super().__init__(base_path=UPath(self.prefix))
 
-    def get_op_output_relative_path(self, context: Union[InputContext, OutputContext]) -> UPath:
+    def get_op_output_relative_path(
+        self, context: Union[InputContext, OutputContext]
+    ) -> UPath:
         parts = context.get_identifier()
         run_id = parts[0]
         output_parts = parts[1:]
         return UPath("storage", run_id, "files", *output_parts)
 
     @contextmanager
-    def _acquire_lease(self, client: Any, is_rm: bool = False) -> Iterator[str]:
+    def _acquire_lease(
+        self, client: Any, is_rm: bool = False
+    ) -> Iterator[str]:
         lease_client = self.lease_client_constructor(client=client)
         lease_client.acquire(lease_duration=self.lease_duration)
         try:
@@ -67,7 +81,9 @@ class FileOrDirectoryADLS2IOManager(UPathIOManager):
 
     def path_exists(self, path: UPath) -> bool:
         try:
-            self.file_system_client.get_file_client(path.as_posix()).get_file_properties()
+            self.file_system_client.get_file_client(
+                path.as_posix()
+            ).get_file_properties()
             return True
         except ResourceNotFoundError:
             return False
@@ -78,25 +94,33 @@ class FileOrDirectoryADLS2IOManager(UPathIOManager):
             file_client.delete_file(lease=lease, recursive=True)
 
     async def _async_upload_file(self, local_path: Path, remote_path: UPath):
-        file_client = self.file_system_client.create_file(remote_path.as_posix())
+        file_client = self.file_system_client.create_file(
+            remote_path.as_posix()
+        )
         lease_client = self.lease_client_constructor(client=file_client)
         lease_client.acquire(lease_duration=self.lease_duration)
         try:
             with open(local_path, "rb") as f:
-                file_client.upload_data(f.read(), lease=lease_client.id, overwrite=True)
+                file_client.upload_data(
+                    f.read(), lease=lease_client.id, overwrite=True
+                )
         finally:
             lease_client.release()
         return {
             "original_path": str(local_path),
-            "blob_path": f"{remote_path.as_posix()}"
+            "blob_path": f"{remote_path.as_posix()}",
         }
 
-    def dump_to_path(self, context: OutputContext, obj: Any, path: UPath) -> None:
+    def dump_to_path(
+        self, context: OutputContext, obj: Any, path: UPath
+    ) -> None:
         if isinstance(obj, str):
             obj = Path(obj)
 
         if not isinstance(obj, (Path, list)):
-            raise TypeError("Unsupported type: must be a Path to a file, list of file Paths, or Path to a directory")
+            raise TypeError(
+                "Unsupported type: must be a Path to a file, list of file Paths, or Path to a directory"
+            )
 
         files_to_upload = []
 
@@ -104,7 +128,9 @@ class FileOrDirectoryADLS2IOManager(UPathIOManager):
             rel_path = path / obj.name
             files_to_upload.append((obj, rel_path))
 
-        elif isinstance(obj, list) and all(isinstance(p, Path) and p.is_file() for p in obj):
+        elif isinstance(obj, list) and all(
+            isinstance(p, Path) and p.is_file() for p in obj
+        ):
             for file_path in obj:
                 rel_path = path / file_path.name
                 files_to_upload.append((file_path, rel_path))
@@ -116,7 +142,9 @@ class FileOrDirectoryADLS2IOManager(UPathIOManager):
                     files_to_upload.append((file_path, rel_path))
 
         else:
-            raise TypeError("Unsupported type: must be a Path to a file, list of file Paths, or Path to a directory")
+            raise TypeError(
+                "Unsupported type: must be a Path to a file, list of file Paths, or Path to a directory"
+            )
 
         # Run uploads in parallel
         loop = asyncio.get_event_loop()
@@ -129,9 +157,13 @@ class FileOrDirectoryADLS2IOManager(UPathIOManager):
         context.log.debug(f"manifest: '{manifest_json}'\n")
 
         manifest_blob_path = path / "manifest.json"
-        file_client = self.file_system_client.create_file(manifest_blob_path.as_posix())
+        file_client = self.file_system_client.create_file(
+            manifest_blob_path.as_posix()
+        )
         with self._acquire_lease(file_client) as lease:
-            file_client.upload_data(manifest_json.encode("utf-8"), lease=lease, overwrite=True)
+            file_client.upload_data(
+                manifest_json.encode("utf-8"), lease=lease, overwrite=True
+            )
 
     async def _async_download_file(self, blob_path: str, local_path: Path):
         file_client = self.file_system_client.get_file_client(blob_path)
@@ -148,7 +180,9 @@ class FileOrDirectoryADLS2IOManager(UPathIOManager):
         local_dir.mkdir(parents=True, exist_ok=True)
 
         # Download manifest
-        file_client = self.file_system_client.get_file_client((path / "manifest.json").as_posix())
+        file_client = self.file_system_client.get_file_client(
+            (path / "manifest.json").as_posix()
+        )
         stream = file_client.download_file()
         manifest = json.loads(stream.readall())
 
@@ -165,7 +199,9 @@ class FileOrDirectoryADLS2IOManager(UPathIOManager):
 
         return local_dir
 
-    def WORKING_dump_to_path(self, context: OutputContext, obj: Any, path: UPath) -> None:
+    def WORKING_dump_to_path(
+        self, context: OutputContext, obj: Any, path: UPath
+    ) -> None:
         if self.path_exists(path):
             context.log.warning(f"Removing existing ADLS2 key: {path}")
             self.unlink(path)
@@ -188,7 +224,9 @@ class FileOrDirectoryADLS2IOManager(UPathIOManager):
         with self._acquire_lease(file_client) as lease:
             with open(zip_path, "rb") as f:
                 file_client.upload_data(f.read(), lease=lease, overwrite=True)
-            file_client.set_metadata({"original_dir_name": original_dir_name}, lease=lease)
+            file_client.set_metadata(
+                {"original_dir_name": original_dir_name}, lease=lease
+            )
 
         # Clean up temp zip
         zip_path.unlink()
@@ -196,7 +234,9 @@ class FileOrDirectoryADLS2IOManager(UPathIOManager):
 
     # WORKING!!
     # TODO: update to write to local dir instead of temp dir
-    def WORKING_load_from_path(self, context: InputContext, path: UPath) -> Path:
+    def WORKING_load_from_path(
+        self, context: InputContext, path: UPath
+    ) -> Path:
         if context.dagster_type.typing_type == type(None):
             return None
 
@@ -222,7 +262,9 @@ class FileOrDirectoryADLS2IOManager(UPathIOManager):
 
         return target_dir
 
-    def ANNOTATED_dump_to_path(self, context: OutputContext, obj: Any, path: UPath) -> None:
+    def ANNOTATED_dump_to_path(
+        self, context: OutputContext, obj: Any, path: UPath
+    ) -> None:
         if self.path_exists(path):
             context.log.warning(f"Removing existing ADLS2 key: {path}")
             self.unlink(path)
@@ -240,7 +282,9 @@ class FileOrDirectoryADLS2IOManager(UPathIOManager):
         with self._acquire_lease(file) as lease:
             file.upload_data(zipped_dir, lease=lease, overwrite=True)
 
-    def ANNOTATED_load_from_path(self, context: InputContext, path: UPath) -> Any:
+    def ANNOTATED_load_from_path(
+        self, context: InputContext, path: UPath
+    ) -> Any:
         if context.dagster_type.typing_type == type(None):
             return None
         file = self.file_system_client.get_file_client(path.as_posix())
@@ -252,13 +296,17 @@ class FileOrDirectoryADLS2IOManager(UPathIOManager):
         local_path = "TBD"
         return local_path
 
-    def OLD_dump_to_path(self, context: OutputContext, obj: Any, path: UPath) -> None:
+    def OLD_dump_to_path(
+        self, context: OutputContext, obj: Any, path: UPath
+    ) -> None:
         if isinstance(obj, str):
             obj = Path(obj)
         if isinstance(obj, Path) and obj.is_file():
             self._upload_file(obj, path)
 
-        elif isinstance(obj, list) and all(isinstance(p, Path) and p.is_file() for p in obj):
+        elif isinstance(obj, list) and all(
+            isinstance(p, Path) and p.is_file() for p in obj
+        ):
             for file_path in obj:
                 rel_path = path / file_path.name
                 self._upload_file(file_path, rel_path)
@@ -270,13 +318,17 @@ class FileOrDirectoryADLS2IOManager(UPathIOManager):
                     self._upload_file(file_path, rel_path)
 
         else:
-            raise TypeError("Unsupported type: must be a Path to a file, list of file Paths, or Path to a directory")
+            raise TypeError(
+                "Unsupported type: must be a Path to a file, list of file Paths, or Path to a directory"
+            )
         # update this code to use async to upload files in parallel to a configured path in blob
         # create a list with this format [{"original_path": "relative/path/to/file.extension", "blob_path": "azure_uri/to/file"}]
         # and write that list to a file that will be uploaded to the original path: UPath argument
 
     def _upload_file(self, local_path: Path, remote_path: UPath) -> None:
-        file_client = self.file_system_client.create_file(remote_path.as_posix())
+        file_client = self.file_system_client.create_file(
+            remote_path.as_posix()
+        )
         with self._acquire_lease(file_client) as lease:
             with open(local_path, "rb") as f:
                 file_client.upload_data(f.read(), lease=lease, overwrite=True)
@@ -285,13 +337,19 @@ class FileOrDirectoryADLS2IOManager(UPathIOManager):
         local_dir = Path(f"/tmp/{path.name}")
         local_dir.mkdir(parents=True, exist_ok=True)
 
-        paths = self.file_system_client.get_paths(path=path.as_posix(), recursive=True)
+        paths = self.file_system_client.get_paths(
+            path=path.as_posix(), recursive=True
+        )
         for p in paths:
             if not p.is_directory:
                 remote_file_path = p.name
-                local_file_path = local_dir / Path(remote_file_path).relative_to(path.as_posix())
+                local_file_path = local_dir / Path(
+                    remote_file_path
+                ).relative_to(path.as_posix())
                 local_file_path.parent.mkdir(parents=True, exist_ok=True)
-                file_client = self.file_system_client.get_file_client(remote_file_path)
+                file_client = self.file_system_client.get_file_client(
+                    remote_file_path
+                )
                 stream = file_client.download_file()
                 with open(local_file_path, "wb") as f:
                     for chunk in stream.chunks():
@@ -379,7 +437,8 @@ class ADLS2FileIOManager(ConfigurableIOManager):
     adls2: ResourceDependency[ADLS2Resource]
     adls2_file_system: str = Field(description="ADLS Gen2 file system name.")
     adls2_prefix: str = Field(
-        default="dagster", description="ADLS Gen2 file system prefix to write to."
+        default="dagster",
+        description="ADLS Gen2 file system prefix to write to.",
     )
     lease_duration: int = Field(
         default=60,
@@ -414,7 +473,9 @@ class ADLS2FileIOManager(ConfigurableIOManager):
     config_schema=ADLS2FileIOManager.to_config_schema(),
     required_resource_keys={"adls2"},
 )
-def adls2_file_io_manager(init_context: InitResourceContext) -> FileOrDirectoryADLS2IOManager:
+def adls2_file_io_manager(
+    init_context: InitResourceContext,
+) -> FileOrDirectoryADLS2IOManager:
     """Persistent IO manager using Azure Data Lake Storage Gen2 for storage.
 
     Serializes objects via pickling. Suitable for objects storage for distributed executors, so long
