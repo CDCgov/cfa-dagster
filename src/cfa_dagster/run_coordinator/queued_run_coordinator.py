@@ -9,7 +9,6 @@ class UserQueuedRunCoordinator(QueuedRunCoordinator):
         dagster_run = context.dagster_run
         user = os.environ["USER"]
         if user is None or dagster_run.tags.get("user") != user:
-            context.logger.error(f"Environment variable 'USER' must be set and the run must be tagged with your 'USER'" +
+            raise RuntimeError(f"Environment variable 'USER' must be set and the run must be tagged with your 'USER'" +
                                  'e.g. tags={"user"="<your_username>"')
-            return None
         return super().submit_run(context)
