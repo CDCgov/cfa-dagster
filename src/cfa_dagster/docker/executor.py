@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Optional, cast
 
 import dagster._check as check
 from dagster import Field, IntSource, executor
@@ -18,7 +18,6 @@ from dagster._utils.merger import merge_dicts
 from dagster_docker.container_context import DockerContainerContext
 from dagster_docker.docker_executor import (
     DockerStepHandler, 
-    docker_executor as dagster_docker_executor
 )
 from dagster_docker.utils import (
     DOCKER_CONFIG_SCHEMA,
@@ -50,9 +49,72 @@ if TYPE_CHECKING:
 )
 @beta
 def docker_executor(init_context: InitExecutorContext) -> Executor:
-    executor = dagster_docker_executor(init_context)
+    """Executor which launches steps as Docker containers.
 
-    existing_get_image = executor._step_handler._get_image
+    To use the `docker_executor`, set it as the `executor_def` when defining a job:
+
+    .. literalinclude:: ../../../../../../python_modules/libraries/dagster-docker/dagster_docker_tests/test_example_executor.py
+       :start-after: start_marker
+       :end-before: end_marker
+       :language: python
+
+    Then you can configure the executor with run config as follows:
+
+    .. code-block:: YAML
+
+        execution:
+          config:
+            registry: ...
+            network: ...
+            networks: ...
+            container_kwargs: ...
+
+    If you're using the DockerRunLauncher, configuration set on the containers created by the run
+    launcher will also be set on the containers that are created for each step.
+    """
+    config = init_context.executor_config
+    image = check.opt_str_elem(config, "image")
+    registry = check.opt_dict_elem(config, "registry", key_type=str)
+    env_vars = check.opt_list_elem(config, "env_vars", of_type=str)
+    network = check.opt_str_elem(config, "network")
+    networks = check.opt_list_elem(config, "networks", of_type=str)
+    container_kwargs = check.opt_dict_elem(config, "container_kwargs", key_type=str)
+    retries = check.dict_elem(config, "retries", key_type=str)
+    max_concurrent = check.opt_int_elem(config, "max_concurrent")
+    tag_concurrency_limits = check.opt_list_elem(config, "tag_concurrency_limits")
+
+    validate_docker_config(network, networks, container_kwargs)
+
+    if network and not networks:
+        networks = [network]
+
+    container_context = DockerContainerContext(
+        registry=registry,
+        env_vars=env_vars or [],
+        networks=networks or [],
+        container_kwargs=container_kwargs,
+    )
+
+    return StepDelegatingExecutor(
+        NewDockerStepHandler(image, container_context),
+        retries=check.not_none(RetryMode.from_config(retries)),
+        max_concurrent=max_concurrent,
+        tag_concurrency_limits=tag_concurrency_limits,
+    )
+
+
+class NewDockerStepHandler(DockerStepHandler):
+    def __init__(
+        self,
+        image: Optional[str],
+        container_context: DockerContainerContext,
+    ):
+        super().__init__()
+
+        self._image = check.opt_str_param(image, "image")
+        self._container_context = check.inst_param(
+            container_context, "container_context", DockerContainerContext
+        )
 
     def _get_image(self, step_handler_context: StepHandlerContext):
         # get image from step config
@@ -68,10 +130,9 @@ def docker_executor(init_context: InitExecutorContext) -> Executor:
 
         if image:
             return image
-        return existing_get_image(self, step_handler_context)
-    executor._step_handler._get_image = _get_image
+        return super()._get_image(self, step_handler_context)
 
-    return executor
+
 
 
 def OLD_docker_executor(init_context: InitExecutorContext) -> Executor:
