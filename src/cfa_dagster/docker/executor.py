@@ -16,7 +16,10 @@ from dagster._core.executor.step_delegating.step_handler.base import (
 )
 from dagster._utils.merger import merge_dicts
 from dagster_docker.container_context import DockerContainerContext
-from dagster_docker.docker_executor import DockerStepHandler
+from dagster_docker.docker_executor import (
+    DockerStepHandler, 
+    docker_executor as dagster_docker_executor
+)
 from dagster_docker.utils import (
     DOCKER_CONFIG_SCHEMA,
     validate_docker_config,
@@ -47,6 +50,31 @@ if TYPE_CHECKING:
 )
 @beta
 def docker_executor(init_context: InitExecutorContext) -> Executor:
+    executor = dagster_docker_executor(init_context)
+
+    existing_get_image = executor._step_handler._get_image
+
+    def _get_image(self, step_handler_context: StepHandlerContext):
+        # get image from step config
+        step_key = self._get_step_key(step_handler_context)
+        step_context = step_handler_context.get_step_context(step_key)
+        image = (
+            step_context.run_config
+                        .get("ops", {})
+                        .get(step_key, {})
+                        .get("config", {})
+                        .get("image")
+        )
+
+        if image:
+            return image
+        return existing_get_image(self, step_handler_context)
+    executor._step_handler._get_image = _get_image
+
+    return executor
+
+
+def OLD_docker_executor(init_context: InitExecutorContext) -> Executor:
     """Executor which launches steps as Docker containers.
 
     To use the `docker_executor`, set it as the `executor_def` when defining a job:
@@ -134,13 +162,13 @@ class CustomDockerStepHandler(DockerStepHandler):
         # get image from step config
         step_key = self._get_step_key(step_handler_context)
         step_context = step_handler_context.get_step_context(step_key)
-        print(f"step_context: '{step_context}'\n")
-        plan_data = step_context.plan_data
-        print(f"plan_data: '{plan_data}'\n")
-        execution_plan = step_context.execution_plan
-        print(f"execution_plan: '{execution_plan}'\n")
+        # print(f"step_context: '{step_context}'\n")
+        # plan_data = step_context.plan_data
+        # print(f"plan_data: '{plan_data}'\n")
+        # execution_plan = step_context.execution_plan
+        # print(f"execution_plan: '{execution_plan}'\n")
         run_config = step_context.run_config
-        print(f"run_config: '{run_config}'\n")
+        # print(f"run_config: '{run_config}'\n")
 
         step_config = run_config["ops"].get(step_key).get("config")
         print(f"step_config: '{step_config}'\n")
