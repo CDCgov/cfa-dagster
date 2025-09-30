@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Optional, cast
 
 import dagster._check as check
 from dagster import Field, IntSource, executor
@@ -16,7 +16,9 @@ from dagster._core.executor.step_delegating.step_handler.base import (
 )
 from dagster._utils.merger import merge_dicts
 from dagster_docker.container_context import DockerContainerContext
-from dagster_docker.docker_executor import DockerStepHandler
+from dagster_docker.docker_executor import (
+    DockerStepHandler, 
+)
 from dagster_docker.utils import (
     DOCKER_CONFIG_SCHEMA,
     validate_docker_config,
@@ -70,31 +72,16 @@ def docker_executor(init_context: InitExecutorContext) -> Executor:
     If you're using the DockerRunLauncher, configuration set on the containers created by the run
     launcher will also be set on the containers that are created for each step.
     """
-    print(f"init_context: '{init_context}'\n")
     config = init_context.executor_config
-    print(f"config: '{config}'\n")
-    job = init_context.job
-    print(f"job: '{job}'\n")
-    asset_selection = job.asset_selection
-    print(f"asset_selection: '{asset_selection}'\n")
-    op_selection = job.op_selection
-    print(f"op_selection: '{op_selection}'\n")
-    job_def = job.get_definition()
-    print(f"job_def: '{job_def}'\n")
-
     image = check.opt_str_elem(config, "image")
     registry = check.opt_dict_elem(config, "registry", key_type=str)
     env_vars = check.opt_list_elem(config, "env_vars", of_type=str)
     network = check.opt_str_elem(config, "network")
     networks = check.opt_list_elem(config, "networks", of_type=str)
-    container_kwargs = check.opt_dict_elem(
-        config, "container_kwargs", key_type=str
-    )
+    container_kwargs = check.opt_dict_elem(config, "container_kwargs", key_type=str)
     retries = check.dict_elem(config, "retries", key_type=str)
     max_concurrent = check.opt_int_elem(config, "max_concurrent")
-    tag_concurrency_limits = check.opt_list_elem(
-        config, "tag_concurrency_limits"
-    )
+    tag_concurrency_limits = check.opt_list_elem(config, "tag_concurrency_limits")
 
     validate_docker_config(network, networks, container_kwargs)
 
@@ -109,49 +96,38 @@ def docker_executor(init_context: InitExecutorContext) -> Executor:
     )
 
     return StepDelegatingExecutor(
-        CustomDockerStepHandler(image, container_context),
+        NewDockerStepHandler(image, container_context),
         retries=check.not_none(RetryMode.from_config(retries)),
         max_concurrent=max_concurrent,
         tag_concurrency_limits=tag_concurrency_limits,
     )
 
 
-class CustomDockerStepHandler(DockerStepHandler):
+class NewDockerStepHandler(DockerStepHandler):
+    def __init__(
+        self,
+        image: Optional[str],
+        container_context: DockerContainerContext,
+    ):
+        super().__init__(image, container_context)
+
+        self._image = check.opt_str_param(image, "image")
+        self._container_context = check.inst_param(
+            container_context, "container_context", DockerContainerContext
+        )
+
     def _get_image(self, step_handler_context: StepHandlerContext):
-        from dagster_docker import DockerRunLauncher
-
-        image = cast(
-            "JobPythonOrigin", step_handler_context.dagster_run.job_code_origin
-        ).repository_origin.container_image
-        if not image:
-            image = self._image
-
-        run_launcher = step_handler_context.instance.run_launcher
-
-        if not image and isinstance(run_launcher, DockerRunLauncher):
-            image = run_launcher.image
-
         # get image from step config
         step_key = self._get_step_key(step_handler_context)
         step_context = step_handler_context.get_step_context(step_key)
-        print(f"step_context: '{step_context}'\n")
-        plan_data = step_context.plan_data
-        print(f"plan_data: '{plan_data}'\n")
-        execution_plan = step_context.execution_plan
-        print(f"execution_plan: '{execution_plan}'\n")
-        run_config = step_context.run_config
-        print(f"run_config: '{run_config}'\n")
+        image = (
+            step_context.run_config
+                        .get("ops", {})
+                        .get(step_key, {})
+                        .get("config", {})
+                        .get("image")
+        )
 
-        step_config = run_config["ops"].get(step_key).get("config")
-        print(f"step_config: '{step_config}'\n")
-        step_image = step_config.get("image")
-        print(f"step_image: '{step_image}'\n")
-
-        image = step_image
-
-        if not image:
-            raise Exception(
-                "No docker image specified by the executor config or repository"
-            )
-
-        return image
+        if image:
+            return image
+        return super()._get_image(step_handler_context)
