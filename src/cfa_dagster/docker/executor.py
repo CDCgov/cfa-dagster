@@ -130,7 +130,7 @@ class NewDockerStepHandler(DockerStepHandler):
 
         if image:
             return image
-        return super()._get_image(self, step_handler_context)
+        return super()._get_image(step_handler_context)
 
 
 
