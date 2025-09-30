@@ -109,7 +109,7 @@ class NewDockerStepHandler(DockerStepHandler):
         image: Optional[str],
         container_context: DockerContainerContext,
     ):
-        super().__init__()
+        super().__init__(image, container_context)
 
         self._image = check.opt_str_param(image, "image")
         self._container_context = check.inst_param(
