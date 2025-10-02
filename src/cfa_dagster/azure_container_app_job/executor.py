@@ -145,9 +145,10 @@ class AzureContainerAppJobStepHandler(StepHandler):
         container_context: DockerContainerContext,
     ):
         super().__init__()
-        print("Launching a new AzureContainerAppJobStepHandler")
+        print(f"Launching a new {self.name}")
         self._step_container_ids = {}
         self._step_caj_execution_ids = {}
+        self._image = image
         # self._caj_client =
 
         self._job_name = "cfa-dagster"  # TODO: move to config
@@ -183,9 +184,10 @@ class AzureContainerAppJobStepHandler(StepHandler):
                         .get("image")
         )
 
-        if image:
-            return image
-        return super()._get_image(step_handler_context)
+        if not image:
+            raise Exception("No docker image specified by the executor or run config")
+
+        return image
 
     def _get_docker_container_context(
         self, step_handler_context: StepHandlerContext
@@ -216,16 +218,6 @@ class AzureContainerAppJobStepHandler(StepHandler):
     @property
     def name(self) -> str:
         return "AzureContainerAppJobStepHandler"
-
-    def _get_client(self, docker_container_context: DockerContainerContext):
-        client = docker.client.from_env()
-        if docker_container_context.registry:
-            client.login(
-                registry=docker_container_context.registry["url"],
-                username=docker_container_context.registry["username"],
-                password=docker_container_context.registry["password"],
-            )
-        return client
 
     def _get_step_key(self, step_handler_context: StepHandlerContext) -> str:
         check.not_none(
