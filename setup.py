@@ -90,6 +90,6 @@ storage:
 # write to ~/.dagster_home/dagster.yaml
 dagster_home = Path.home() / ".dagster_home"
 dagster_home.mkdir(parents=True, exist_ok=True)
-config_path = dagster_home / "dagster2.yaml"
+config_path = dagster_home / "dagster.yaml"
 config_path.write_text(dagster_yaml_raw)
-print("Created ~/.dagster_home/dagster2.yaml")
+print("Created ~/.dagster_home/dagster.yaml")
