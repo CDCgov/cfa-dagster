@@ -28,10 +28,10 @@ db_username = client.get_secret("cfa-pg-dagster-dev-admin-username").value
 db_password = client.get_secret("cfa-pg-dagster-dev-admin-password").value
 existing_db_name = "postgres"
 
-# Create a new database for the user
-user_db_name = os.environ.get("USER")
-if not user_db_name:
-    raise ValueError("USER environment variable not set")
+# Create a new database for the user based on home directory
+# using the $USER env var includes the domain extension which is not
+# valid for a postgres db name
+user_db_name = Path.home().name
 
 conn = None
 try:
