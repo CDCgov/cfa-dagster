@@ -10,7 +10,8 @@ from azure.batch.models import (
     PoolInformation,
     TaskAddParameter,
     TaskConstraints,
-    TaskContainerSettings
+    TaskContainerSettings,
+    UserIdentity,
 )
 from azure.identity import DefaultAzureCredential
 from msrest.authentication import BasicTokenAuthentication
@@ -237,7 +238,7 @@ class AzureBatchStepHandler(StepHandler):
         container_settings = TaskContainerSettings(image_name=step_image, container_run_options="--rm --workdir /")
 
         # Run task at the admin level to be able to read/write to mounted drives
-        user_identity = batchmodels.UserIdentity(
+        user_identity = UserIdentity(
             auto_user=batchmodels.AutoUserSpecification(
                 scope=batchmodels.AutoUserScope.pool,
                 elevation_level=batchmodels.ElevationLevel.admin,
