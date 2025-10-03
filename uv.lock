@@ -212,6 +212,7 @@ dependencies = [
     { name = "dagster-azure" },
     { name = "dagster-docker" },
     { name = "dagster-postgres" },
+    { name = "msrest" },
     { name = "pydantic" },
 ]
 
@@ -227,6 +228,7 @@ requires-dist = [
     { name = "dagster-azure", specifier = ">=0.27.4" },
     { name = "dagster-docker", specifier = ">=0.27.4" },
     { name = "dagster-postgres", specifier = ">=0.27.4" },
+    { name = "msrest", specifier = "==0.7.1" },
     { name = "pydantic", specifier = ">=2.11.7" },
 ]
 

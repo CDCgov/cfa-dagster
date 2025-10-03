@@ -122,7 +122,6 @@ class AzureBatchStepHandler(StepHandler):
         self._step_job_ids = {}
         self._pool_id = "cfa-dagster"
         print(f"Launching a new {self.name}")
-        self._image = image
         credential = DefaultAzureCredential()
 
         batch_url = f"https://cfaprdba.eastus.batch.azure.com"

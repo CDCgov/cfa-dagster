@@ -148,8 +148,6 @@ class AzureContainerAppJobStepHandler(StepHandler):
         print(f"Launching a new {self.name}")
         self._step_container_ids = {}
         self._step_caj_execution_ids = {}
-        self._image = image
-        # self._caj_client =
 
         self._job_name = "cfa-dagster"  # TODO: move to config
         self._resource_group = "ext-edav-cfa-prd"  # TODO: move to config
@@ -183,6 +181,8 @@ class AzureContainerAppJobStepHandler(StepHandler):
                         .get("config", {})
                         .get("image")
         )
+        if not image:
+            image = self._image
 
         if not image:
             raise Exception("No docker image specified by the executor or run config")
