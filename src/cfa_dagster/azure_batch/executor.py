@@ -260,7 +260,7 @@ class AzureBatchStepHandler(StepHandler):
                 resource_id=resource_id
             ),
         )
-        task_container_settings = TaskContainerSettings(
+        container_settings = TaskContainerSettings(
             image_name=step_image,
             container_run_options="--rm --workdir /",
             registry=container_registry,
