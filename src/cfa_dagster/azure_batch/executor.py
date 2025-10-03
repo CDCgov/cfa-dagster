@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING, Optional, cast
 import dagster._check as check
 from azure.batch import BatchServiceClient
 from azure.batch.models import (
+    ContainerRegistry,
+    ComputeNodeIdentityReference,
     BatchErrorException,
     CloudTask,
     JobAddParameter,
@@ -238,7 +240,21 @@ class AzureBatchStepHandler(StepHandler):
 
         command = execute_step_args.get_command_args()
 
-        container_settings = TaskContainerSettings(image_name=step_image, container_run_options="--rm --workdir /")
+        resource_group_name = "ext-edav-cfa-network-prd"
+        user_assigned_identity_name = "ext-edav-cfa-batch-account"
+        resource_id = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{user_assigned_identity_name}"
+
+        container_registry = ContainerRegistry(
+            registry_server="cfaprdbatchcr.azurecr.io",
+            identity_reference=ComputeNodeIdentityReference(
+                resource_id=resource_id
+            ),
+        )
+        task_container_settings = TaskContainerSettings(
+            image_name=step_image,
+            container_run_options="--rm --workdir /",
+            registry=container_registry,
+        )
 
         # Run task at the admin level to be able to read/write to mounted drives
         user_identity = UserIdentity(
