@@ -12,6 +12,7 @@ from azure.batch.models import (
     TaskConstraints,
     TaskContainerSettings
 )
+from azure.identity import DefaultAzureCredential
 from msrest.authentication import BasicTokenAuthentication
 from dagster import Field, IntSource, StringSource, executor
 from dagster._core.definitions.executor_definition import (
@@ -122,17 +123,18 @@ class AzureBatchStepHandler(StepHandler):
         self._step_job_ids = {}
         self._pool_id = "cfa-dagster"
         print(f"Launching a new {self.name}")
+        credential_v2 = DefaultAzureCredential()
         token = {
             "access_token": credential_v2.get_token(
                 "https://batch.core.windows.net/.default"
             ).token
         }
-        credential = BasicTokenAuthentication(token)
+        credential_v1 = BasicTokenAuthentication(token)
 
         batch_url = f"https://cfaprdba.eastus.batch.azure.com"
 
         self._batch_client = BatchServiceClient(
-            credentials=credential, batch_url=batch_url
+            credentials=credential_v1, batch_url=batch_url
         )
 
         self._image = check.opt_str_param(image, "image")
