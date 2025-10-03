@@ -10,7 +10,7 @@ from azure.batch.models import (
     PoolInformation,
     TaskAddParameter,
     TaskConstraints,
-    ContainerSettings
+    TaskContainerSettings
 )
 from azure.identity import DefaultAzureCredential
 from dagster import Field, IntSource, StringSource, executor
@@ -226,7 +226,7 @@ class AzureBatchStepHandler(StepHandler):
 
         command = execute_step_args.get_command_args()
 
-        container_settings = ContainerSettings(image_name=step_image)
+        container_settings = TaskContainerSettings(image_name=step_image)
 
         task = TaskAddParameter(
             id=f"task-{step_key}",
