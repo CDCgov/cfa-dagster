@@ -139,6 +139,13 @@ class AzureBatchStepHandler(StepHandler):
 
         batch_url = f"https://cfaprdba.eastus.batch.azure.com"
 
+        self._subscription_id = (
+            SubscriptionClient(credential_v2)
+            .subscriptions.list()
+            .next()
+            .subscription_id
+        )
+
         self._batch_client = BatchServiceClient(
             credentials=credential_v1, batch_url=batch_url
         )
@@ -242,7 +249,9 @@ class AzureBatchStepHandler(StepHandler):
 
         resource_group_name = "ext-edav-cfa-network-prd"
         user_assigned_identity_name = "ext-edav-cfa-batch-account"
-        resource_id = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{user_assigned_identity_name}"
+        resource_id = f"/subscriptions/{self._subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{user_assigned_identity_name}"
+
+
 
         container_registry = ContainerRegistry(
             registry_server="cfaprdbatchcr.azurecr.io",
