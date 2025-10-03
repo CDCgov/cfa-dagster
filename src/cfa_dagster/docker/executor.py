@@ -96,14 +96,14 @@ def docker_executor(init_context: InitExecutorContext) -> Executor:
     )
 
     return StepDelegatingExecutor(
-        NewDockerStepHandler(image, container_context),
+        CustomDockerStepHandler(image, container_context),
         retries=check.not_none(RetryMode.from_config(retries)),
         max_concurrent=max_concurrent,
         tag_concurrency_limits=tag_concurrency_limits,
     )
 
 
-class NewDockerStepHandler(DockerStepHandler):
+class CustomDockerStepHandler(DockerStepHandler):
     def __init__(
         self,
         image: Optional[str],
