@@ -128,7 +128,7 @@ class AzureBatchStepHandler(StepHandler):
         batch_url = f"https://cfaprdba.eastus.batch.azure.com"
 
         self._batch_client = BatchServiceClient(
-            credential=credential, batch_url=batch_url
+            credentials=credential, batch_url=batch_url
         )
 
         self._image = check.opt_str_param(image, "image")
