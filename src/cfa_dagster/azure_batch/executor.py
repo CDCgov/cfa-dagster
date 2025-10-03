@@ -234,13 +234,22 @@ class AzureBatchStepHandler(StepHandler):
 
         command = execute_step_args.get_command_args()
 
-        container_settings = TaskContainerSettings(image_name=step_image)
+        container_settings = TaskContainerSettings(image_name=step_image, container_run_options="--rm --workdir /")
+
+        # Run task at the admin level to be able to read/write to mounted drives
+        user_identity = batchmodels.UserIdentity(
+            auto_user=batchmodels.AutoUserSpecification(
+                scope=batchmodels.AutoUserScope.pool,
+                elevation_level=batchmodels.ElevationLevel.admin,
+            )
+        )
 
         task = TaskAddParameter(
             id=f"task-{step_key}",
             command_line=f"/bin/bash -c \'{" ".join(command)}\'",
             container_settings=container_settings,
             environment_settings=[{"name": k, "value": v} for k, v in env_vars.items()],
+            user_identity=user_identity,
         )
 
         self._batch_client.task.add(job_id=job_id, task=task)
