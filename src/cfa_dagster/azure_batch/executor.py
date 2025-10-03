@@ -261,8 +261,7 @@ class AzureBatchStepHandler(StepHandler):
             ),
         )
 
-        working_dir = (container_context
-                       .get("container_kwargs", {})
+        working_dir = (container_context.container_kwargs
                        .get("working_dir")) or "/app"
 
         container_settings = TaskContainerSettings(
