@@ -260,9 +260,14 @@ class AzureBatchStepHandler(StepHandler):
                 resource_id=resource_id
             ),
         )
+
+        working_dir = (container_context
+                       .get("container_kwargs", {})
+                       .get("working_dir")) or "/app"
+
         container_settings = TaskContainerSettings(
             image_name=step_image,
-            container_run_options="--rm --workdir /app",
+            container_run_options=f"--rm --workdir {working_dir}",
             registry=container_registry,
         )
 
