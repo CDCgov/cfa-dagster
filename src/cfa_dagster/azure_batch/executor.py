@@ -146,6 +146,8 @@ class AzureBatchStepHandler(StepHandler):
                         .get("config", {})
                         .get("image")
         )
+        if not image:
+            image = self._image
 
         if not image:
             raise Exception("No docker image specified by the executor or run config")
