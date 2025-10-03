@@ -2,6 +2,7 @@ from collections.abc import Iterator
 from typing import TYPE_CHECKING, Optional, cast
 
 import dagster._check as check
+from azure.mgmt.resource.subscriptions import SubscriptionClient
 from azure.batch import BatchServiceClient
 from azure.batch.models import (
     ContainerRegistry,
