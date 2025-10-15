@@ -276,9 +276,7 @@ class AzureBatchStepHandler(StepHandler):
         mount_options = ""
         for volume in volumes:
             source, target = volume.split(":", 1)
-            az_mount_dir = "$AZ_BATCH_NODE_MOUNTS_DIR",
-            mount_template = "--mount type=bind,source={}/{},target={}"
-            mount_options += " " + mount_template.format(az_mount_dir, source, target)
+            mount_options += f" --mount type=bind,source=$AZ_BATCH_NODE_MOUNTS_DIR/{source},target={target}"
 
         workdir = container_context.container_kwargs.get("working_dir", "/app")
 
