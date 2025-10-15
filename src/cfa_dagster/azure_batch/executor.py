@@ -124,7 +124,7 @@ def azure_batch_executor(
     pool_name = check.opt_str_elem(config, "pool_name")
 
     return StepDelegatingExecutor(
-        AzureBatchStepHandler(image, container_context),
+        AzureBatchStepHandler(image, container_context, pool_name),
         retries=check.not_none(RetryMode.from_config(retries)),
         max_concurrent=max_concurrent,
         tag_concurrency_limits=tag_concurrency_limits,
