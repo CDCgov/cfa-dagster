@@ -54,6 +54,15 @@ if TYPE_CHECKING:
     config_schema=merge_dicts(
         DOCKER_CONFIG_SCHEMA,
         {
+            "pool_name": Field(
+                StringSource,
+                is_required=False,
+                default_value="cfa-dagster",
+                description=(
+                    "The name of the Azure Batch Pool. Defaults "
+                    "to the cfa-dagster test pool with 4 CPU 16 GB RAM"
+                )
+            ),
             "retries": get_retries_config(),
             "max_concurrent": Field(
                 IntSource,
@@ -112,8 +121,10 @@ def azure_batch_executor(
         container_kwargs=container_kwargs,
     )
 
+    pool_name = check.opt_str_elem(config, "pool_name")
+
     return StepDelegatingExecutor(
-        AzureBatchStepHandler(image, container_context),
+        AzureBatchStepHandler(image, container_context, pool_name),
         retries=check.not_none(RetryMode.from_config(retries)),
         max_concurrent=max_concurrent,
         tag_concurrency_limits=tag_concurrency_limits,
@@ -125,10 +136,12 @@ class AzureBatchStepHandler(StepHandler):
         self,
         image: Optional[str],
         container_context: DockerContainerContext,
+        pool_name: Optional[str],
     ):
         super().__init__()
         self._step_job_ids = {}
-        self._pool_id = "cfa-dagster"
+        # self._pool_id = "cfa-dagster"
+        self._pool_id = pool_name
         print(f"Launching a new {self.name}")
         credential_v2 = DefaultAzureCredential()
         token = {
@@ -252,8 +265,6 @@ class AzureBatchStepHandler(StepHandler):
         user_assigned_identity_name = "ext-edav-cfa-batch-account"
         resource_id = f"/subscriptions/{self._subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{user_assigned_identity_name}"
 
-
-
         container_registry = ContainerRegistry(
             registry_server="cfaprdbatchcr.azurecr.io",
             identity_reference=ComputeNodeIdentityReference(
@@ -261,16 +272,21 @@ class AzureBatchStepHandler(StepHandler):
             ),
         )
 
-        working_dir = (container_context.container_kwargs
-                       .get("working_dir")) or "/app"
+        volumes = container_context.container_kwargs.get("volumes", [])
+        mount_options = ""
+        for volume in volumes:
+            source, target = volume.split(":", 1)
+            mount_options += f" --mount type=bind,source=$AZ_BATCH_NODE_MOUNTS_DIR/{source},target={target}"
+
+        workdir = container_context.container_kwargs.get("working_dir", "/app")
 
         container_settings = TaskContainerSettings(
             image_name=step_image,
-            container_run_options=f"--rm --workdir {working_dir}",
+            container_run_options=f"--rm --workdir {workdir} {mount_options}",
             registry=container_registry,
         )
 
-        # Run task at the admin level to be able to read/write to mounted drives
+        # Run task as admin to be able to read/write to mounted drives
         user_identity = UserIdentity(
             auto_user=AutoUserSpecification(
                 scope=AutoUserScope.pool,
