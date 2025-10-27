@@ -2,11 +2,19 @@
 
 ## Overview
 
-This repo serves as the base for CFA's dagster software including custom executors, IO Managers, etc.
+This repo serves as the base for CFA's Dagster software including custom executors, IO Managers, etc.
 
 ## Getting started
 
-In the future, there will be python packages hosted in this repo to be used with local Dagster instances
+To get started with local Dagster development, see the [examples](examples/README.md)
+
+To use this repo as a python library, add the dependency to your `pyproject.toml` or inline PEP 723 script comment:
+```toml
+ dependencies = [
+    "cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git",
+ ]
+
+```
 
 ## Project admins
 
