@@ -13,6 +13,9 @@
 #    "azure-identity>=1.23.0",
 #    "azure-mgmt-appcontainers==3.2.0",
 #    "azure-mgmt-resource>=24.0.0",
+#    "PyJWT",
+#    "cryptography",
+#    "requests",
 # ]
 # ///
 import os
@@ -22,6 +25,9 @@ from pathlib import Path
 import yaml
 import dagster as dg
 from urllib.parse import urlparse
+import jwt
+import time
+import requests
 
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
@@ -48,14 +54,51 @@ if "--dev" in sys.argv:
 # get the user from the environment, throw an error if variable is not set
 user = os.environ["DAGSTER_USER"]
 
+
+def create_jwt() -> str:
+    """Create a GitHub App JWT using the PEM private key."""
+    APP_ID = "924513"  # ID for GH App installed on both cdcgov and cdcent
+    PEM_PATH = "/opt/dagster/dagster_home/gh_app.pem"
+    with open(PEM_PATH, "r") as f:
+        private_key = f.read()
+
+    now = int(time.time())
+    payload = {
+        "iat": now,
+        "exp": now + 9 * 60,  # max 10 minutes
+        "iss": APP_ID,
+    }
+
+    return jwt.encode(payload, private_key, algorithm="RS256")
+
+
+def get_installation_token(jwt: str, gh_org: str) -> str:
+    """Exchange a JWT for an installation access token."""
+    # Installation IDs for the GH App per org
+    org_install_ids = {
+        "cdcgov": "55092555",
+        "cdcent": "51970934",
+    }
+    install_id = org_install_ids.get(gh_org.lower())
+
+    url = f"https://api.github.com/app/installations/{install_id}/access_tokens"
+    headers = {
+        "Authorization": f"Bearer {jwt}",
+        "Accept": "application/vnd.github+json",
+    }
+    response = requests.post(url, headers=headers, timeout=10)
+    response.raise_for_status()
+    return response.json()["token"]
+
+
 CODE_LOCATION_DIR = "/opt/dagster/code_location"
 TMP_VENV_DIR = "/tmp/venv/"
+WORKSPACE_YAML_PATH = "/opt/dagster/dagster_home/workspace.yaml"
+GRAPHQL_URL = "http://dagster.apps.edav.ext.cdc.gov/graphql"
 
-
-@dg.op(out={"repo_name": dg.Out(), "script_path": dg.Out()})
-def clone_repo(context: dg.OpExecutionContext, github_url: str) -> tuple[str, Path]:
+def parse_github_url(url: str) -> tuple[str, str, str]:
     # Parse the URL
-    parsed = urlparse(github_url)
+    parsed = urlparse(url)
     path_parts = parsed.path.strip("/").split("/")
 
     # Validate structure
@@ -66,7 +109,16 @@ def clone_repo(context: dg.OpExecutionContext, github_url: str) -> tuple[str, Pa
     owner = path_parts[0]
     repo = path_parts[1]
     file_path = "/".join(path_parts[4:])
-    repo_url = f"https://github.com/{owner}/{repo}.git"
+    return (owner, repo, file_path)
+
+
+@dg.op(out={"repo_name": dg.Out(), "script_path": dg.Out()})
+def clone_repo(context: dg.OpExecutionContext, github_url: str) -> tuple[str, Path]:
+    owner, repo, file_path = parse_github_url(github_url)
+    jwt = create_jwt()
+    token = get_installation_token(jwt, owner)
+
+    repo_url = f"https://x-access-token:{token}@github.com/{owner}/{repo}.git"
 
     # Clone the repo into a temp directory
     subprocess.run(["git", "clone", "--depth", "1", repo_url],
@@ -74,18 +126,8 @@ def clone_repo(context: dg.OpExecutionContext, github_url: str) -> tuple[str, Pa
                    check=True)
 
     # Construct full path to the script
-    script_path = os.path.join(CODE_LOCATION_DIR, file_path)
+    script_path = Path(f"{CODE_LOCATION_DIR}/{repo}/{file_path}")
     return (repo, script_path)
-
-
-@dg.op(out={"repo_name": dg.Out(), "script_path": dg.Out()})
-def OLD_clone_repo(context: dg.OpExecutionContext, url: str, repo_name: str) -> tuple[str, Path]:
-    subprocess.run(["git", "clone", url],
-                   cwd=CODE_LOCATION_DIR,
-                   check=True)
-    script_path = Path(f"{CODE_LOCATION_DIR}/{repo_name}")
-    context.log.info(f"Cloned {repo_name} to {script_path}")
-    return (repo_name, script_path)
 
 
 @dg.op
@@ -128,7 +170,6 @@ def update_workspace_yaml(context: dg.OpExecutionContext,
         executable_path (str): Path to the Python executable.
         location_name (str): Name of the code location.
     """
-    WORKSPACE_YAML_PATH = "/opt/dagster/dagster_home/workspace.yaml"
     # Read the existing YAML content
     with open(WORKSPACE_YAML_PATH, 'r') as f:
         data = yaml.safe_load(f)
@@ -147,7 +188,7 @@ def update_workspace_yaml(context: dg.OpExecutionContext,
     # Append the new code location
     data["load_from"].append({
         "python_file": {
-            "relative_path": script_path,
+            "relative_path": f"{script_path}",
             "executable_path": f"{venv_path}/bin/python",
             "location_name": repo_name
         }
@@ -203,13 +244,138 @@ def restart_dagster_webserver(context: dg.OpExecutionContext, should_restart: bo
     context.log.info(f"Restarting container app: {CONTAINER_APP}")
 
 
+@dg.op
+def reload_workspace(should_reload: bool):
+    if not should_reload:
+        return
+
+    query = """
+    mutation reload_workspace {
+      reloadWorkspace {
+        __typename
+        ... on Workspace {
+          id
+          locationEntries {
+            id
+            name
+            loadStatus
+            locationOrLoadError {
+              __typename
+              ... on PythonError {
+                message
+                stack
+              }
+            }
+          }
+        }
+        ... on PythonError {
+          message
+          stack
+        }
+      }
+    }
+    """
+    requests.post(GRAPHQL_URL, json={"query": query}).raise_for_status()
+
+
 @dg.job()
 def add_code_location():
     repo_name, script_path = clone_repo()
     tmp_venv_path = install_deps(repo_name, script_path)
     venv_path = hard_copy_venv(script_path, tmp_venv_path)
     did_update = update_workspace_yaml(repo_name, script_path, venv_path)
-    restart_dagster_webserver(did_update)
+    # restart_dagster_webserver(did_update)
+    reload_workspace(did_update)
+
+
+@dg.op(out={"relative_path": dg.Out(), "executable_path": dg.Out()})
+def get_code_location(location_name: str) -> tuple[Path, Path]:
+    """Reads from the workspace.yaml and returns executable_path and relative_path."""
+    # Open and parse the workspace.yaml file
+    with open(WORKSPACE_YAML_PATH, 'r') as file:
+        workspace_data = yaml.safe_load(file)
+
+    # Assuming the structure has a 'code_locations' key with a list of locations
+    code_locations = workspace_data.get('load_from', [])
+
+    # Validate if code_locations is non-empty
+    if not code_locations:
+        raise ValueError(f"No code locations found in {WORKSPACE_YAML_PATH}")
+
+    location = next(
+        (loc for loc in code_locations if loc.get('location_name') == location_name)
+        , None)
+
+    if not location:
+        raise ValueError(f"Location '{location_name}' not found!")
+
+    executable_path = location.get('executable_path')
+    if not executable_path:
+        raise ValueError(f"Location '{location_name}' does not have an executable_path")
+
+    return (Path(location.get('relative_path')), Path(executable_path.split('/bin/python')[0]))
+
+def get_current_remote_url(repo_path):
+    """Get the current 'origin' remote URL of the Git repository."""
+    result = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=repo_path,
+        text=True,
+        capture_output=True,
+        check=True
+    )
+    return result.stdout.strip()
+
+def update_git_remote_url(repo_path):
+    """Update the 'origin' remote URL with the new token."""
+    # Step 1: Get the current 'origin' remote URL
+    current_url = get_current_remote_url(repo_path)
+
+    owner, repo, file_path = parse_github_url(current_url)
+
+    # Step 2: Replace the token in the URL
+    # The pattern assumes the current URL has the format:
+    # https://x-access-token:<token>@github.com/...
+    current_token = current_url.split(':')[-1].split('@')[0]
+
+    jwt = create_jwt()
+    new_token = get_installation_token(jwt, owner)
+
+    # Construct the new remote URL with the new token
+    new_remote_url = current_url.replace(current_token, new_token)
+
+    # Step 3: Update the 'origin' remote URL with the new one
+    subprocess.run(
+        ["git", "remote", "set-url", "origin", new_remote_url],
+        cwd=repo_path,
+        check=True
+    )
+
+    print(f"Updated remote URL to: {new_remote_url}")
+    return repo_path
+
+@dg.op
+def pull_repo(venv_path: Path) -> Path:
+    update_git_remote_url(venv_path)
+    subprocess.run(["git", "pull"], cwd=venv_path, check=True)
+    return venv_path
+
+@dg.op
+def update_dependencies(relative_path: Path, venv_path: Path) -> bool:
+    env = os.environ.copy()
+    env["VIRTUAL_ENV"] = f"{venv_path}"
+    subprocess.run(["uv", "sync", "--script", f"{relative_path}", "--active"],
+                   cwd=venv_path,
+                   env=env,
+                   check=True)
+    return True
+
+@dg.job
+def update_code_location():
+    relative_path, venv_path = get_code_location()
+    venv_path = pull_repo(venv_path)
+    did_update = update_dependencies(relative_path, venv_path)
+    reload_workspace(did_update)
 
 
 @dg.job(config=dg.RunConfig(
@@ -222,7 +388,7 @@ def restart_webserver():
 # Add assets, jobs, schedules, and sensors here to have them appear in the
 # Dagster UI
 defs = dg.Definitions(
-    jobs=[add_code_location, restart_webserver],
+    jobs=[add_code_location, update_code_location, restart_webserver],
     # setting Docker as the default executor. comment this out to use
     # the default executor that runs directly on your computer
     executor=dg.in_process_executor,
