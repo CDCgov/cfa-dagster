@@ -205,10 +205,8 @@ def update_workspace_yaml(context: dg.OpExecutionContext,
 
 
 @dg.op
-def restart_dagster_webserver(context: dg.OpExecutionContext, should_restart: bool):
-    if not should_restart:
-        return
-
+@dg.op(ins={"should_run": dg.In(dg.Nothing)})
+def restart_dagster_webserver(context: dg.OpExecutionContext):
     RESOURCE_GROUP = "ext-edav-cfa-prd"
     CONTAINER_APP = "dagster"
     credential = DefaultAzureCredential()
@@ -246,11 +244,9 @@ def restart_dagster_webserver(context: dg.OpExecutionContext, should_restart: bo
     context.log.info(f"Restarting container app: {CONTAINER_APP}")
 
 
-@dg.op
-def reload_dagster_workspace(context: dg.OpExecutionContext, should_reload):
-    if not should_reload:
-        return
-
+# using the Nothing type to force synchronous execution
+@dg.op(ins={"should_run": dg.In(dg.Nothing)})
+def reload_dagster_workspace(context: dg.OpExecutionContext):
     query = """
     mutation reload_workspace {
       reloadWorkspace {
@@ -290,7 +286,6 @@ def add_code_location():
     tmp_venv_path = install_deps(script_path, tmp_venv_path)
     venv_path = hard_copy_venv(script_path, tmp_venv_path)
     did_update = update_workspace_yaml(repo_name, script_path, venv_path)
-    # restart_dagster_webserver(did_update)
     reload_dagster_workspace(did_update)
 
 
@@ -380,16 +375,12 @@ def update_code_location():
     reload_dagster_workspace(venv_path)
 
 
-@dg.job(config=dg.RunConfig(
-    ops={"restart_dagster_webserver": {"inputs": {"should_restart": True}}}
-))
+@dg.job
 def restart_webserver():
     restart_dagster_webserver()
 
 
-@dg.job(config=dg.RunConfig(
-    ops={"reload_dagster_workspace": {"inputs": {"should_reload": True}}}
-))
+@dg.job
 def reload_workspace():
     reload_dagster_workspace()
 
