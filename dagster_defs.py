@@ -92,14 +92,18 @@ def get_installation_token(jwt: str, gh_org: str) -> str:
 
 
 CODE_LOCATION_DIR = "/opt/dagster/code_location"
-TMP_VENV_DIR = "/tmp/venv/"
+TMP_VENV_DIR = "/tmp/venv"
 WORKSPACE_YAML_PATH = "/opt/dagster/dagster_home/workspace.yaml"
 GRAPHQL_URL = "http://dagster.apps.edav.ext.cdc.gov/graphql"
 
-def parse_github_url(url: str) -> tuple[str, str, str]:
-    # Parse the URL
-    parsed = urlparse(url)
+
+@dg.op(out={"repo_name": dg.Out(), "script_path": dg.Out()})
+def clone_repo(context: dg.OpExecutionContext, github_url: str) -> tuple[str, Path]:
+    context.log.debug(f"github_url: '{github_url}'")
+    parsed = urlparse(github_url)
     path_parts = parsed.path.strip("/").split("/")
+    context.log.debut(f"parsed: '{parsed}'")
+    context.log.debut(f"path_parts: '{path_parts}'")
 
     # Validate structure
     if len(path_parts) < 5 or path_parts[2] != "blob":
@@ -109,12 +113,6 @@ def parse_github_url(url: str) -> tuple[str, str, str]:
     owner = path_parts[0]
     repo = path_parts[1]
     file_path = "/".join(path_parts[4:])
-    return (owner, repo, file_path)
-
-
-@dg.op(out={"repo_name": dg.Out(), "script_path": dg.Out()})
-def clone_repo(context: dg.OpExecutionContext, github_url: str) -> tuple[str, Path]:
-    owner, repo, file_path = parse_github_url(github_url)
     jwt = create_jwt()
     token = get_installation_token(jwt, owner)
 
@@ -131,18 +129,22 @@ def clone_repo(context: dg.OpExecutionContext, github_url: str) -> tuple[str, Pa
 
 
 @dg.op
-def install_deps(context: dg.OpExecutionContext, repo_name: str, script_path: Path) -> Path:
-    venv_dir = f"{TMP_VENV_DIR}/{repo_name}/.venv"
+def get_temp_venv(repo_name: str) -> Path:
+    return Path(f"{TMP_VENV_DIR}/{repo_name}/.venv")
+
+
+@dg.op
+def install_deps(context: dg.OpExecutionContext, script_path: Path, venv_path: Path) -> Path:
     # install dependencies to a temp virtual env
     # ASSUMPTIONS:
     # - file contains PEP723 dependency metadata
     env = os.environ.copy()
-    env["VIRTUAL_ENV"] = venv_dir
-    subprocess.run(["uv", "sync", "--script", script_path, "--active"],
+    env["VIRTUAL_ENV"] = f"{venv_path}"
+    subprocess.run(["uv", "sync", "--script", f"{script_path}", "--active"],
                    env=env,
                    check=True)
-    context.log.info(f"Installed dependencies to {venv_dir}")
-    return Path(venv_dir)
+    context.log.info(f"Installed dependencies to {venv_path}")
+    return venv_path
 
 
 @dg.op
@@ -245,8 +247,8 @@ def restart_dagster_webserver(context: dg.OpExecutionContext, should_restart: bo
 
 
 @dg.op
-def reload_workspace(should_reload: bool):
-    if not should_reload:
+def reload_workspace(should_reload):
+    if should_reload is not None:
         return
 
     query = """
@@ -281,7 +283,8 @@ def reload_workspace(should_reload: bool):
 @dg.job()
 def add_code_location():
     repo_name, script_path = clone_repo()
-    tmp_venv_path = install_deps(repo_name, script_path)
+    tmp_venv_path = get_temp_venv(repo_name)
+    tmp_venv_path = install_deps(script_path, tmp_venv_path)
     venv_path = hard_copy_venv(script_path, tmp_venv_path)
     did_update = update_workspace_yaml(repo_name, script_path, venv_path)
     # restart_dagster_webserver(did_update)
@@ -296,24 +299,26 @@ def get_code_location(location_name: str) -> tuple[Path, Path]:
         workspace_data = yaml.safe_load(file)
 
     # Assuming the structure has a 'code_locations' key with a list of locations
-    code_locations = workspace_data.get('load_from', [])
+    code_locations = workspace_data.get('load_from')
 
     # Validate if code_locations is non-empty
     if not code_locations:
         raise ValueError(f"No code locations found in {WORKSPACE_YAML_PATH}")
 
     location = next(
-        (loc for loc in code_locations if loc.get('location_name') == location_name)
-        , None)
+        (loc.get('python_file') for loc in code_locations if loc.get('python_file', {}).get('location_name') == location_name),
+        None)
 
     if not location:
         raise ValueError(f"Location '{location_name}' not found!")
+
 
     executable_path = location.get('executable_path')
     if not executable_path:
         raise ValueError(f"Location '{location_name}' does not have an executable_path")
 
     return (Path(location.get('relative_path')), Path(executable_path.split('/bin/python')[0]))
+
 
 def get_current_remote_url(repo_path):
     """Get the current 'origin' remote URL of the Git repository."""
@@ -326,12 +331,15 @@ def get_current_remote_url(repo_path):
     )
     return result.stdout.strip()
 
+
 def update_git_remote_url(repo_path):
     """Update the 'origin' remote URL with the new token."""
     # Step 1: Get the current 'origin' remote URL
     current_url = get_current_remote_url(repo_path)
 
-    owner, repo, file_path = parse_github_url(current_url)
+    parsed = urlparse(current_url)
+    path_parts = parsed.path.strip("/").split("/")
+    owner = path_parts[0]
 
     # Step 2: Replace the token in the URL
     # The pattern assumes the current URL has the format:
@@ -374,8 +382,8 @@ def update_dependencies(relative_path: Path, venv_path: Path) -> bool:
 def update_code_location():
     relative_path, venv_path = get_code_location()
     venv_path = pull_repo(venv_path)
-    did_update = update_dependencies(relative_path, venv_path)
-    reload_workspace(did_update)
+    venv_path = install_deps(relative_path, venv_path)
+    reload_workspace(venv_path)
 
 
 @dg.job(config=dg.RunConfig(
