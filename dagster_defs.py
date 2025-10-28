@@ -247,8 +247,8 @@ def restart_dagster_webserver(context: dg.OpExecutionContext, should_restart: bo
 
 
 @dg.op
-def reload_workspace(should_reload):
-    if should_reload is not None:
+def reload_dagster_workspace(context: dg.OpExecutionContext, should_reload):
+    if not should_reload:
         return
 
     query = """
@@ -277,8 +277,10 @@ def reload_workspace(should_reload):
       }
     }
     """
-    res = requests.post(GRAPHQL_URL, json={"query": query}).raise_for_status()
-    print(res)
+    res = requests.post(GRAPHQL_URL, json={"query": query})
+    context.log.debug(res.text)
+    res.raise_for_status()
+    context.log.info("Reloaded workspace")
 
 
 @dg.job()
@@ -289,7 +291,7 @@ def add_code_location():
     venv_path = hard_copy_venv(script_path, tmp_venv_path)
     did_update = update_workspace_yaml(repo_name, script_path, venv_path)
     # restart_dagster_webserver(did_update)
-    reload_workspace(did_update)
+    reload_dagster_workspace(did_update)
 
 
 @dg.op(out={"relative_path": dg.Out(), "executable_path": dg.Out()})
@@ -312,7 +314,6 @@ def get_code_location(location_name: str) -> tuple[Path, Path]:
 
     if not location:
         raise ValueError(f"Location '{location_name}' not found!")
-
 
     executable_path = location.get('executable_path')
     if not executable_path:
@@ -363,18 +364,20 @@ def update_git_remote_url(repo_path):
     print(f"Updated remote URL to: {new_remote_url}")
     return repo_path
 
+
 @dg.op
 def pull_repo(venv_path: Path) -> Path:
     update_git_remote_url(venv_path)
     subprocess.run(["git", "pull"], cwd=venv_path, check=True)
     return venv_path
 
+
 @dg.job
 def update_code_location():
     relative_path, venv_path = get_code_location()
     venv_path = pull_repo(venv_path)
     venv_path = install_deps(relative_path, venv_path)
-    reload_workspace(venv_path)
+    reload_dagster_workspace(venv_path)
 
 
 @dg.job(config=dg.RunConfig(
@@ -384,14 +387,18 @@ def restart_webserver():
     restart_dagster_webserver()
 
 
+@dg.job(config=dg.RunConfig(
+    ops={"reload_dagster_workspace": {"inputs": {"should_reload": True}}}
+))
+def reload_workspace():
+    reload_dagster_workspace()
+
+
 # Add assets, jobs, schedules, and sensors here to have them appear in the
 # Dagster UI
 defs = dg.Definitions(
-    jobs=[add_code_location, update_code_location, restart_webserver],
-    # setting Docker as the default executor. comment this out to use
-    # the default executor that runs directly on your computer
+    jobs=[add_code_location, update_code_location, restart_webserver, reload_workspace],
+    # using the in process executor because we want to run jobs 
+    # directly on the daemon instance
     executor=dg.in_process_executor,
-    # executor=docker_executor_configured,
-    # executor=azure_caj_executor_configured,
-    # executor=azure_batch_executor_configured,
 )
