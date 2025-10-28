@@ -277,7 +277,8 @@ def reload_workspace(should_reload):
       }
     }
     """
-    requests.post(GRAPHQL_URL, json={"query": query}).raise_for_status()
+    res = requests.post(GRAPHQL_URL, json={"query": query}).raise_for_status()
+    print(res)
 
 
 @dg.job()
@@ -367,16 +368,6 @@ def pull_repo(venv_path: Path) -> Path:
     update_git_remote_url(venv_path)
     subprocess.run(["git", "pull"], cwd=venv_path, check=True)
     return venv_path
-
-@dg.op
-def update_dependencies(relative_path: Path, venv_path: Path) -> bool:
-    env = os.environ.copy()
-    env["VIRTUAL_ENV"] = f"{venv_path}"
-    subprocess.run(["uv", "sync", "--script", f"{relative_path}", "--active"],
-                   cwd=venv_path,
-                   env=env,
-                   check=True)
-    return True
 
 @dg.job
 def update_code_location():
