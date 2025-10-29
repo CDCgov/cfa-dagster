@@ -12,18 +12,13 @@
 #    "pyyaml>=6.0.2",
 # ]
 # ///
+import json
 import os
 import subprocess
 import sys
 from pathlib import Path
-import json
 
 import dagster as dg
-from cfa_dagster.azure_batch.executor import azure_batch_executor
-from cfa_dagster.azure_container_app_job.executor import (
-    azure_container_app_job_executor as azure_caj_executor,
-)
-from cfa_dagster.docker.executor import docker_executor
 from dagster_azure.adls2 import (
     ADLS2DefaultAzureCredential,
     ADLS2PickleIOManager,
@@ -33,6 +28,12 @@ from dagster_azure.blob import (
     AzureBlobStorageDefaultCredential,
     AzureBlobStorageResource,
 )
+
+from cfa_dagster.azure_batch.executor import azure_batch_executor
+from cfa_dagster.azure_container_app_job.executor import (
+    azure_container_app_job_executor as azure_caj_executor,
+)
+from cfa_dagster.docker.executor import docker_executor
 
 # Start the Dagster UI and set necessary env vars
 if "--dev" in sys.argv:
@@ -57,7 +58,7 @@ user = os.environ["DAGSTER_USER"]
 
 
 @dg.asset(
-    kinds={'azure_blob'},
+    kinds={"azure_blob"},
     description="An asset that downloads a file from Azure Blob Storage",
 )
 def basic_blob_asset(azure_blob_storage: AzureBlobStorageResource):
@@ -87,12 +88,12 @@ def basic_r_asset(basic_blob_asset):
             # add metadata from upstream asset
             "config": dg.MetadataValue.json(json.loads(basic_blob_asset)),
             # Dagster will plot numeric values as you repeat runs
-            "output_value": dg.MetadataValue.int(int(random_number))
+            "output_value": dg.MetadataValue.int(int(random_number)),
         }
     )
 
 
-disease_partitions = dg.StaticPartitionsDefinition(['COVID', 'FLU', 'RSV'])
+disease_partitions = dg.StaticPartitionsDefinition(["COVID", "FLU", "RSV"])
 
 
 @dg.asset(
@@ -172,9 +173,7 @@ partitioned_r_asset_job = dg.define_asset_job(
 )
 
 # schedule the job to run weekly
-schedule_every_wednesday = dg.ScheduleDefinition(
-    name="weekly_cron", cron_schedule="0 9 * * 3", job=basic_r_asset_job
-)
+schedule_every_wednesday = dg.ScheduleDefinition(name="weekly_cron", cron_schedule="0 9 * * 3", job=basic_r_asset_job)
 
 
 # this prefix allows your assets to be stored in Azure

@@ -21,14 +21,14 @@
 import os
 import subprocess
 import sys
-from pathlib import Path
-import yaml
-import dagster as dg
-from urllib.parse import urlparse
-import jwt
 import time
-import requests
+from pathlib import Path
+from urllib.parse import urlparse
 
+import dagster as dg
+import jwt
+import requests
+import yaml
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.mgmt.resource.subscriptions import SubscriptionClient
@@ -107,8 +107,10 @@ def clone_repo(context: dg.OpExecutionContext, github_url: str) -> tuple[str, Pa
 
     # Validate structure
     if len(path_parts) < 5 or path_parts[2] != "blob":
-        raise ValueError("Invalid GitHub file URL format. "
-        "Expected: https://github.com/cdcent/cfa-dagster/blob/main/examples/dagster_defs.py")
+        raise ValueError(
+            "Invalid GitHub file URL format. "
+            "Expected: https://github.com/cdcent/cfa-dagster/blob/main/examples/dagster_defs.py"
+        )
 
     owner = path_parts[0]
     repo = path_parts[1]
@@ -119,9 +121,7 @@ def clone_repo(context: dg.OpExecutionContext, github_url: str) -> tuple[str, Pa
     repo_url = f"https://x-access-token:{token}@github.com/{owner}/{repo}.git"
 
     # Clone the repo into a temp directory
-    subprocess.run(["git", "clone", "--depth", "1", repo_url],
-                   cwd=CODE_LOCATION_DIR,
-                   check=True)
+    subprocess.run(["git", "clone", "--depth", "1", repo_url], cwd=CODE_LOCATION_DIR, check=True)
 
     # Construct full path to the script
     script_path = Path(f"{CODE_LOCATION_DIR}/{repo}/{file_path}")
@@ -140,9 +140,7 @@ def install_deps(context: dg.OpExecutionContext, script_path: Path, venv_path: P
     # - file contains PEP723 dependency metadata
     env = os.environ.copy()
     env["VIRTUAL_ENV"] = f"{venv_path}"
-    subprocess.run(["uv", "sync", "--script", f"{script_path}", "--active"],
-                   env=env,
-                   check=True)
+    subprocess.run(["uv", "sync", "--script", f"{script_path}", "--active"], env=env, check=True)
     context.log.info(f"Installed dependencies to {venv_path}")
     return venv_path
 
@@ -150,8 +148,7 @@ def install_deps(context: dg.OpExecutionContext, script_path: Path, venv_path: P
 @dg.op
 def hard_copy_venv(context: dg.OpExecutionContext, script_path: Path, tmp_venv_dir: Path) -> Path:
     local_venv_path = f"{script_path.parent}/.venv"
-    subprocess.run(["cp", "-rL", tmp_venv_dir, local_venv_path],
-                   check=True)
+    subprocess.run(["cp", "-rL", tmp_venv_dir, local_venv_path], check=True)
     # remove temp_venv
     subprocess.run(["rm", "-rf", tmp_venv_dir], check=True)
     context.log.info(f"Copied dependencies to {local_venv_path}")
@@ -159,10 +156,7 @@ def hard_copy_venv(context: dg.OpExecutionContext, script_path: Path, tmp_venv_d
 
 
 @dg.op
-def update_workspace_yaml(context: dg.OpExecutionContext,
-                          repo_name: str,
-                          script_path: Path,
-                          venv_path: Path) -> bool:
+def update_workspace_yaml(context: dg.OpExecutionContext, repo_name: str, script_path: Path, venv_path: Path) -> bool:
     """
     Adds a new python_file entry to the load_from list in a Dagster workspace YAML file.
 
@@ -173,7 +167,7 @@ def update_workspace_yaml(context: dg.OpExecutionContext,
         location_name (str): Name of the code location.
     """
     # Read the existing YAML content
-    with open(WORKSPACE_YAML_PATH, 'r') as f:
+    with open(WORKSPACE_YAML_PATH, "r") as f:
         data = yaml.safe_load(f)
 
     # Ensure load_from exists and is a list
@@ -188,16 +182,18 @@ def update_workspace_yaml(context: dg.OpExecutionContext,
             return False
 
     # Append the new code location
-    data["load_from"].append({
-        "python_file": {
-            "relative_path": f"{script_path}",
-            "executable_path": f"{venv_path}/bin/python",
-            "location_name": repo_name
+    data["load_from"].append(
+        {
+            "python_file": {
+                "relative_path": f"{script_path}",
+                "executable_path": f"{venv_path}/bin/python",
+                "location_name": repo_name,
+            }
         }
-    })
+    )
 
     # Write the updated YAML back to the file
-    with open(WORKSPACE_YAML_PATH, 'w') as f:
+    with open(WORKSPACE_YAML_PATH, "w") as f:
         yaml.dump(data, f, default_flow_style=False)
 
     context.log.info(f"Added code location '{repo_name}' to {WORKSPACE_YAML_PATH}")
@@ -212,23 +208,12 @@ def restart_dagster_webserver(context: dg.OpExecutionContext):
     credential = DefaultAzureCredential()
 
     # Get first subscription for logged-in credential
-    first_subscription_id = (
-        SubscriptionClient(credential)
-        .subscriptions
-        .list()
-        .next()
-        .subscription_id
-    )
+    first_subscription_id = SubscriptionClient(credential).subscriptions.list().next().subscription_id
 
-    client = ContainerAppsAPIClient(
-        credential=credential, subscription_id=first_subscription_id
-    )
+    client = ContainerAppsAPIClient(credential=credential, subscription_id=first_subscription_id)
 
     # Find active revision
-    revisions = list(
-        client.container_apps_revisions
-        .list_revisions(RESOURCE_GROUP, CONTAINER_APP)
-    )
+    revisions = list(client.container_apps_revisions.list_revisions(RESOURCE_GROUP, CONTAINER_APP))
     active_revision = next((r for r in revisions if r.active), None)
 
     if not active_revision:
@@ -236,9 +221,7 @@ def restart_dagster_webserver(context: dg.OpExecutionContext):
 
     rev_name = active_revision.name
     client.container_apps_revisions.restart_revision(
-        resource_group_name=RESOURCE_GROUP,
-        container_app_name=CONTAINER_APP,
-        revision_name=rev_name
+        resource_group_name=RESOURCE_GROUP, container_app_name=CONTAINER_APP, revision_name=rev_name
     )
 
     context.log.info(f"Restarting container app: {CONTAINER_APP}")
@@ -293,38 +276,39 @@ def add_code_location():
 def get_code_location(location_name: str) -> tuple[Path, Path]:
     """Reads from the workspace.yaml and returns executable_path and relative_path."""
     # Open and parse the workspace.yaml file
-    with open(WORKSPACE_YAML_PATH, 'r') as file:
+    with open(WORKSPACE_YAML_PATH, "r") as file:
         workspace_data = yaml.safe_load(file)
 
     # Assuming the structure has a 'code_locations' key with a list of locations
-    code_locations = workspace_data.get('load_from')
+    code_locations = workspace_data.get("load_from")
 
     # Validate if code_locations is non-empty
     if not code_locations:
         raise ValueError(f"No code locations found in {WORKSPACE_YAML_PATH}")
 
     location = next(
-        (loc.get('python_file') for loc in code_locations if loc.get('python_file', {}).get('location_name') == location_name),
-        None)
+        (
+            loc.get("python_file")
+            for loc in code_locations
+            if loc.get("python_file", {}).get("location_name") == location_name
+        ),
+        None,
+    )
 
     if not location:
         raise ValueError(f"Location '{location_name}' not found!")
 
-    executable_path = location.get('executable_path')
+    executable_path = location.get("executable_path")
     if not executable_path:
         raise ValueError(f"Location '{location_name}' does not have an executable_path")
 
-    return (Path(location.get('relative_path')), Path(executable_path.split('/bin/python')[0]))
+    return (Path(location.get("relative_path")), Path(executable_path.split("/bin/python")[0]))
 
 
 def get_current_remote_url(repo_path):
     """Get the current 'origin' remote URL of the Git repository."""
     result = subprocess.run(
-        ["git", "remote", "get-url", "origin"],
-        cwd=repo_path,
-        text=True,
-        capture_output=True,
-        check=True
+        ["git", "remote", "get-url", "origin"], cwd=repo_path, text=True, capture_output=True, check=True
     )
     return result.stdout.strip()
 
@@ -341,7 +325,7 @@ def update_git_remote_url(repo_path):
     # Step 2: Replace the token in the URL
     # The pattern assumes the current URL has the format:
     # https://x-access-token:<token>@github.com/...
-    current_token = current_url.split(':')[-1].split('@')[0]
+    current_token = current_url.split(":")[-1].split("@")[0]
 
     jwt = create_jwt()
     new_token = get_installation_token(jwt, owner)
@@ -350,11 +334,7 @@ def update_git_remote_url(repo_path):
     new_remote_url = current_url.replace(current_token, new_token)
 
     # Step 3: Update the 'origin' remote URL with the new one
-    subprocess.run(
-        ["git", "remote", "set-url", "origin", new_remote_url],
-        cwd=repo_path,
-        check=True
-    )
+    subprocess.run(["git", "remote", "set-url", "origin", new_remote_url], cwd=repo_path, check=True)
 
     print(f"Updated remote URL to: {new_remote_url}")
     return repo_path
@@ -389,7 +369,7 @@ def reload_workspace():
 # Dagster UI
 defs = dg.Definitions(
     jobs=[add_code_location, update_code_location, restart_webserver, reload_workspace],
-    # using the in process executor because we want to run jobs 
+    # using the in process executor because we want to run jobs
     # directly on the daemon instance
     executor=dg.in_process_executor,
 )
