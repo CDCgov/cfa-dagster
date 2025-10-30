@@ -16,6 +16,10 @@ To use this repo as a python library, add the dependency to your `pyproject.toml
 
 ```
 
+## Future Development
+
+- A Blob File IO Manager to pass data between assets in a file format
+
 ## Project admins
 
 - Giovanni Rella <ap82@cdc.gov> (CDC/OD/ORR/CFA)

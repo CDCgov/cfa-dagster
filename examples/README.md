@@ -28,7 +28,3 @@ It is highly recommended that you complete the Dagster quickstart [tutorial](htt
     1. Push your updated image to ACR: `az login --identity && az acr login -n cfaprdbatchcr && docker build -t cfaprdbatchcr.azurecr.io/cfa-dagster-sandbox:$(basename $HOME) . --push`
     2. Modify the dagster_defs.py file to use the `azure_caj_executor` instead of the `docker_executor`
     4. Materialize your Asset again! (See `Getting Started`)
-
-## Future Development
-
-- A Blob IO Manager to pass data between assets in a file format
