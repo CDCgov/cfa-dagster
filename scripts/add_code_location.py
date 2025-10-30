@@ -9,8 +9,8 @@ from urllib.parse import urlparse
 
 DESCRIPTION = ('Script to register your Dagster workflows with the central '
                'Dagster instance for scheduling and event-based triggering')
-# DAGSTER_BASE_URL = "http://127.0.0.1:3000"  # local url
 DAGSTER_BASE_URL = "http://dagster.apps.edav.ext.cdc.gov"
+# DAGSTER_BASE_URL = "http://127.0.0.1:3000"
 DAGSTER_GRAPHQL_URL = f"{DAGSTER_BASE_URL}/graphql"
 EXAMPLE_GITHUB_URL = 'https://github.com/cdcent/cfa-dagster/blob/main/examples/dagster_defs.py'
 
@@ -41,7 +41,7 @@ def main(github_url: str):
           selector: {
             jobName: "add_code_location",
             repositoryName: "__repository__",
-            repositoryLocationName: "dagster_defs.py"
+            repositoryLocationName: "cfa-dagster"
           },
           runConfigData: $runConfigData
         }
@@ -109,12 +109,6 @@ if __name__ == "__main__":
               EXAMPLE_GITHUB_URL +
               ' NOTE: you must provide the default branch e.g. main, master, prod'
               )
-    )
-    parser.add_argument(
-        '--dagster_url',
-        default=DAGSTER_BASE_URL,
-        type=str,
-        help=f"Optional. The url of the Dagster instance. Default: '{DAGSTER_BASE_URL}'"
     )
     args = parser.parse_args()
 
