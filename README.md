@@ -18,6 +18,8 @@ This repo serves as the base for CFA's Dagster software including custom executo
 
 - To register your Dagster workflows with the central Dagster server for production scheduling and event triggering, run `uv run https://raw.githubusercontent.com/CDCgov/cfa-dagster/refs/heads/main/scripts/add_code_location.py --github_url <your_github_url>`. The GitHub URL you provide should be a link directly to the python file containing your Dagster definitions e.g. https://github.com/cdcent/cfa-dagster/blob/main/examples/dagster_defs.py. The link MUST be to the default branch of your repository e.g. main, master, prod, etc.
 
+- To update your existing Dagster workflows on the central Dagster server, run `uv run https://raw.githubusercontent.com/CDCgov/cfa-dagster/refs/heads/main/scripts/update_code_location.py --location_name <your_location_name>`. The location name is usually the name of your GitHub repo.
+
 ## Future Development
 
 - A Blob File IO Manager to pass data between assets in a file format
