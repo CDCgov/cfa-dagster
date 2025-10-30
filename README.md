@@ -6,15 +6,17 @@ This repo serves as the base for CFA's Dagster software including custom executo
 
 ## Getting started
 
-To get started with local Dagster development, see the [examples](examples/README.md)
+- To get started with local Dagster development, see the [examples](examples/README.md)
 
-To use this repo as a python library, add the dependency to your `pyproject.toml` or inline PEP 723 script comment:
+- To use this repo as a python library, add the dependency to your `pyproject.toml` or inline PEP 723 script comment:
 ```toml
  dependencies = [
     "cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git",
  ]
 
 ```
+
+- To register your Dagster workflows with the central Dagster server for production scheduling and event triggering, run `uv run https://raw.githubusercontent.com/CDCgov/cfa-dagster/refs/heads/main/scripts/add_code_location.py --github_url <your_github_url>`. The GitHub URL you provide should be a link directly to the python file containing your Dagster definitions e.g. https://github.com/cdcent/cfa-dagster/blob/main/examples/dagster_defs.py. The link MUST be to the default branch of your repository e.g. main, master, prod, etc.
 
 ## Future Development
 

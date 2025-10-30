@@ -102,8 +102,8 @@ def clone_repo(context: dg.OpExecutionContext, github_url: str) -> tuple[str, Pa
     context.log.debug(f"github_url: '{github_url}'")
     parsed = urlparse(github_url)
     path_parts = parsed.path.strip("/").split("/")
-    context.log.debut(f"parsed: '{parsed}'")
-    context.log.debut(f"path_parts: '{path_parts}'")
+    context.log.debug(f"parsed: '{parsed}'")
+    context.log.debug(f"path_parts: '{path_parts}'")
 
     # Validate structure
     if len(path_parts) < 5 or path_parts[2] != "blob":
