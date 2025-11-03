@@ -103,13 +103,13 @@
         {
           default = pythonSets.${system}.mkVirtualEnv "cfa-dagster-infra" workspace.deps.default;
           container = pkgs.dockerTools.buildLayeredImage {
-            name = "cfa-dagster-infra-nix";
-            tag = "latest";
+            name = "cfaprdbatchcr.azurecr.io/cfa-dagster-infra";
+            tag = "nix";
             contents = [
               virtualenv
               pkgs.uv
               pkgs.bash
-              pkgs.uutils-coreutils-noprefix
+              pkgs.coreutils-full
               pkgs.dockerTools.usrBinEnv
               pkgs.dockerTools.binSh
               pkgs.dockerTools.caCertificates
@@ -118,6 +118,7 @@
             ];
             config = {
               Env = [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
                 "UV_NO_SYNC=1"
                 "UV_PYTHON=${pythonSet.python.interpreter}"
                 "UV_PYTHON_DOWNLOADS=never"
