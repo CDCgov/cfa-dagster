@@ -15,6 +15,8 @@ This repo serves as the base for CFA's Dagster software including custom executo
  ]
 
 ```
+## Moving local workflow to production
+If you would like to schedule your workflow to run on a schedule or triggered based on other workflows, you can move your workflows to the production server with the following:
 
 - To register your Dagster workflows with the central Dagster server for production scheduling and event triggering, run `uv run https://raw.githubusercontent.com/CDCgov/cfa-dagster/refs/heads/main/scripts/add_code_location.py --github_url <your_github_url>`. The GitHub URL you provide should be a link directly to the python file containing your Dagster definitions e.g. https://github.com/cdcent/cfa-dagster/blob/main/examples/dagster_defs.py. The link MUST be to the default branch of your repository e.g. main, master, prod, etc.
 
