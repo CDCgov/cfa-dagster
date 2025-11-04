@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from datetime import datetime as date
 from typing import TYPE_CHECKING, Optional, cast
 
 import dagster._check as check
@@ -247,7 +248,7 @@ class AzureBatchStepHandler(StepHandler):
         step_key = self._get_step_key(step_handler_context)
         execute_step_args = step_handler_context.execute_step_args
 
-        job_id = f"dagster-step-{step_handler_context.dagster_run.run_id[:8]}-{step_key}"
+        job_id = f"dagster-job-{date.now().strftime('%Y-%m-%d-%H_%M_%S')}-{step_key}"
         self._step_job_ids[step_key] = job_id
 
         pool_info = PoolInformation(pool_id=self._pool_id)
@@ -327,7 +328,7 @@ class AzureBatchStepHandler(StepHandler):
     ) -> CheckStepHealthResult:
         step_key = self._get_step_key(step_handler_context)
         job_id = self._step_job_ids[step_key]
-        task_id = f"task-{step_key}"
+        task_id = f"dagster-step-{step_handler_context.dagster_run.run_id[:8]}-{step_key}"
 
         try:
             task = self._batch_client.task.get(job_id, task_id)
