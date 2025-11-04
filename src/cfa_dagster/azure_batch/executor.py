@@ -84,13 +84,22 @@ def azure_batch_executor(
 
     To use the `azure_batch_executor`, set it as the `executor_def` when defining a job:
 
+    .. code-block:: python
+        some_job = dg.define_asset_job(
+            name="some_job",
+            executor_def=azure_container_app_job_executor,
+            ..
+        )
+
     Then you can configure the executor with run config as follows:
 
     .. code-block:: YAML
 
         execution:
           config:
-            registry: ...
+            pool_name: ...
+            image: ...
+            env_vars: ...
             container_kwargs: ...
 
     """

@@ -7,7 +7,7 @@ import docker.errors
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.mgmt.resource.subscriptions import SubscriptionClient
-from dagster import Field, IntSource, executor
+from dagster import Field, IntSource, StringSource, executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
@@ -58,6 +58,15 @@ if TYPE_CHECKING:
     config_schema=merge_dicts(
         DOCKER_CONFIG_SCHEMA,
         {
+            "container_app_job_name": Field(
+                StringSource,
+                is_required=False,
+                default_value="cfa-dagster",
+                description=(
+                    "The name of the Container App Job. Defaults "
+                    "to the cfa-dagster job with 4 CPU 8 GB RAM"
+                )
+            ),
             "retries": get_retries_config(),
             "max_concurrent": Field(
                 IntSource,
@@ -72,18 +81,19 @@ if TYPE_CHECKING:
     ),
     requirements=multiple_process_executor_requirements(),
 )
-# @beta
 def azure_container_app_job_executor(
     init_context: InitExecutorContext,
 ) -> Executor:
-    """Executor which launches steps as Docker containers.
+    """Executor which launches steps as Container App Job executions.
 
     To use the `azure_container_app_job_executor`, set it as the `executor_def` when defining a job:
 
-    .. literalinclude:: ../../../../../../python_modules/libraries/dagster-docker/dagster_docker_tests/test_example_executor.py
-       :start-after: start_marker
-       :end-before: end_marker
-       :language: python
+    .. code-block:: python
+        some_job = dg.define_asset_job(
+            name="some_job",
+            executor_def=azure_container_app_job_executor,
+            ..
+        )
 
     Then you can configure the executor with run config as follows:
 
@@ -91,10 +101,9 @@ def azure_container_app_job_executor(
 
         execution:
           config:
-            registry: ...
-            network: ...
-            networks: ...
-            container_kwargs: ...
+            container_app_job_name: ...
+            image: ...
+            env_vars: ...
 
     If you're using the DockerRunLauncher, configuration set on the containers created by the run
     launcher will also be set on the containers that are created for each step.
@@ -143,14 +152,15 @@ class AzureContainerAppJobStepHandler(StepHandler):
         self,
         image: Optional[str],
         container_context: DockerContainerContext,
+        container_app_job_name: Optional[str],
     ):
         super().__init__()
         print(f"Launching a new {self.name}")
         self._step_container_ids = {}
         self._step_caj_execution_ids = {}
 
-        self._job_name = "cfa-dagster"  # TODO: move to config
-        self._resource_group = "ext-edav-cfa-prd"  # TODO: move to config
+        self._job_name = container_app_job_name
+        self._resource_group = "ext-edav-cfa-prd"  # TODO: move to config?
         credential = DefaultAzureCredential()
 
         # Get first subscription for logged-in credential
