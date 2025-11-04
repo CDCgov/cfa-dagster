@@ -1,13 +1,15 @@
 #!/usr/bin/env -S uv run --script
 # PEP 723 dependency definition: https://peps.python.org/pep-0723/
 # /// script
-# requires-python = ">=3.13"
+# requires-python = ">=3.13,<3.14"
 # dependencies = [
 #    "dagster-azure>=0.27.4",
 #    "dagster-docker>=0.27.4",
 #    "dagster-postgres>=0.27.4",
 #    "dagster-webserver",
 #    "dagster==1.11.4",
+#  # pydantic 2.12.X contains breaking changes for Dagster
+#    "pydantic==2.11.9",
 #    "cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git",
 #    "pyyaml>=6.0.2",
 # ]
@@ -105,6 +107,10 @@ def partitioned_r_asset(context: dg.OpExecutionContext):
     subprocess.run(f"Rscript hello.R {disease}", shell=True, check=True)
 
 
+# this should match your Dockerfile WORKDIR
+workdir = "/opt/dagster/code_location/cfa-dagster"
+
+
 # configuring an executor to run workflow steps on Docker
 # add this to a job or the Definitions class to use it
 docker_executor_configured = docker_executor.configured(
@@ -118,7 +124,7 @@ docker_executor_configured = docker_executor.configured(
                 f"/home/{user}/.azure:/root/.azure",
                 # bind current file so we don't have to rebuild
                 # the container image for workflow changes
-                f"{__file__}:/app/{os.path.basename(__file__)}",
+                f"{__file__}:{workdir}/{os.path.basename(__file__)}",
             ]
         },
     }
@@ -128,7 +134,7 @@ docker_executor_configured = docker_executor.configured(
 # add this to a job or the Definitions class to use it
 azure_caj_executor_configured = azure_caj_executor.configured(
     {
-        "image": f"cfaprdbatchcr.azurecr.io/cfa-dagster-sandbox:{user}",
+        "image": f"cfaprdbatchcr.azurecr.io/cfa-dagster:{user}",
         "env_vars": [f"DAGSTER_USER={user}"],
     }
 )
@@ -137,13 +143,11 @@ azure_caj_executor_configured = azure_caj_executor.configured(
 # add this to a job or the Definitions class to use it
 azure_batch_executor_configured = azure_batch_executor.configured(
     {
-        "image": f"cfaprdbatchcr.azurecr.io/cfa-dagster-sandbox:{user}",
+        "image": f"cfaprdbatchcr.azurecr.io/cfa-dagster:{user}",
         "env_vars": [f"DAGSTER_USER={user}"],
-        # "container_kwargs": {
-        #     # default working_dir is /app for Batch
-        #     # I have not been able to get Batch to work with other dirs
-        #     "working_dir": "/app",
-        # },
+        "container_kwargs": {
+            "working_dir": workdir,
+        },
     }
 )
 
