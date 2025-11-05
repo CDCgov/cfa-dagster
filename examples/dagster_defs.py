@@ -54,6 +54,10 @@ if "--dev" in sys.argv:
     except KeyboardInterrupt:
         print("\nShutting down cleanly...")
 
+is_production = not os.getenv("DAGSTER_IS_DEV_CLI")  # set by dagster cli
+if is_production:
+    print("Running in local dev environment")
+
 
 # get the user from the environment, throw an error if variable is not set
 user = os.environ["DAGSTER_USER"]
@@ -117,6 +121,7 @@ docker_executor_configured = docker_executor.configured(
     {
         # specify a default image
         "image": "basic-r-asset",
+        # required env variable to separate resources by user in Azure
         "env_vars": [f"DAGSTER_USER={user}"],
         "container_kwargs": {
             "volumes": [
@@ -134,7 +139,9 @@ docker_executor_configured = docker_executor.configured(
 # add this to a job or the Definitions class to use it
 azure_caj_executor_configured = azure_caj_executor.configured(
     {
+        # specify a default image
         "image": f"cfaprdbatchcr.azurecr.io/cfa-dagster:{user}",
+        # required env variable to separate resources by user in Azure
         "env_vars": [f"DAGSTER_USER={user}"],
     }
 )
@@ -143,10 +150,20 @@ azure_caj_executor_configured = azure_caj_executor.configured(
 # add this to a job or the Definitions class to use it
 azure_batch_executor_configured = azure_batch_executor.configured(
     {
+        # change the pool_name to your existing pool name
+        # "pool_name": "cfa-dagster",
+        # specify a default image
         "image": f"cfaprdbatchcr.azurecr.io/cfa-dagster:{user}",
+        # required env variable to separate resources by user in Azure
         "env_vars": [f"DAGSTER_USER={user}"],
         "container_kwargs": {
+            # set the working directory to match your Dockerfile
+            # required for Azure Batch
             "working_dir": workdir,
+            # mount config if your existing Batch pool already has Blob mounts
+            # "volumes": [
+            #     "nssp-etl:nssp-etl",
+            # ]
         },
     }
 )
@@ -180,6 +197,8 @@ partitioned_r_asset_job = dg.define_asset_job(
 schedule_every_wednesday = dg.ScheduleDefinition(name="weekly_cron", cron_schedule="0 9 * * 3", job=basic_r_asset_job)
 
 
+# switch storage accounts between dev and prod
+storage_account = "cfadagster" if is_production else "cfadagsterdev"
 # this prefix allows your assets to be stored in Azure
 # without conflicting with other users
 adls2_prefix = f"dagster-files/{user}/"
@@ -188,14 +207,15 @@ resources_def = {
     # This IOManager lets Dagster serialize asset outputs and store them
     # in Azure to pass between assets
     "io_manager": ADLS2PickleIOManager(
-        adls2_file_system="cfadagsterdev",
+        adls2_file_system=storage_account,
         adls2_prefix=adls2_prefix,
         adls2=ADLS2Resource(
-            storage_account="cfadagsterdev",
+            storage_account=storage_account,
             credential=ADLS2DefaultAzureCredential(kwargs={}),
         ),
         lease_duration=-1,  # unlimited lease for writing large files
     ),
+    # an example storage account
     "azure_blob_storage": AzureBlobStorageResource(
         account_url="cfadagsterdev.blob.core.windows.net",
         credential=AzureBlobStorageDefaultCredential(),
