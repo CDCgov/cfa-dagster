@@ -269,7 +269,7 @@ class AzureBatchStepHandler(StepHandler):
         step_key = self._get_step_key(step_handler_context)
         execute_step_args = step_handler_context.execute_step_args
 
-        job_id = self._get_job_id()
+        job_id = self._get_job_id(step_handler_context)
 
         pool_info = PoolInformation(pool_id=self._pool_id)
         job = JobAddParameter(id=job_id, pool_info=pool_info)
@@ -375,7 +375,7 @@ class AzureBatchStepHandler(StepHandler):
         self, step_handler_context: StepHandlerContext
     ) -> Iterator[DagsterEvent]:
         step_key = self._get_step_key(step_handler_context)
-        job_id = self._get_job_id()
+        job_id = self._get_job_id(step_handler_context)
         task_id = self._get_task_id(step_key)
 
         yield DagsterEvent.engine_event(
