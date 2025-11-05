@@ -376,7 +376,7 @@ class AzureBatchStepHandler(StepHandler):
     ) -> Iterator[DagsterEvent]:
         step_key = self._get_step_key(step_handler_context)
         job_id = self._get_job_id(step_handler_context)
-        task_id = self._get_task_id(step_key)
+        task_id = self._get_task_id(step_handler_context)
 
         yield DagsterEvent.engine_event(
             step_handler_context.get_step_context(step_key),
