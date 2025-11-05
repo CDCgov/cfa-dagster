@@ -245,8 +245,11 @@ class AzureBatchStepHandler(StepHandler):
 
     def _get_job_id(self, step_handler_context: StepHandlerContext):
         run = step_handler_context.dagster_run
-        run_id = run.tags.get("dagster/backfill") or run.run_id
-        job_id = f"dagster-run-{run_id}"
+        backfill_id = run.tags.get("dagster/backfill") 
+        print(f"backfill_id: '{backfill_id}'")
+        print(f"run_id: '{run.run_id}'")
+        id = backfill_id or run.run_id
+        job_id = f"dagster-run-{id}"
         return job_id
 
     def _get_task_id(self, step_handler_context: StepHandlerContext):
