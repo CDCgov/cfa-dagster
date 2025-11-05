@@ -112,6 +112,14 @@ def azure_batch_executor(
     container_kwargs = check.opt_dict_elem(
         config, "container_kwargs", key_type=str
     )
+    base_working_dir = "/opt/dagster/code_location/"
+    working_dir = container_kwargs.get("working_dir")
+    if not working_dir or not working_dir.startswith(base_working_dir):
+        raise ValueError((
+            "Missing property 'container_kwargs.working_dir' "
+            f"is required and must start with '{base_working_dir}'\n"
+            "Please update your executor config and Dockerfile if required"
+        ))
     retries = check.dict_elem(config, "retries", key_type=str)
     max_concurrent = check.opt_int_elem(config, "max_concurrent")
     tag_concurrency_limits = check.opt_list_elem(
@@ -148,7 +156,6 @@ class AzureBatchStepHandler(StepHandler):
         pool_name: Optional[str],
     ):
         super().__init__()
-        self._step_job_ids = {}
         # self._pool_id = "cfa-dagster"
         self._pool_id = pool_name
         print(f"Launching a new {self.name}")
@@ -236,6 +243,21 @@ class AzureBatchStepHandler(StepHandler):
         )
         return step_keys_to_execute[0]
 
+    def _get_job_id(step_handler_context: StepHandlerContext):
+        run = step_handler_context.dagster_run
+        run_id = run.tags.get("dagster/backfill") or run.run_id
+        job_id = f"dagster-run-{run_id}"
+        return job_id
+
+    def _get_task_id(self, step_handler_context: StepHandlerContext):
+        run = step_handler_context.dagster_run
+        step_key = self._get_step_key(step_handler_context)
+        partition_key = run.tags.get("dagster/partition") or ""
+        task_id = f"dagster-step-{step_key}"
+        if partition_key:
+            task_id = f"{task_id}-{partition_key}"
+        return task_id
+
     def launch_step(
         self, step_handler_context: StepHandlerContext
     ) -> Iterator[DagsterEvent]:
@@ -247,11 +269,7 @@ class AzureBatchStepHandler(StepHandler):
         step_key = self._get_step_key(step_handler_context)
         execute_step_args = step_handler_context.execute_step_args
 
-        run = step_handler_context.dagster_run
-        run_id = run.tags.get("dagster/backfill") or run.run_id
-        job_id = f"dagster-run-{run_id}"
-        print(f"job_id: '{job_id}'")
-        self._step_job_ids[step_key] = job_id
+        job_id = self._get_job_id()
 
         pool_info = PoolInformation(pool_id=self._pool_id)
         job = JobAddParameter(id=job_id, pool_info=pool_info)
@@ -290,7 +308,7 @@ class AzureBatchStepHandler(StepHandler):
             source, target = volume.split(":", 1)
             mount_options += f" --mount type=bind,source=$AZ_BATCH_NODE_MOUNTS_DIR/{source},target={target}"
 
-        workdir = container_context.container_kwargs.get("working_dir", "/app")
+        workdir = container_context.container_kwargs.get("working_dir", "/app")  # TODO: validate this
 
         container_settings = TaskContainerSettings(
             image_name=step_image,
@@ -305,9 +323,10 @@ class AzureBatchStepHandler(StepHandler):
                 elevation_level=ElevationLevel.admin,
             )
         )
+        task_id = self._get_task_id(step_handler_context)
 
         task = TaskAddParameter(
-            id=f"task-{step_key}",
+            id=task_id,
             command_line=f"/bin/bash -c \'{" ".join(command)}\'",
             container_settings=container_settings,
             environment_settings=[{"name": k, "value": v} for k, v in env_vars.items()],
@@ -329,8 +348,8 @@ class AzureBatchStepHandler(StepHandler):
         self, step_handler_context: StepHandlerContext
     ) -> CheckStepHealthResult:
         step_key = self._get_step_key(step_handler_context)
-        job_id = self._step_job_ids[step_key]
-        task_id = f"task-{step_key}"
+        job_id = self._get_job_id(step_handler_context)
+        task_id = self._get_task_id(step_handler_context)
 
         try:
             task = self._batch_client.task.get(job_id, task_id)
@@ -356,11 +375,12 @@ class AzureBatchStepHandler(StepHandler):
         self, step_handler_context: StepHandlerContext
     ) -> Iterator[DagsterEvent]:
         step_key = self._get_step_key(step_handler_context)
-        job_id = self._step_job_ids[step_key]
+        job_id = self._get_job_id()
+        task_id = self._get_task_id(step_key)
 
         yield DagsterEvent.engine_event(
             step_handler_context.get_step_context(step_key),
-            message=f"Terminating Azure Batch job {job_id} for step.",
+            message=f"Terminating Azure Batch task {task_id} in job {job_id} for step {step_key}.",
             event_specific_data=EngineEventData(),
         )
-        self._batch_client.job.terminate(job_id)
+        self._batch_client.task.terminate(job_id=job_id, task_id=task_id)
