@@ -247,7 +247,10 @@ class AzureBatchStepHandler(StepHandler):
         step_key = self._get_step_key(step_handler_context)
         execute_step_args = step_handler_context.execute_step_args
 
-        job_id = f"dagster-run-{step_handler_context.dagster_run.run_id}"
+        run = step_handler_context.dagster_run
+        run_id = run.tags.get("dagster/backfill" or run.run_id)
+        job_id = f"dagster-run-{run_id}"
+        print(f"job_id: '{job_id}'")
         self._step_job_ids[step_key] = job_id
 
         pool_info = PoolInformation(pool_id=self._pool_id)
