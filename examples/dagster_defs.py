@@ -60,7 +60,12 @@ if is_production:
 
 
 # get the user from the environment, throw an error if variable is not set
-user = os.environ["DAGSTER_USER"]
+user = os.getenv("DAGSTER_USER")
+if not user:
+    raise RuntimeError((
+        "Env var 'DAGSTER_USER' is not set. "
+        "If you are running locally, don't forget the '--dev' cli argument "
+        "e.g. uv run dagster_defs.py --dev"))
 
 
 @dg.asset(
