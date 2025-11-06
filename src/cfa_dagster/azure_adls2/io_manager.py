@@ -26,10 +26,7 @@ class ADLS2PickleIOManager(dagster_azure_adls2.ADLS2PickleIOManager):
     _storage_account = "cfadagster" if is_production else "cfadagsterdev"
     _user = os.getenv("DAGSTER_USER")
 
-    adls2: ResourceDependency[ADLS2Resource] = ADLS2Resource(
-        storage_account=_storage_account,
-        credential=ADLS2DefaultAzureCredential(kwargs={}),
-    )
+    adls2: ResourceDependency[ADLS2Resource]
     adls2_file_system: str = Field(
         description="ADLS Gen2 file system name.",
         default=_storage_account,
@@ -45,6 +42,12 @@ class ADLS2PickleIOManager(dagster_azure_adls2.ADLS2PickleIOManager):
     @property
     @cached_method
     def _internal_io_manager(self) -> PickledObjectADLS2IOManager:
+        if not self.adls2:
+            self.adls2 = ADLS2Resource(
+                storage_account=self._storage_account,
+                credential=ADLS2DefaultAzureCredential(kwargs={}),
+            )
+
         return PickledObjectADLS2IOManager(
             self.adls2_file_system,
             self.adls2.adls2_client,
