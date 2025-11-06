@@ -42,17 +42,16 @@ class ADLS2PickleIOManager(dagster_azure_adls2.ADLS2PickleIOManager):
     @property
     @cached_method
     def _internal_io_manager(self) -> PickledObjectADLS2IOManager:
-        if not self.adls2:
-            self.adls2 = ADLS2Resource(
-                storage_account=self._storage_account,
-                credential=ADLS2DefaultAzureCredential(kwargs={}),
-            )
+        adls2 = self.adls2 or ADLS2Resource(
+            storage_account=self._storage_account,
+            credential=ADLS2DefaultAzureCredential(kwargs={}),
+        )
 
         return PickledObjectADLS2IOManager(
             self.adls2_file_system,
-            self.adls2.adls2_client,
-            self.adls2.blob_client,
-            self.adls2.lease_client_constructor,
+            adls2.adls2_client,
+            adls2.blob_client,
+            adls2.lease_client_constructor,
             self.adls2_prefix,
             self.lease_duration,
         )
