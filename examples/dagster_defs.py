@@ -122,8 +122,8 @@ docker_executor_configured = docker_executor.configured(
     {
         # specify a default image
         "image": "basic-r-asset",
-        # required env variable to separate resources by user in Azure
-        "env_vars": [f"DAGSTER_USER={user}"],
+        # set env vars here
+        # "env_vars": [f"DAGSTER_USER={user}"],
         "container_kwargs": {
             "volumes": [
                 # bind the ~/.azure folder for optional cli login
@@ -142,8 +142,8 @@ azure_caj_executor_configured = azure_caj_executor.configured(
     {
         # specify a default image
         "image": f"cfaprdbatchcr.azurecr.io/cfa-dagster:{user}",
-        # required env variable to separate resources by user in Azure
-        "env_vars": [f"DAGSTER_USER={user}"],
+        # set env vars here
+        # "env_vars": [f"DAGSTER_USER={user}"],
     }
 )
 
@@ -155,8 +155,8 @@ azure_batch_executor_configured = azure_batch_executor.configured(
         # "pool_name": "cfa-dagster",
         # specify a default image
         "image": f"cfaprdbatchcr.azurecr.io/cfa-dagster:{user}",
-        # required env variable to separate resources by user in Azure
-        "env_vars": [f"DAGSTER_USER={user}"],
+        # set env vars here
+        # "env_vars": [f"DAGSTER_USER={user}"],
         "container_kwargs": {
             # set the working directory to match your Dockerfile
             # required for Azure Batch
