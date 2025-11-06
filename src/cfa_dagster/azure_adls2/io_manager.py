@@ -9,7 +9,7 @@ from dagster import (
 from dagster._utils.cached_method import cached_method
 from pydantic import Field
 
-import dagster_azure.adls2 as adls2
+import dagster_azure.adls2 as dagster_azure_adls2
 from dagster_azure.adls2 import (
     PickledObjectADLS2IOManager,
     ADLS2DefaultAzureCredential,
@@ -20,8 +20,8 @@ import os
 is_production = not os.getenv("DAGSTER_IS_DEV_CLI")  # set by dagster cli
 
 
-class ADLS2PickleIOManager(adls2.ADLS2PickleIOManager):
-    __doc__ = adls2.ADLS2PickleIOManager.__doc__
+class ADLS2PickleIOManager(dagster_azure_adls2.ADLS2PickleIOManager):
+    __doc__ = dagster_azure_adls2.ADLS2PickleIOManager.__doc__
 
     _storage_account = "cfadagster" if is_production else "cfadagsterdev"
     _user = os.getenv("DAGSTER_USER")
