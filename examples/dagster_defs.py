@@ -170,6 +170,10 @@ partitioned_r_asset_job = dg.define_asset_job(
 # schedule the job to run weekly
 schedule_every_wednesday = dg.ScheduleDefinition(name="weekly_cron", cron_schedule="0 9 * * 3", job=basic_r_asset_job)
 
+# env variable set by Dagster CLI
+is_production = not os.getenv("DAGSTER_IS_DEV_CLI")
+# change storage accounts between dev and prod
+storage_account = "cfadagster" if is_production else "cfadagsterdev"
 
 resources_def = {
     # This IOManager lets Dagster serialize asset outputs and store them
@@ -177,7 +181,7 @@ resources_def = {
     "io_manager": ADLS2PickleIOManager(),
     # an example storage account
     "azure_blob_storage": AzureBlobStorageResource(
-        account_url="cfadagsterdev.blob.core.windows.net",
+        account_url=f"{storage_account}.blob.core.windows.net",
         credential=AzureBlobStorageDefaultCredential(),
     ),
 }
