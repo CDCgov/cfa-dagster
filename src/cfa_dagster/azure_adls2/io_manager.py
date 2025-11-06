@@ -22,20 +22,19 @@ is_production = not os.getenv("DAGSTER_IS_DEV_CLI")  # set by dagster cli
 
 class ADLS2PickleIOManager(adls2.ADLS2PickleIOManager):
 
-    storage_account = "cfadagster" if is_production else "cfadagsterdev"
-    user = os.getenv("DAGSTER_USER")
-    adls2_prefix = f"dagster-files/{user}/"
+    _storage_account = "cfadagster" if is_production else "cfadagsterdev"
+    _user = os.getenv("DAGSTER_USER")
 
     adls2: ResourceDependency[ADLS2Resource] = ADLS2Resource(
-        storage_account=storage_account,
+        storage_account=_storage_account,
         credential=ADLS2DefaultAzureCredential(kwargs={}),
     )
     adls2_file_system: str = Field(
         description="ADLS Gen2 file system name.",
-        default=storage_account,
+        default=_storage_account,
     )
     adls2_prefix: str = Field(
-        default=f"dagster-files/{user}", description="ADLS Gen2 file system prefix to write to."
+        default=f"dagster-files/{_user}", description="ADLS Gen2 file system prefix to write to."
     )
     lease_duration: int = Field(
         default=-1,
