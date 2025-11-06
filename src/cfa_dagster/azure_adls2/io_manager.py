@@ -58,6 +58,6 @@ class ADLS2PickleIOManager(adls2.ADLS2PickleIOManager):
         return super().load_input(context)
 
     def handle_output(self, context: "OutputContext", obj: Any) -> None:
-        return super().handle_output(context, obj)
+        super().handle_output(context, obj)
 
 
