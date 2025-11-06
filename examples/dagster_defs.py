@@ -31,6 +31,7 @@ from dagster_azure.blob import (
     AzureBlobStorageResource,
 )
 
+from cfa_dagster.utils import collect_definitions
 from cfa_dagster.azure_batch.executor import azure_batch_executor
 from cfa_dagster.azure_container_app_job.executor import (
     azure_container_app_job_executor as azure_caj_executor,
@@ -82,7 +83,6 @@ def basic_blob_asset(azure_blob_storage: AzureBlobStorageResource):
     downloader = container_client.download_blob("test-files/test_config.json")
     print("Downloaded file from blob!")
     return downloader.readall().decode("utf-8")
-
 
 @dg.asset(
     description="An asset that runs R code",
@@ -228,12 +228,9 @@ resources_def = {
 }
 
 
-# Add assets, jobs, schedules, and sensors here to have them appear in the
-# Dagster UI
+# Create Definitions object
 defs = dg.Definitions(
-    assets=[basic_r_asset, partitioned_r_asset, basic_blob_asset],
-    jobs=[basic_r_asset_job, partitioned_r_asset_job],
-    schedules=[schedule_every_wednesday],
+    **collect_definitions(globals()),
     resources=resources_def,
     # setting Docker as the default executor. comment this out to use
     # the default executor that runs directly on your computer
@@ -241,3 +238,4 @@ defs = dg.Definitions(
     # executor=azure_caj_executor_configured,
     # executor=azure_batch_executor_configured,
 )
+
