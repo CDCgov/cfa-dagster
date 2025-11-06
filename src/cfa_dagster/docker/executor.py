@@ -87,8 +87,11 @@ def docker_executor(init_context: InitExecutorContext) -> Executor:
         networks = [network]
 
     env_vars = env_vars or []
+    # propagate user & dev env vars
     user = os.getenv("DAGSTER_USER")
+    is_dev = os.getenv("DAGSTER_IS_DEV_CLI")
     env_vars.append(f"DAGSTER_USER={user}")
+    env_vars.append(f"DAGSTER_IS_DEV_CLI={is_dev}")
 
     container_context = DockerContainerContext(
         registry=registry,

@@ -242,7 +242,9 @@ class AzureContainerAppJobStepHandler(StepHandler):
             step_handler_context.dagster_run.job_name
         )
         env_vars["DAGSTER_RUN_STEP_KEY"] = step_key
+        # propagate user & dev env vars
         env_vars["DAGSTER_USER"] = os.getenv("DAGSTER_USER")
+        env_vars["DAGSTER_IS_DEV_CLI"] = os.getenv("DAGSTER_IS_DEV_CLI")
 
         # Download existing job template
         job_template = client.jobs.get(
