@@ -2,8 +2,9 @@ from dagster import (
     AssetsDefinition,
     JobDefinition,
     ScheduleDefinition,
-    SensorDefinition
+    SensorDefinition,
 )
+from dagster._core.definitions.unresolved_asset_job_definition import UnresolvedAssetJobDefinition
 import os
 import sys
 from pathlib import Path
@@ -55,7 +56,7 @@ def collect_definitions(namespace):
     for obj in list(namespace.values()):
         if isinstance(obj, AssetsDefinition):
             assets.append(obj)
-        elif isinstance(obj, JobDefinition):
+        elif isinstance(obj, JobDefinition) or isinstance(obj, UnresolvedAssetJobDefinition):
             jobs.append(obj)
         elif isinstance(obj, ScheduleDefinition):
             schedules.append(obj)
