@@ -1,0 +1,1 @@
+from cfa_dagster.azure_adls2.io_manager import ADLS2PickleIOManager
