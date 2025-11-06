@@ -17,8 +17,6 @@
 import json
 import os
 import subprocess
-import sys
-from pathlib import Path
 
 import dagster as dg
 from dagster_azure.blob import (
@@ -27,42 +25,17 @@ from dagster_azure.blob import (
 )
 
 from cfa_dagster.azure_adls2.io_manager import ADLS2PickleIOManager
-from cfa_dagster.utils import collect_definitions
+from cfa_dagster.utils import bootstrap_dev, collect_definitions
 from cfa_dagster.azure_batch.executor import azure_batch_executor
 from cfa_dagster.azure_container_app_job.executor import (
     azure_container_app_job_executor as azure_caj_executor,
 )
 from cfa_dagster.docker.executor import docker_executor
 
-# Start the Dagster UI and set necessary env vars
-if "--dev" in sys.argv:
-    # Set environment variables
-    home_dir = Path.home()
-    dagster_user = home_dir.name
-    dagster_home = home_dir / ".dagster_home"
+# function to start the dev server
+bootstrap_dev()
 
-    os.environ["DAGSTER_USER"] = dagster_user
-    os.environ["DAGSTER_HOME"] = str(dagster_home)
-    script = sys.argv[0]
-
-    # Run the Dagster webserver
-    try:
-        subprocess.run(["dagster", "dev", "-f", script])
-    except KeyboardInterrupt:
-        print("\nShutting down cleanly...")
-
-is_production = not os.getenv("DAGSTER_IS_DEV_CLI")  # set by dagster cli
-if not is_production:
-    print("Running in local dev environment")
-
-
-# get the user from the environment, throw an error if variable is not set
 user = os.getenv("DAGSTER_USER")
-if not user:
-    raise RuntimeError((
-        "Env var 'DAGSTER_USER' is not set. "
-        "If you are running locally, don't forget the '--dev' cli argument "
-        "e.g. uv run dagster_defs.py --dev"))
 
 
 @dg.asset(
