@@ -21,16 +21,12 @@ import sys
 from pathlib import Path
 
 import dagster as dg
-from dagster_azure.adls2 import (
-    ADLS2DefaultAzureCredential,
-    ADLS2PickleIOManager,
-    ADLS2Resource,
-)
 from dagster_azure.blob import (
     AzureBlobStorageDefaultCredential,
     AzureBlobStorageResource,
 )
 
+from cfa_dagster.azure_adls2.io_manager import ADLS2PickleIOManager
 from cfa_dagster.utils import collect_definitions
 from cfa_dagster.azure_batch.executor import azure_batch_executor
 from cfa_dagster.azure_container_app_job.executor import (
@@ -211,15 +207,7 @@ adls2_prefix = f"dagster-files/{user}/"
 resources_def = {
     # This IOManager lets Dagster serialize asset outputs and store them
     # in Azure to pass between assets
-    "io_manager": ADLS2PickleIOManager(
-        adls2_file_system=storage_account,
-        adls2_prefix=adls2_prefix,
-        adls2=ADLS2Resource(
-            storage_account=storage_account,
-            credential=ADLS2DefaultAzureCredential(kwargs={}),
-        ),
-        lease_duration=-1,  # unlimited lease for writing large files
-    ),
+    "io_manager": ADLS2PickleIOManager(),
     # an example storage account
     "azure_blob_storage": AzureBlobStorageResource(
         account_url="cfadagsterdev.blob.core.windows.net",
