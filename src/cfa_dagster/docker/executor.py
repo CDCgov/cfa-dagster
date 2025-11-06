@@ -1,6 +1,7 @@
-from typing import TYPE_CHECKING, Optional, cast
+from typing import Optional, cast
 
 import dagster._check as check
+import os
 from dagster import Field, IntSource, executor
 from dagster._annotations import beta
 from dagster._core.definitions.executor_definition import (
@@ -23,9 +24,6 @@ from dagster_docker.utils import (
     DOCKER_CONFIG_SCHEMA,
     validate_docker_config,
 )
-
-if TYPE_CHECKING:
-    from dagster._core.origin import JobPythonOrigin
 
 
 @executor(
@@ -88,9 +86,13 @@ def docker_executor(init_context: InitExecutorContext) -> Executor:
     if network and not networks:
         networks = [network]
 
+    env_vars = env_vars or []
+    user = os.getenv("DAGSTER_USER")
+    env_vars.append(f"DAGSTER_USER={user}")
+
     container_context = DockerContainerContext(
         registry=registry,
-        env_vars=env_vars or [],
+        env_vars=env_vars,
         networks=networks or [],
         container_kwargs=container_kwargs,
     )

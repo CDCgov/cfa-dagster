@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Optional, cast
+import os
 
 import dagster._check as check
 from azure.mgmt.resource.subscriptions import SubscriptionClient
@@ -291,6 +292,7 @@ class AzureBatchStepHandler(StepHandler):
             step_handler_context.dagster_run.job_name
         )
         env_vars["DAGSTER_RUN_STEP_KEY"] = step_key
+        env_vars["DAGSTER_USER"] = os.getenv("DAGSTER_USER")
 
         command = execute_step_args.get_command_args()
 

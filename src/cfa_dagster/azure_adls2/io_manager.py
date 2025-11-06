@@ -9,7 +9,7 @@ from dagster import (
 from dagster._utils.cached_method import cached_method
 from pydantic import Field
 
-import dagster_azure.adls2 as adls2
+import dagster_azure.adls2 as dagster_azure_adls2
 from dagster_azure.adls2 import (
     PickledObjectADLS2IOManager,
     ADLS2DefaultAzureCredential,
@@ -20,16 +20,13 @@ import os
 is_production = not os.getenv("DAGSTER_IS_DEV_CLI")  # set by dagster cli
 
 
-class ADLS2PickleIOManager(adls2.ADLS2PickleIOManager):
-    __doc__ = adls2.ADLS2PickleIOManager.__doc__
+class ADLS2PickleIOManager(dagster_azure_adls2.ADLS2PickleIOManager):
+    __doc__ = dagster_azure_adls2.ADLS2PickleIOManager.__doc__
 
     _storage_account = "cfadagster" if is_production else "cfadagsterdev"
     _user = os.getenv("DAGSTER_USER")
 
-    adls2: ResourceDependency[ADLS2Resource] = ADLS2Resource(
-        storage_account=_storage_account,
-        credential=ADLS2DefaultAzureCredential(kwargs={}),
-    )
+    adls2: ResourceDependency[ADLS2Resource]
     adls2_file_system: str = Field(
         description="ADLS Gen2 file system name.",
         default=_storage_account,
@@ -45,19 +42,24 @@ class ADLS2PickleIOManager(adls2.ADLS2PickleIOManager):
     @property
     @cached_method
     def _internal_io_manager(self) -> PickledObjectADLS2IOManager:
+        adls2 = self.adls2 or ADLS2Resource(
+            storage_account=self._storage_account,
+            credential=ADLS2DefaultAzureCredential(kwargs={}),
+        )
+
         return PickledObjectADLS2IOManager(
             self.adls2_file_system,
-            self.adls2.adls2_client,
-            self.adls2.blob_client,
-            self.adls2.lease_client_constructor,
+            adls2.adls2_client,
+            adls2.blob_client,
+            adls2.lease_client_constructor,
             self.adls2_prefix,
             self.lease_duration,
         )
 
     def load_input(self, context: "InputContext") -> Any:
-        return super().load_input(context)
+        return self._internal_io_manager.load_input(context)
 
     def handle_output(self, context: "OutputContext", obj: Any) -> None:
-        return super().handle_output(context, obj)
+        self._internal_io_manager.handle_output(context, obj)
 
 
