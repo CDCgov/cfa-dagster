@@ -1,9 +1,8 @@
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Optional, cast
+from typing import Optional, cast
 
 import dagster._check as check
-import docker
-import docker.errors
+import os
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.mgmt.resource.subscriptions import SubscriptionClient
@@ -30,27 +29,6 @@ from dagster_docker.utils import (
     validate_docker_config,
     validate_docker_image,
 )
-from dagster_shared.serdes.utils import hash_str
-
-
-def pretty_print(obj):
-    return obj
-    import json
-
-    serializable_object = {
-        k: str(v)
-        if not isinstance(v, (str, int, float, bool, list, dict))
-        else v
-        for k, v in vars(obj).items()
-    }
-
-    json_data = json.dumps(serializable_object, indent=2)
-    return json_data
-    # print(json_data)
-
-
-if TYPE_CHECKING:
-    from dagster._core.origin import JobPythonOrigin
 
 
 @executor(
@@ -264,6 +242,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
             step_handler_context.dagster_run.job_name
         )
         env_vars["DAGSTER_RUN_STEP_KEY"] = step_key
+        env_vars["DAGSTER_USER"] = os.getenv("DAGSTER_USER")
 
         # Download existing job template
         job_template = client.jobs.get(
