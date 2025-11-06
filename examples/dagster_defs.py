@@ -55,7 +55,7 @@ if "--dev" in sys.argv:
         print("\nShutting down cleanly...")
 
 is_production = not os.getenv("DAGSTER_IS_DEV_CLI")  # set by dagster cli
-if is_production:
+if not is_production:
     print("Running in local dev environment")
 
 
