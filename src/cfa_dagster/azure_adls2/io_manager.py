@@ -21,6 +21,7 @@ is_production = not os.getenv("DAGSTER_IS_DEV_CLI")  # set by dagster cli
 
 
 class ADLS2PickleIOManager(adls2.ADLS2PickleIOManager):
+    __doc__ = adls2.ADLS2PickleIOManager.__doc__
 
     _storage_account = "cfadagster" if is_production else "cfadagsterdev"
     _user = os.getenv("DAGSTER_USER")
@@ -60,4 +61,3 @@ class ADLS2PickleIOManager(adls2.ADLS2PickleIOManager):
         return super().handle_output(context, obj)
 
 
-ADLS2PickleIOManager.__doc__ = adls2.ADLS2PickleIOManager.__doc__
