@@ -57,9 +57,9 @@ class ADLS2PickleIOManager(dagster_azure_adls2.ADLS2PickleIOManager):
         )
 
     def load_input(self, context: "InputContext") -> Any:
-        return self._internal_io_manager.load_input(context)
+        return super().load_input(context)
 
     def handle_output(self, context: "OutputContext", obj: Any) -> None:
-        self._internal_io_manager.handle_output(context, obj)
+        super().handle_output(context, obj)
 
 
