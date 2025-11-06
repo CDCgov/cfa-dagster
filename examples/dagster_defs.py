@@ -171,12 +171,6 @@ partitioned_r_asset_job = dg.define_asset_job(
 schedule_every_wednesday = dg.ScheduleDefinition(name="weekly_cron", cron_schedule="0 9 * * 3", job=basic_r_asset_job)
 
 
-# switch storage accounts between dev and prod
-storage_account = "cfadagster" if is_production else "cfadagsterdev"
-# this prefix allows your assets to be stored in Azure
-# without conflicting with other users
-adls2_prefix = f"dagster-files/{user}/"
-
 resources_def = {
     # This IOManager lets Dagster serialize asset outputs and store them
     # in Azure to pass between assets
