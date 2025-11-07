@@ -53,6 +53,7 @@ def basic_blob_asset(azure_blob_storage: AzureBlobStorageResource):
     print("Downloaded file from blob!")
     return downloader.readall().decode("utf-8")
 
+
 @dg.asset(
     description="An asset that runs R code",
 )

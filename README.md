@@ -6,7 +6,7 @@ This repo serves as the base for CFA's Dagster software including custom executo
 
 ## Getting started
 
-- To get started with local Dagster development, see the [examples](examples/README.md)
+- To get started with local Dagster development, clone this repo and check out the [examples](examples/)
 
 - To use this repo as a python library, add the dependency to your `pyproject.toml` or inline PEP 723 script comment:
 ```toml
@@ -16,11 +16,14 @@ This repo serves as the base for CFA's Dagster software including custom executo
 
 ```
 ## Moving local workflow to production
-If you would like to schedule your workflow to run on a schedule or triggered based on other workflows, you can move your workflows to the production server with the following:
+If you would like to schedule your workflow to run on a schedule or triggered based on other workflows, you can move your workflows to the production server (http://dagster.apps.edav.ext.cdc.gov) with the following:
 
 - To register your Dagster workflows with the central Dagster server for production scheduling and event triggering, run `uv run https://raw.githubusercontent.com/CDCgov/cfa-dagster/refs/heads/main/scripts/add_code_location.py --github_url <your_github_url>`. The GitHub URL you provide should be a link directly to the python file containing your Dagster definitions e.g. https://github.com/cdcent/cfa-dagster/blob/main/examples/dagster_defs.py. The link MUST be to the default branch of your repository e.g. main, master, prod, etc.
 
 - To update your existing Dagster workflows on the central Dagster server, run `uv run https://raw.githubusercontent.com/CDCgov/cfa-dagster/refs/heads/main/scripts/update_code_location.py --location_name <your_location_name>`. The location name is usually the name of your GitHub repo.
+
+## Infrastructure
+For information about the infrastructure, see the [infra](infra/) folder
 
 ## Future Development
 
