@@ -50,7 +50,22 @@ def bootstrap_dev():
             " e.g. uv run dagster_defs.py --dev"))
 
 
-def collect_definitions(namespace=globals()):
+def collect_definitions(namespace):
+    """
+    Function to collect Dagster definitions from a namespace.
+    Usage:
+    # collect definitions from globals() namespace in current file
+    collected_defs = collect_definitions(globals())
+
+    # Create Definitions object passing collected definitions
+    defs = dg.Definitions(
+        assets=collected_defs["assets"],
+        asset_checks=collected_defs["asset_checks"],
+        jobs=collected_defs["jobs"],
+        sensors=collected_defs["sensors"],
+        schedules=collected_defs["schedules"],
+    )
+    """
     assets = []
     asset_checks = []
     jobs = []
