@@ -1,10 +1,13 @@
 from dagster import (
+    AssetChecksDefinition,
     AssetsDefinition,
     JobDefinition,
     ScheduleDefinition,
     SensorDefinition,
 )
-from dagster._core.definitions.unresolved_asset_job_definition import UnresolvedAssetJobDefinition
+from dagster._core.definitions.unresolved_asset_job_definition import (
+    UnresolvedAssetJobDefinition
+)
 import os
 import sys
 from pathlib import Path
@@ -43,12 +46,13 @@ def bootstrap_dev():
     if not os.getenv("DAGSTER_USER"):
         raise RuntimeError((
             "Env var 'DAGSTER_USER' is not set. "
-            "If you are running locally, don't forget the '--dev' cli argument "
-            "e.g. uv run dagster_defs.py --dev"))
+            "If you are running locally, don't forget the '--dev' cli argument"
+            " e.g. uv run dagster_defs.py --dev"))
 
 
-def collect_definitions(namespace):
+def collect_definitions(namespace=globals()):
     assets = []
+    asset_checks = []
     jobs = []
     schedules = []
     sensors = []
@@ -56,7 +60,10 @@ def collect_definitions(namespace):
     for obj in list(namespace.values()):
         if isinstance(obj, AssetsDefinition):
             assets.append(obj)
-        elif isinstance(obj, JobDefinition) or isinstance(obj, UnresolvedAssetJobDefinition):
+        if isinstance(obj, AssetChecksDefinition):
+            asset_checks.append(obj)
+        elif (isinstance(obj, JobDefinition)
+              or isinstance(obj, UnresolvedAssetJobDefinition)):
             jobs.append(obj)
         elif isinstance(obj, ScheduleDefinition):
             schedules.append(obj)
@@ -65,8 +72,8 @@ def collect_definitions(namespace):
 
     return {
         "assets": assets,
+        "asset_checks": asset_checks,
         "jobs": jobs,
         "schedules": schedules,
         "sensors": sensors,
     }
-
