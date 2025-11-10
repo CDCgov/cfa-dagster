@@ -1,6 +1,5 @@
 FROM docker.io/rocker/r-ver:4.4.0
 
-
 # We need curl to get UV and git to get a python dependency from GitHub
 RUN apt-get update && apt-get install -y curl git
 
@@ -9,8 +8,7 @@ RUN apt-get update && apt-get install -y curl git
 ARG INSTALL_AZ_CLI=false
 RUN if [ "${INSTALL_AZ_CLI}" = "true" ]; then curl -sL https://aka.ms/InstallAzureCLIDeb | bash; fi
 
-# WORKDIR MUST be /opt/dagster/code_location/<your repo name>
-ARG WORKDIR=/opt/dagster/code_location/cfa-dagster
+ARG WORKDIR=/app
 WORKDIR ${WORKDIR}
 
 # copy your application code
@@ -23,9 +21,8 @@ ENV PATH="/root/.local/bin:$PATH"
 # add Dagster workflow file
 COPY ./dagster_defs.py .
 
-# the virtual environment MUST be .venv in the same directory as your dagster workflow file
-ENV VIRTUAL_ENV=${WORKDIR}/.venv
 # create a virtual environment for the dagster workflows
+ENV VIRTUAL_ENV=${WORKDIR}/.venv
 RUN uv venv ${VIRTUAL_ENV}
 
 # install the dagster workflow dependencies

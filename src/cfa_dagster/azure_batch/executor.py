@@ -57,12 +57,8 @@ if TYPE_CHECKING:
         {
             "pool_name": Field(
                 StringSource,
-                is_required=False,
-                default_value="cfa-dagster",
-                description=(
-                    "The name of the Azure Batch Pool. Defaults "
-                    "to the cfa-dagster test pool with 4 CPU 16 GB RAM"
-                )
+                is_required=True,
+                description="The name of the Azure Batch Pool.",
             ),
             "retries": get_retries_config(),
             "max_concurrent": Field(
@@ -113,14 +109,11 @@ def azure_batch_executor(
     container_kwargs = check.opt_dict_elem(
         config, "container_kwargs", key_type=str
     )
-    # base_working_dir = "/opt/dagster/code_location/"
-    base_working_dir = "/"
     working_dir = container_kwargs.get("working_dir")
-    if not working_dir or not working_dir.startswith(base_working_dir):
+    if not working_dir:
         raise ValueError((
             "Missing property 'container_kwargs.working_dir' "
-            f"is required and must start with '{base_working_dir}'\n"
-            "Please update your executor config and Dockerfile if required"
+            f"is required and must match your Dockerfile WORKDIR"
         ))
     retries = check.dict_elem(config, "retries", key_type=str)
     max_concurrent = check.opt_int_elem(config, "max_concurrent")

@@ -38,12 +38,8 @@ from dagster_docker.utils import (
         {
             "container_app_job_name": Field(
                 StringSource,
-                is_required=False,
-                default_value="cfa-dagster",
-                description=(
-                    "The name of the Container App Job. Defaults "
-                    "to the cfa-dagster job with 4 CPU 8 GB RAM"
-                )
+                is_required=True,
+                description="The name of the Container App Job",
             ),
             "retries": get_retries_config(),
             "max_concurrent": Field(

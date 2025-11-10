@@ -18,9 +18,15 @@ This repo serves as the base for CFA's Dagster software including custom executo
 ## Moving local workflow to production
 If you would like to schedule your workflow to run on a schedule or triggered based on other workflows, you can move your workflows to the production server (http://dagster.apps.edav.ext.cdc.gov) with the following:
 
-- To register your Dagster workflows with the central Dagster server for production scheduling and event triggering, run `uv run https://raw.githubusercontent.com/CDCgov/cfa-dagster/refs/heads/main/scripts/add_code_location.py --github_url <your_github_url>`. The GitHub URL you provide should be a link directly to the python file containing your Dagster definitions e.g. https://github.com/cdcent/cfa-dagster/blob/main/examples/dagster_defs.py. The link MUST be to the default branch of your repository e.g. main, master, prod, etc.
+- Build your workflow into a Docker image and push to a container registry. Your workflow file must be named `dagster_defs.py` and in the `WORKDIR` of your image. Be sure to `uv sync` your workflow dependencies and add them to the `PATH`. See the examples for more info.
 
-- To update your existing Dagster workflows on the central Dagster server, run `uv run https://raw.githubusercontent.com/CDCgov/cfa-dagster/refs/heads/main/scripts/update_code_location.py --location_name <your_location_name>`. The location name is usually the name of your GitHub repo.
+- To create a workflow or update an existing one, run `uv run https://raw.githubusercontent.com/CDCgov/cfa-dagster/refs/heads/main/scripts/update_code_location.py --registry_image <your_registry_image>`. Your registry image can be `cfaprdbatchcr.azurecr.io/{image}:{tag}` or `ghcr.io/cdcgov/{image}:{tag}`. Images from cdcent cannot be used due to privacy and credential restrictions.
+
+New workflows will be created as 'code locations' on the server named to match your registry image with underscored replaced by hyphens e.g.
+
+- registering the image `cfaprdbatchcr.azurecr.io/cfa_dagster:latest` will result in a code location named `cfa-dagster`
+
+This means you *cannot* register the same image with different tags e.g. `cfa_dagster:prod` & `cfa_dagster:feature`
 
 ## Infrastructure
 For information about the infrastructure, see the [infra](infra/) folder
