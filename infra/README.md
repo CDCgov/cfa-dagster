@@ -24,19 +24,7 @@ Our dagster-daemon is running as a Container Instance named [dagster-daemon](htt
 
 Code locations are the source of Dagster workflows.
 
-Our code locations are currently stored on an Azure File Share named [cfadagsterfs](https://portal.azure.com/#@ext.cdc.gov/resource/subscriptions/ef340bd6-2809-4635-b18b-7e6583a8803b/resourceGroups/EXT-EDAV-CFA-PRD/providers/Microsoft.Storage/storageAccounts/cfadagsterfs/fileList). Each code location is represented by a python file with dependencies specified in PEP 723 format. Using a File Share allows us to store the code locations and their dependencies separately from the dagster-webserver and dagster-daemon in a resilient, cost-effective manner.
-
-The code locations live under /opt/dagster/code_location, with Dagster config under /opt/dagster/dagster_home/
-
-/opt/dagster$ tree . -L 2
-.
-├── code_location
-│   ├── cfa-dagster
-│   └── cfa-dagster-sandbox
-└── dagster_home
-    ├── gh_app.pem
-    ├── dagster.yaml
-    └── workspace.yaml
+Our code locations are currently deployed as small Azure Container Instances (ACI). Using ACI allows each location to have totally independent dependencies according to what is specified in the location's Dockerfile.
 
 ## The Database
 

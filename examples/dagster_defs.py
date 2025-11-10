@@ -87,8 +87,7 @@ def partitioned_r_asset(context: dg.OpExecutionContext):
 
 
 # this should match your Dockerfile WORKDIR
-workdir = "/opt/dagster/code_location/cfa-dagster"
-
+workdir = "/app"
 
 # configuring an executor to run workflow steps on Docker
 # add this to a job or the Definitions class to use it
@@ -114,6 +113,7 @@ docker_executor_configured = docker_executor.configured(
 # add this to a job or the Definitions class to use it
 azure_caj_executor_configured = azure_caj_executor.configured(
     {
+        "container_app_job_name": "cfa-dagster",
         # specify a default image
         "image": f"cfaprdbatchcr.azurecr.io/cfa-dagster:{user}",
         # set env vars here
@@ -126,7 +126,7 @@ azure_caj_executor_configured = azure_caj_executor.configured(
 azure_batch_executor_configured = azure_batch_executor.configured(
     {
         # change the pool_name to your existing pool name
-        # "pool_name": "cfa-dagster",
+        "pool_name": "cfa-dagster",
         # specify a default image
         "image": f"cfaprdbatchcr.azurecr.io/cfa-dagster:{user}",
         # set env vars here

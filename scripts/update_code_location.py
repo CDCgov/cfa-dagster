@@ -6,14 +6,17 @@ import json
 import requests
 import argparse
 
-DESCRIPTION = ('Script to update your Dagster code locations on the central Dagster server')
+DESCRIPTION = ('Script to update your Dagster code '
+               'locations on the central Dagster server')
 DAGSTER_BASE_URL = "http://dagster.apps.edav.ext.cdc.gov"
 # DAGSTER_BASE_URL = "http://127.0.0.1:3000"
 DAGSTER_GRAPHQL_URL = f"{DAGSTER_BASE_URL}/graphql"
 
 
-def main(location_name: str):
+def main(registry_image: str):
     f""" ${DESCRIPTION} """
+    if registry_image.startswith('ghcr.io/cdcent'):
+        raise ValueError("Cannot use images from private ghcr.io/cdcent repos")
 
     query = """
     mutation runJob($runConfigData: RunConfigData) {
@@ -47,9 +50,9 @@ def main(location_name: str):
     variables = {
         "runConfigData": {
             "ops": {
-                "get_code_location": {
+                "get_code_location_name": {
                     "inputs": {
-                        "location_name": location_name
+                        "registry_image": registry_image
                     }
                 }
             }
@@ -83,13 +86,15 @@ if __name__ == "__main__":
         description=DESCRIPTION
     )
     parser.add_argument(
-        '--location_name',
+        '--registry_image',
         required=True,
         type=str,
-        help=('Required. The name of your code location. '
-              'This is usually your GitHub repo name')
+        help=('Required. The registry image for your code location. '
+              'e.g. cfaprdbatchcr.azurecr.io/cfa-dagster:latest, '
+              'ghcr.io/cdcgov/cfa-dagster:latest. '
+              'Images from ghcr.io/cdcent cannot be used!'
+              )
     )
     args = parser.parse_args()
 
-    location_name = args.location_name
-    main(location_name)
+    main(args.registry_image)
