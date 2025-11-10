@@ -91,6 +91,7 @@ def azure_container_app_job_executor(
 
     # this is the config from the Launchpad
     print(f"config: '{config}'")
+    container_app_job_name = check.opt_str_elem(config, "container_app_job_name")
     image = check.opt_str_elem(config, "image")
     registry = check.opt_dict_elem(config, "registry", key_type=str)
     env_vars = check.opt_list_elem(config, "env_vars", of_type=str)
@@ -118,7 +119,7 @@ def azure_container_app_job_executor(
     )
 
     return StepDelegatingExecutor(
-        AzureContainerAppJobStepHandler(image, container_context),
+        AzureContainerAppJobStepHandler(image, container_context, container_app_job_name),
         retries=check.not_none(RetryMode.from_config(retries)),
         max_concurrent=max_concurrent,
         tag_concurrency_limits=tag_concurrency_limits,
@@ -130,7 +131,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
         self,
         image: Optional[str],
         container_context: DockerContainerContext,
-        container_app_job_name: Optional[str],
+        container_app_job_name: str,
     ):
         super().__init__()
         print(f"Launching a new {self.name}")
