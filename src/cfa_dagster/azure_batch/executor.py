@@ -113,7 +113,8 @@ def azure_batch_executor(
     container_kwargs = check.opt_dict_elem(
         config, "container_kwargs", key_type=str
     )
-    base_working_dir = "/opt/dagster/code_location/"
+    # base_working_dir = "/opt/dagster/code_location/"
+    base_working_dir = "/"
     working_dir = container_kwargs.get("working_dir")
     if not working_dir or not working_dir.startswith(base_working_dir):
         raise ValueError((
