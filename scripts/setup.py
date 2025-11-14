@@ -74,8 +74,6 @@ compute_logs:
 run_coordinator:
   module: dagster.core.run_coordinator
   class: QueuedRunCoordinator
-  config:
-    max_concurrent_runs: 25
 
 storage:
   postgres:
