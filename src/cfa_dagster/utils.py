@@ -1,4 +1,10 @@
+from dagster_graphql import DagsterGraphQLClient
 from dagster import (
+    DagsterInstance,
+    AssetKey,
+    EventRecordsFilter,
+    DagsterEventType,
+    RunConfig,
     AssetChecksDefinition,
     AssetsDefinition,
     JobDefinition,
@@ -35,7 +41,16 @@ def bootstrap_dev():
 
         # Run the Dagster webserver
         try:
-            subprocess.run(["dagster", "dev", "-f", script])
+            subprocess.run([
+                "dagster",
+                "dev",
+                "-h",
+                "127.0.0.1",
+                "-p",
+                "3000",
+                "-f",
+                script
+            ])
         except KeyboardInterrupt:
             print("\nShutting down cleanly...")
 
@@ -92,3 +107,91 @@ def collect_definitions(namespace):
         "schedules": schedules,
         "sensors": sensors,
     }
+
+
+def launch_asset_backfill(
+    asset_keys: list[str],
+    partition_keys: list[str],
+    tags: dict = {"programmed_backfill": "true"},
+    run_config: RunConfig = RunConfig(),
+):
+    """
+    Function to launch an asset backfill via the GraphQL client
+    """
+
+    if os.getenv("DAGSTER_IS_DEV_CLI"):  # set by dagster cli
+        client = DagsterGraphQLClient(hostname="127.0.0.1", port_number=3000)
+    else:
+        client = DagsterGraphQLClient(hostname="dagster.apps.edav.ext.cdc.gov")
+
+    query = """
+    mutation LaunchPartitionBackfill(
+        $backfillParams: LaunchBackfillParams!
+    ) {
+        launchPartitionBackfill(backfillParams: $backfillParams) {
+            __typename
+            ... on LaunchBackfillSuccess {
+                backfillId
+            }
+            ... on PythonError {
+                message
+                stack
+            }
+        }
+    }
+    """
+    variables = {
+        "backfillParams": {
+            "partitionNames": partition_keys,
+            "tags": [{"key": k, "value": v} for k, v in (tags or {}).items()],
+            "assetSelection": [{"path": key.split("/")} for key in asset_keys],
+            "runConfigData": run_config.to_config_dict(),
+        }
+    }
+    print(f"variables: '{variables}'")
+    result = client._execute(query, variables=variables)
+    print(f"result: '{result}'")
+    payload = result.get("launchPartitionBackfill")
+    if payload["__typename"] == "LaunchBackfillSuccess":
+        return payload["backfillId"]
+    else:
+        raise RuntimeError(f"Backfill failed: {payload['message']}")
+
+
+def get_latest_metadata_for_partition(asset_key_str: str, partition_key: str) -> dict:
+    """
+    Returns the metadata from the latest materialization for a given asset and partition.
+
+    Used to pass data between assets via metadata when typical outputs are not available like when using BackfillPolicy.single_run().
+    """
+    instance = DagsterInstance.get()
+    asset_key = AssetKey(asset_key_str)
+
+    # Filter for materialization events for this asset and partition
+    event_records_filter = EventRecordsFilter(
+        asset_key=asset_key,
+        event_type=DagsterEventType.ASSET_MATERIALIZATION,
+        asset_partitions=[partition_key],
+    )
+
+    # Fetch all matching events
+    events = instance.get_event_records(event_records_filter)
+
+    # Filter materializations with non-empty metadata
+    materializations = [
+        e.event_log_entry
+        for e in events
+        if e.event_log_entry.asset_materialization is not None
+        and e.event_log_entry.asset_materialization.metadata
+    ]
+
+    # Sort by event timestamp descending
+    materializations.sort(key=lambda e: e.timestamp, reverse=True)
+
+    # Return metadata from the latest one
+    if materializations:
+        metadata = materializations[0].asset_materialization.metadata
+        unwrapped_metadata = {k: v.value for k, v in metadata.items()}
+        return unwrapped_metadata
+    else:
+        return {}
