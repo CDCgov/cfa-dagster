@@ -16,8 +16,8 @@ dependencies = [
     "dagster-azure>=0.27.4",
     "dagster-docker>=0.27.4",
     "dagster-postgres>=0.27.4",
-    "dagster==1.12.1",
-    "dagster-graphql==1.12.1",
+    "dagster==1.12.2",
+    "dagster-graphql==1.12.2",
     "aiofiles>=24.1.0",
 ]
 
