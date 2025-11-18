@@ -100,6 +100,12 @@ def create_or_update_code_location_aci(
             "type": "UserAssigned",
             "user_assigned_identities": {managed_identity_id: {}}
         },
+        "imageRegistryCredentials": [
+            {
+                "server": "cfaprdbatchcr.azurecr.io",
+                "identity": managed_identity_id
+            }
+        ],
         "containers": [
             {
                 "name": container_group_name,

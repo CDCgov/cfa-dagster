@@ -25,7 +25,7 @@ def main(registry_image: str):
           selector: {
             jobName: "update_code_location",
             repositoryName: "__repository__",
-            repositoryLocationName: "cfa-dagster"
+            repositoryLocationName: "cfa_dagster"
           },
           runConfigData: $runConfigData
         }
