@@ -253,7 +253,7 @@ class AzureBatchStepHandler(StepHandler):
         partition_key: str = run.tags.get("dagster/partition") or ""
         task_id = f"dagster-step-{step_key}"
         if partition_key:
-            partition_key.replace("|", "_")  # | char not valid for Batch
+            partition_key = partition_key.replace("|", "_")  # | char not valid for Batch
             task_id = f"{task_id}-{partition_key}"
         return task_id
 
