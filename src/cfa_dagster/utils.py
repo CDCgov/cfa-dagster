@@ -1,16 +1,5 @@
 from dagster_graphql import DagsterGraphQLClient
-from dagster import (
-    DagsterInstance,
-    AssetKey,
-    EventRecordsFilter,
-    DagsterEventType,
-    RunConfig,
-    AssetChecksDefinition,
-    AssetsDefinition,
-    JobDefinition,
-    ScheduleDefinition,
-    SensorDefinition,
-)
+import dagster as dg
 from dagster._core.definitions.unresolved_asset_job_definition import (
     UnresolvedAssetJobDefinition
 )
@@ -88,16 +77,16 @@ def collect_definitions(namespace):
     sensors = []
 
     for obj in list(namespace.values()):
-        if isinstance(obj, AssetsDefinition):
+        if isinstance(obj, dg.AssetsDefinition):
             assets.append(obj)
-        if isinstance(obj, AssetChecksDefinition):
+        if isinstance(obj, dg.AssetChecksDefinition):
             asset_checks.append(obj)
-        elif (isinstance(obj, JobDefinition)
+        elif (isinstance(obj, dg.JobDefinition)
               or isinstance(obj, UnresolvedAssetJobDefinition)):
             jobs.append(obj)
-        elif isinstance(obj, ScheduleDefinition):
+        elif isinstance(obj, dg.ScheduleDefinition):
             schedules.append(obj)
-        elif isinstance(obj, SensorDefinition):
+        elif isinstance(obj, dg.SensorDefinition):
             sensors.append(obj)
 
     return {
@@ -113,7 +102,7 @@ def launch_asset_backfill(
     asset_keys: list[str],
     partition_keys: list[str],
     tags: dict = {"programmed_backfill": "true"},
-    run_config: RunConfig = RunConfig(),
+    run_config: dg.RunConfig = dg.RunConfig(),
 ):
     """
     Function to launch an asset backfill via the GraphQL client
@@ -158,19 +147,23 @@ def launch_asset_backfill(
         raise RuntimeError(f"Backfill failed: {payload['message']}")
 
 
-def get_latest_metadata_for_partition(asset_key_str: str, partition_key: str) -> dict:
+def get_latest_metadata_for_partition(
+    instance: dg.DagsterInstance,
+    asset_key_str: str,
+    partition_key: str
+) -> dict:
     """
     Returns the metadata from the latest materialization for a given asset and partition.
 
     Used to pass data between assets via metadata when typical outputs are not available like when using BackfillPolicy.single_run().
     """
-    instance = DagsterInstance.get()
-    asset_key = AssetKey(asset_key_str)
+    instance = dg.DagsterInstance.get()
+    asset_key = dg.AssetKey(asset_key_str)
 
     # Filter for materialization events for this asset and partition
-    event_records_filter = EventRecordsFilter(
+    event_records_filter = dg.EventRecordsFilter(
         asset_key=asset_key,
-        event_type=DagsterEventType.ASSET_MATERIALIZATION,
+        event_type=dg.DagsterEventType.ASSET_MATERIALIZATION,
         asset_partitions=[partition_key],
     )
 
