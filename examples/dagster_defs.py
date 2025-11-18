@@ -6,8 +6,8 @@
 #    "dagster-azure>=0.27.4",
 #    "dagster-docker>=0.27.4",
 #    "dagster-postgres>=0.27.4",
-#    "dagster-webserver",
-#    "dagster==1.11.4",
+#    "dagster-webserver==1.12.2",
+#    "dagster==1.12.2",
 #  # pydantic 2.12.X contains breaking changes for Dagster
 #    "pydantic==2.11.9",
 #    "cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git",
