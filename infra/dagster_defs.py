@@ -1,23 +1,4 @@
 #!/usr/bin/env -S uv run --script
-# PEP 723 dependency definition: https://peps.python.org/pep-0723/
-# /// script
-# requires-python = ">=3.13"
-# dependencies = [
-#    "dagster-azure>=0.27.4",
-#    "dagster-docker>=0.27.4",
-#    "dagster-postgres>=0.27.4",
-#    "dagster-webserver",
-#    "dagster==1.11.4",
-#    "cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git",
-#    "pyyaml>=6.0.2",
-#    "azure-identity>=1.23.0",
-#    "azure-mgmt-appcontainers==3.2.0",
-#    "azure-mgmt-containerinstance",
-#    "azure-mgmt-loganalytics",
-#    "azure-mgmt-resource>=24.0.0",
-#    "requests",
-# ]
-# ///
 import os
 import dagster as dg
 import requests

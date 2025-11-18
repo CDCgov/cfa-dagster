@@ -1,28 +1,23 @@
 FROM ghcr.io/astral-sh/uv:debian
 
-WORKDIR /tmp
+# set dagster home for the webserver
+ENV DAGSTER_HOME=/opt/dagster/dagster_home
 
-RUN uv venv /opt/venv
+ARG WORKDIR=/opt/venv
+WORKDIR ${WORKDIR}
+
 # Use the virtual environment automatically
-ENV VIRTUAL_ENV=/opt/venv
-# Place entry points in the environment at the front of the path
-ENV PATH="/opt/venv/bin:$PATH"
+ENV VIRTUAL_ENV=${WORKDIR}/.venv
+RUN uv venv ${VIRTUAL_ENV}
 
-RUN uv pip install \
-    dagster \
-    dagster-pipes \
-    dagster-graphql \
-    dagster-webserver \
-    dagster-postgres \
-    dagster-docker \
-    dagster-azure \
-    "cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git"
+# add python dependencies to PATH
+ENV PATH="${VIRTUAL_ENV}/bin:$PATH"
 
-# Set $DAGSTER_HOME and copy dagster instance and workspace YAML there
-ENV DAGSTER_HOME=/opt/dagster/dagster_home/
 
-RUN mkdir -p $DAGSTER_HOME
+COPY ./pyproject.toml .
+COPY ./uv.lock .
 
-COPY dagster.yaml workspace.yaml $DAGSTER_HOME
+# get python dependencies
+RUN uv sync
 
-WORKDIR $DAGSTER_HOME
+WORKDIR ${DAGSTER_HOME}

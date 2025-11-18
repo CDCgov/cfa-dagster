@@ -18,7 +18,7 @@ A Container App is ideal for this use case since it gives us the ability to perf
 
 The dagster daemon is a process that polls for available jobs that have been scheduled by the UI.
 
-Our dagster-daemon is running as a Container Instance named [dagster-daemon](https://portal.azure.com/#@ext.cdc.gov/resource/subscriptions/ef340bd6-2809-4635-b18b-7e6583a8803b/resourceGroups/ext-edav-cfa-prd/providers/Microsoft.ContainerInstance/containerGroups/dagster-daemon/overview). A Container Instance is good for this use case since they have integrated logs and CPU/RAM metrics and can be scaled up easy if need be.
+Our dagster-daemon is running as a sidecar container in the same Container App as the dagster-webserver. This co-location helps ensure the daemon and webserver are using the same dagster.yaml and workspace.yaml
 
 ## Code locations
 
