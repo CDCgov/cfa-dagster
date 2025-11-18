@@ -250,9 +250,10 @@ class AzureBatchStepHandler(StepHandler):
     def _get_task_id(self, step_handler_context: StepHandlerContext):
         run = step_handler_context.dagster_run
         step_key = self._get_step_key(step_handler_context)
-        partition_key = run.tags.get("dagster/partition") or ""
+        partition_key: str = run.tags.get("dagster/partition") or ""
         task_id = f"dagster-step-{step_key}"
         if partition_key:
+            partition_key.replace("|", "_")  # | char not valid for Batch
             task_id = f"{task_id}-{partition_key}"
         return task_id
 
