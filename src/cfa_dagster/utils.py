@@ -157,7 +157,6 @@ def get_latest_metadata_for_partition(
 
     Used to pass data between assets via metadata when typical outputs are not available like when using BackfillPolicy.single_run().
     """
-    instance = dg.DagsterInstance.get()
     asset_key = dg.AssetKey(asset_key_str)
 
     # Filter for materialization events for this asset and partition
