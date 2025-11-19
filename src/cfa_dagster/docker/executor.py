@@ -89,9 +89,10 @@ def docker_executor(init_context: InitExecutorContext) -> Executor:
     env_vars = env_vars or []
     # propagate user & dev env vars
     user = os.getenv("DAGSTER_USER")
-    is_dev = os.getenv("DAGSTER_IS_DEV_CLI")
+    dagster_is_dev_cli = os.getenv("DAGSTER_IS_DEV_CLI")
     env_vars.append(f"DAGSTER_USER={user}")
-    env_vars.append(f"DAGSTER_IS_DEV_CLI={is_dev}")
+    if dagster_is_dev_cli:
+        env_vars.append(f"DAGSTER_IS_DEV_CLI={dagster_is_dev_cli}")
 
     container_context = DockerContainerContext(
         registry=registry,
