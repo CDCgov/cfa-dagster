@@ -44,12 +44,18 @@ from dagster_docker.utils import (
             "cpu": Field(
                 Float,
                 is_required=False,
-                description="Required CPU in cores. Min: 0.25 Max: 4.0",
+                description=(
+                    "Required CPU in cores. Min: 0.25 Max: 4.0. "
+                    "CPU value must be half memory e.g. 0.25 cpu 0.5 memory"
+                ),
             ),
             "memory": Field(
-                IntSource,
+                Float,
                 is_required=False,
-                description="Required memory in GB from Min: 1 Max: 8",
+                description=(
+                    "Required memory in GB from Min: 0.5 Max: 8.0"
+                    "Memory value must be double CPU e.g. 0.25 cpu 0.5 memory"
+                ),
             ),
             "retries": get_retries_config(),
             "max_concurrent": Field(
@@ -343,6 +349,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
 
         # print(f"execution: '{execution}'")
         # Check status
+        # TODO: try and get max cpu/memory and add to Dagster UI
         # TODO: try and get container exit code
         # Status represented by enum, but property acces converts to Capital case
         # https://learn.microsoft.com/en-us/python/api/azure-mgmt-appcontainers/azure.mgmt.appcontainers.models.jobexecutionrunningstate?view=azure-python
