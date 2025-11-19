@@ -100,8 +100,8 @@ def azure_container_app_job_executor(
     # this is the config from the Launchpad
     print(f"config: '{config}'")
     container_app_job_name = check.opt_str_elem(config, "container_app_job_name")
-    cpu = check.opt_int_elem(config, "cpu")
-    memory = check.opt_float_elem(config, "memory")
+    cpu = check.opt_float_elem(config, "cpu")
+    memory = check.opt_int_elem(config, "memory")
     image = check.opt_str_elem(config, "image")
     registry = check.opt_dict_elem(config, "registry", key_type=str)
     env_vars = check.opt_list_elem(config, "env_vars", of_type=str)
