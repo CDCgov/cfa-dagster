@@ -6,7 +6,7 @@ import os
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.mgmt.resource.subscriptions import SubscriptionClient
-from dagster import Field, IntSource, StringSource, executor
+from dagster import Field, Float, IntSource, StringSource, executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
@@ -40,6 +40,22 @@ from dagster_docker.utils import (
                 StringSource,
                 is_required=True,
                 description="The name of the Container App Job",
+            ),
+            "cpu": Field(
+                Float,
+                is_required=False,
+                description=(
+                    "Required CPU in cores. Min: 0.25 Max: 4.0. "
+                    "CPU value must be half memory e.g. 0.25 cpu 0.5 memory"
+                ),
+            ),
+            "memory": Field(
+                Float,
+                is_required=False,
+                description=(
+                    "Required memory in GB from Min: 0.5 Max: 8.0"
+                    "Memory value must be double CPU e.g. 0.25 cpu 0.5 memory"
+                ),
             ),
             "retries": get_retries_config(),
             "max_concurrent": Field(
@@ -76,6 +92,8 @@ def azure_container_app_job_executor(
         execution:
           config:
             container_app_job_name: ...
+            cpu: ...
+            ram: ...
             image: ...
             env_vars: ...
 
@@ -88,6 +106,8 @@ def azure_container_app_job_executor(
     # this is the config from the Launchpad
     print(f"config: '{config}'")
     container_app_job_name = check.opt_str_elem(config, "container_app_job_name")
+    cpu = check.opt_float_elem(config, "cpu")
+    memory = check.opt_int_elem(config, "memory")
     image = check.opt_str_elem(config, "image")
     registry = check.opt_dict_elem(config, "registry", key_type=str)
     env_vars = check.opt_list_elem(config, "env_vars", of_type=str)
@@ -115,7 +135,13 @@ def azure_container_app_job_executor(
     )
 
     return StepDelegatingExecutor(
-        AzureContainerAppJobStepHandler(image, container_context, container_app_job_name),
+        AzureContainerAppJobStepHandler(
+            image,
+            container_context,
+            container_app_job_name,
+            cpu,
+            memory
+        ),
         retries=check.not_none(RetryMode.from_config(retries)),
         max_concurrent=max_concurrent,
         tag_concurrency_limits=tag_concurrency_limits,
@@ -128,6 +154,8 @@ class AzureContainerAppJobStepHandler(StepHandler):
         image: Optional[str],
         container_context: DockerContainerContext,
         container_app_job_name: str,
+        cpu: float,
+        memory: int,
     ):
         super().__init__()
         print(f"Launching a new {self.name}")
@@ -135,6 +163,8 @@ class AzureContainerAppJobStepHandler(StepHandler):
         self._step_caj_execution_ids = {}
 
         self._job_name = container_app_job_name
+        self._cpu = cpu
+        self._memory = memory
         self._resource_group = "ext-edav-cfa-prd"  # TODO: move to config?
         credential = DefaultAzureCredential()
 
@@ -251,9 +281,15 @@ class AzureContainerAppJobStepHandler(StepHandler):
         container.image = step_image
         container.env = [{"name": k, "value": v} for k, v in env_vars.items()]
         container.command = execute_step_args.get_command_args()
+        if self._cpu is not None:
+            container.resources.cpu = self._cpu
+        if self._memory is not None:
+            container.resources.memory = f"{self._memory}Gi"
         print(f"container.image: '{container.image}'")
         print(f"container.env: '{container.env}'")
         print(f"container.command: '{container.command}'")
+        print(f"container.resources.cpu: '{container.resources.cpu}'")
+        print(f"container.resources.memory: '{container.resources.memory}'")
 
         job_execution = client.jobs.begin_start(
             resource_group_name=self._resource_group,
@@ -313,6 +349,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
 
         # print(f"execution: '{execution}'")
         # Check status
+        # TODO: try and get max cpu/memory and add to Dagster UI
         # TODO: try and get container exit code
         # Status represented by enum, but property acces converts to Capital case
         # https://learn.microsoft.com/en-us/python/api/azure-mgmt-appcontainers/azure.mgmt.appcontainers.models.jobexecutionrunningstate?view=azure-python
