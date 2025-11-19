@@ -158,7 +158,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
 
         self._job_name = container_app_job_name
         self._cpu = cpu
-        self._memory = f"{memory}Gi"
+        self._memory = memory
         self._resource_group = "ext-edav-cfa-prd"  # TODO: move to config?
         credential = DefaultAzureCredential()
 
@@ -278,7 +278,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
         if self._cpu is not None:
             container.resources.cpu = self._cpu
         if self._memory is not None:
-            container.resources.memory = self._memory
+            container.resources.memory = f"{self._memory}Gi"
         print(f"container.image: '{container.image}'")
         print(f"container.env: '{container.env}'")
         print(f"container.command: '{container.command}'")
