@@ -107,7 +107,7 @@ def azure_container_app_job_executor(
     print(f"config: '{config}'")
     container_app_job_name = check.opt_str_elem(config, "container_app_job_name")
     cpu = check.opt_float_elem(config, "cpu")
-    memory = check.opt_int_elem(config, "memory")
+    memory = check.opt_float_elem(config, "memory")
     image = check.opt_str_elem(config, "image")
     registry = check.opt_dict_elem(config, "registry", key_type=str)
     env_vars = check.opt_list_elem(config, "env_vars", of_type=str)
@@ -155,7 +155,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
         container_context: DockerContainerContext,
         container_app_job_name: str,
         cpu: float,
-        memory: int,
+        memory: float,
     ):
         super().__init__()
         print(f"Launching a new {self.name}")
