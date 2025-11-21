@@ -173,6 +173,7 @@ def update_workspace_yaml(
     if "load_from" not in data or not isinstance(data["load_from"], list):
         data["load_from"] = []
 
+    did_update = False
     # Check if location_name already exists
     for entry in data["load_from"]:
         grpc_server: dict = entry.get("grpc_server", {})
@@ -183,26 +184,28 @@ def update_workspace_yaml(
                 f"Updated code location '{code_location_name}' "
                 f"in {WORKSPACE_YAML_PATH}"
             )
-            return True
+            did_update = True
+            break
 
-    # Append the new code location
-    data["load_from"].append(
-        {
-            "grpc_server": {
-                "host": f"{grpc_host}",
-                "port": grpc_port,
-                "location_name": code_location_name,
+    if not did_update:
+        # Append the new code location
+        data["load_from"].append(
+            {
+                "grpc_server": {
+                    "host": f"{grpc_host}",
+                    "port": grpc_port,
+                    "location_name": code_location_name,
+                }
             }
-        }
-    )
+        )
+        context.log.info(
+            f"Added code location '{code_location_name}' to {WORKSPACE_YAML_PATH}"
+        )
 
     # Write the updated YAML back to the file
     with open(WORKSPACE_YAML_PATH, "w") as f:
         yaml.dump(data, f, default_flow_style=False)
 
-    context.log.info(
-        f"Added code location '{code_location_name}' to {WORKSPACE_YAML_PATH}"
-    )
     return True
 
 
