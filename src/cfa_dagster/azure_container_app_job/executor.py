@@ -101,10 +101,10 @@ def azure_container_app_job_executor(
     launcher will also be set on the containers that are created for each step.
     """
     config = init_context.executor_config
-    print(f"init_context: '{init_context}'")
+    # print(f"init_context: '{init_context}'")
 
     # this is the config from the Launchpad
-    print(f"config: '{config}'")
+    # print(f"config: '{config}'")
     container_app_job_name = check.opt_str_elem(config, "container_app_job_name")
     cpu = check.opt_float_elem(config, "cpu")
     memory = check.opt_float_elem(config, "memory")
@@ -158,7 +158,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
         memory: float,
     ):
         super().__init__()
-        print(f"Launching a new {self.name}")
+        # print(f"Launching a new {self.name}")
         self._step_container_ids = {}
         self._step_caj_execution_ids = {}
 
@@ -287,11 +287,11 @@ class AzureContainerAppJobStepHandler(StepHandler):
             container.resources.cpu = self._cpu
         if self._memory is not None:
             container.resources.memory = f"{self._memory}Gi"
-        print(f"container.image: '{container.image}'")
-        print(f"container.env: '{container.env}'")
-        print(f"container.command: '{container.command}'")
-        print(f"container.resources.cpu: '{container.resources.cpu}'")
-        print(f"container.resources.memory: '{container.resources.memory}'")
+        # print(f"container.image: '{container.image}'")
+        # print(f"container.env: '{container.env}'")
+        # print(f"container.command: '{container.command}'")
+        # print(f"container.resources.cpu: '{container.resources.cpu}'")
+        # print(f"container.resources.memory: '{container.resources.memory}'")
 
         job_execution = client.jobs.begin_start(
             resource_group_name=self._resource_group,
@@ -299,7 +299,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
             template=job_template,
         ).result()
         job_execution_id = job_execution.id.split("/").pop()
-        print(f"Started container app job with id: '{job_execution_id}'")
+        # print(f"Started container app job with id: '{job_execution_id}'")
         self._step_caj_execution_ids[step_key] = job_execution_id
         return job_execution_id
 
@@ -336,7 +336,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
     ) -> CheckStepHealthResult:
         step_key = self._get_step_key(step_handler_context)
         job_execution_id = self._step_caj_execution_ids[step_key]
-        print(f"job_execution_id: '{job_execution_id}'")
+        # print(f"job_execution_id: '{job_execution_id}'")
         # return CheckStepHealthResult.healthy()
 
         client = self._azure_caj_client
@@ -380,7 +380,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
     ) -> Iterator[DagsterEvent]:
         step_key = self._get_step_key(step_handler_context)
         job_execution_id = self._step_caj_execution_ids[step_key]
-        print(f"job_execution_id: '{job_execution_id}'")
+        # print(f"job_execution_id: '{job_execution_id}'")
 
         yield DagsterEvent.engine_event(
             step_handler_context.get_step_context(step_key),
