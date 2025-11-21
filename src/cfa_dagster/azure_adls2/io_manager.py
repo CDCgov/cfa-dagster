@@ -17,7 +17,7 @@ from dagster_azure.adls2 import (
 from dagster_azure.adls2.resources import ADLS2Resource
 import os
 
-is_production = not os.getenv("DAGSTER_IS_DEV_CLI")  # set by dagster cli
+is_production = os.getenv("DAGSTER_IS_DEV_CLI", "false") == "false"  # set by dagster cli
 
 
 class ADLS2PickleIOManager(dagster_azure_adls2.ADLS2PickleIOManager):
