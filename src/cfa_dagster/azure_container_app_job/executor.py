@@ -29,6 +29,29 @@ from dagster_docker.utils import (
     validate_docker_config,
     validate_docker_image,
 )
+# --- Azure Client Global Initialization (Executed Once Per Process) ---
+_RESOURCE_GROUP = "ext-edav-cfa-prd" # Move fixed resource group here
+
+try:
+    _AZURE_CREDENTIAL = DefaultAzureCredential()
+
+    # Get first subscription for logged-in credential
+    _FIRST_SUBSCRIPTION_ID = (
+        SubscriptionClient(_AZURE_CREDENTIAL)
+        .subscriptions.list()
+        .next()
+        .subscription_id
+    )
+
+    _AZURE_CAJ_CLIENT = ContainerAppsAPIClient(
+        credential=_AZURE_CREDENTIAL, subscription_id=_FIRST_SUBSCRIPTION_ID
+    )
+except Exception as e:
+    # A simple error message if the Dagster process starts without Azure credentials
+    # This prevents the process from failing immediately on import if credentials are missing
+    print(f"WARNING: Failed to initialize global Azure clients. If this is a StepDelegatingExecutor host, this is expected: {e}")
+    _AZURE_CAJ_CLIENT = None
+    _RESOURCE_GROUP = None
 
 
 @executor(
@@ -165,20 +188,8 @@ class AzureContainerAppJobStepHandler(StepHandler):
         self._job_name = container_app_job_name
         self._cpu = cpu
         self._memory = memory
-        self._resource_group = "ext-edav-cfa-prd"  # TODO: move to config?
-        credential = DefaultAzureCredential()
-
-        # Get first subscription for logged-in credential
-        first_subscription_id = (
-            SubscriptionClient(credential)
-            .subscriptions.list()
-            .next()
-            .subscription_id
-        )
-
-        self._azure_caj_client = ContainerAppsAPIClient(
-            credential=credential, subscription_id=first_subscription_id
-        )
+        self._resource_group = _RESOURCE_GROUP
+        self._azure_caj_client = _AZURE_CAJ_CLIENT
 
         self._image = check.opt_str_param(image, "image")
         self._container_context = check.inst_param(
