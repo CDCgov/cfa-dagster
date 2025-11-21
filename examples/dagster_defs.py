@@ -174,7 +174,7 @@ schedule_every_wednesday = dg.ScheduleDefinition(
 )
 
 # env variable set by Dagster CLI
-is_production = not os.getenv("DAGSTER_IS_DEV_CLI")
+is_production = os.getenv("DAGSTER_IS_DEV_CLI", "false") == "false"
 # change storage accounts between dev and prod
 storage_account = "cfadagster" if is_production else "cfadagsterdev"
 

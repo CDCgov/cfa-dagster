@@ -43,7 +43,7 @@ def bootstrap_dev():
         except KeyboardInterrupt:
             print("\nShutting down cleanly...")
 
-    if os.getenv("DAGSTER_IS_DEV_CLI"):  # set by dagster cli
+    if os.getenv("DAGSTER_IS_DEV_CLI") == "true":  # set by dagster cli
         print("Running in local dev environment")
 
     # get the user from the environment, throw an error if variable is not set
@@ -108,7 +108,7 @@ def launch_asset_backfill(
     Function to launch an asset backfill via the GraphQL client
     """
 
-    if os.getenv("DAGSTER_IS_DEV_CLI"):  # set by dagster cli
+    if os.getenv("DAGSTER_IS_DEV_CLI") == "true":  # set by dagster cli
         client = DagsterGraphQLClient(hostname="127.0.0.1", port_number=3000)
     else:
         client = DagsterGraphQLClient(hostname="dagster.apps.edav.ext.cdc.gov")
