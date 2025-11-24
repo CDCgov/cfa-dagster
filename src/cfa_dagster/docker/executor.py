@@ -94,6 +94,8 @@ def docker_executor(init_context: InitExecutorContext) -> Executor:
     if dagster_is_dev_cli:
         env_vars.append(f"DAGSTER_IS_DEV_CLI={dagster_is_dev_cli}")
 
+    print(f"env_vars: '{env_vars}'")
+
     container_context = DockerContainerContext(
         registry=registry,
         env_vars=env_vars,
