@@ -164,13 +164,15 @@ class DockerRunLauncher(RunLauncher, ConfigurableClass):
     def get_code_location_origin(self, run):
         if run.job_code_origin:
             repo_origin = run.job_code_origin.repository_origin
+            cp = repo_origin.code_pointer
+
             loadable_target = LoadableTargetOrigin(
                 executable_path=repo_origin.executable_path,
-                python_file=repo_origin.code_pointer.python_file,
-                fn_name=repo_origin.code_pointer.fn_name,
-                working_directory=repo_origin.code_pointer.working_directory,
-                container_image=None,
-                entry_point=repo_origin.entry_point,
+                python_file=cp.python_file,
+                attribute=cp.fn_name,
+                working_directory=cp.working_directory,
+                package_name=None,
+                autoload_defs_module_name=None,
             )
             return InProcessCodeLocationOrigin(loadable_target)
 
