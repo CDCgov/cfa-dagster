@@ -30,8 +30,10 @@ from dagster_docker.utils import (
     validate_docker_image,
 )
 # --- Azure Client Global Initialization (Executed Once Per Process) ---
-_RESOURCE_GROUP = "ext-edav-cfa-prd" # Move fixed resource group here
-
+# Initializing the azure objects at the module level to avoid
+# high memory usage during backfills
+# A backfill of 150 runs used 8GB of RAM for cfa-epinow2-pipeline
+_RESOURCE_GROUP = "ext-edav-cfa-prd"
 try:
     _AZURE_CREDENTIAL = DefaultAzureCredential()
 
