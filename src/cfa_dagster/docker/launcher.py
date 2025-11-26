@@ -164,7 +164,7 @@ class DockerRunLauncher(RunLauncher, ConfigurableClass):
         run: DagsterRun = context.dagster_run
 
         # Extract origin → this tells us which code location to query
-        repo_origin = run.job_code_origin.repository_origin
+        repo_origin = run.job_code_origin.repository_origin.code_location_origin
         print(f"repo_origin: '{repo_origin}'")
 
         repo_location: GrpcServerCodeLocation = GrpcServerCodeLocation(repo_origin, self._instance)
