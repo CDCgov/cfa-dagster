@@ -201,6 +201,9 @@ class DockerRunLauncher(RunLauncher, ConfigurableClass):
         print(f"repo_name: '{repo_name}'")
         repo = code_location.get_repository(repo_name)
         print(f"repo: '{repo}'")
+        metadata = repo.get_display_metadata()
+        print(f"metadata: '{metadata}'")
+
 
         run = context.dagster_run
         job_code_origin = check.not_none(context.job_code_origin)
