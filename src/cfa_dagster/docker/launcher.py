@@ -201,7 +201,8 @@ class DockerRunLauncher(RunLauncher, ConfigurableClass):
         print(f"repo_name: '{repo_name}'")
         repo = code_location.get_repository(repo_name)
         print(f"repo: '{repo}'")
-        metadata = repo.get_display_metadata()
+        # display_metadata: '{'host': 'localhost', 'socket': '/tmp/tmpy8unnusp', 'python_file': 'dagster_defs.py', 'working_directory': '/app'}'
+        metadata = repo.repository_snap.metadata
         print(f"metadata: '{metadata}'")
 
 
