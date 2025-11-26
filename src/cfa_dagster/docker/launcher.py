@@ -195,9 +195,7 @@ class DockerRunLauncher(RunLauncher, ConfigurableClass):
         print(f"code_location: '{code_location}'")
 
         # Now you can get the repository
-        repo = code_location.get_repository(run.job_code_origin.job_name
-                                            if run.job_code_origin
-                                            else run.remote_job_origin.job_name)
+        repo = code_location.get_repository(code_location)
         print(f"repo: '{repo}'")
 
         run = context.dagster_run
