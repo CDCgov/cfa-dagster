@@ -1,4 +1,4 @@
-from dagster._core.remote_origin import InProcessCodeLocationOrigin
+from dagster._core.remote_origin import LoadableTargetOrigin, InProcessCodeLocationOrigin
 # from dagster._core.host_representation.origin import GrpcServerRepositoryLocationOrigin
 # from dagster._api.snapshot_repository import sync_get_external_repositories_data_grpc
 from dagster._core.remote_representation.code_location import GrpcServerCodeLocation
@@ -161,15 +161,21 @@ class DockerRunLauncher(RunLauncher, ConfigurableClass):
 
         container.start()
 
-    def get_code_location_origin(self, run):
-        if run.job_code_origin is not None:
-            # Local Python execution
-            # Wrap repository_origin in an in-process code location
-            return InProcessCodeLocationOrigin(run.job_code_origin.repository_origin)
+    def get_code_location_origin(run):
+        if run.job_code_origin:
+            repo_origin = run.job_code_origin.repository_origin
+            loadable_target = LoadableTargetOrigin(
+                executable_path=repo_origin.executable_path,
+                python_file=repo_origin.code_pointer.python_file,
+                fn_name=repo_origin.code_pointer.fn_name,
+                working_directory=repo_origin.code_pointer.working_directory,
+                container_image=None,
+                entry_point=repo_origin.entry_point,
+            )
+            return InProcessCodeLocationOrigin(loadable_target)
 
-        elif run.remote_job_origin is not None:
-            # Remote execution
-            return run.remote_job_origin.code_location_origin
+        elif run.remote_job_origin:
+            return run.remote_job_origin.repository_origin.code_location_origin
 
         else:
             return None
