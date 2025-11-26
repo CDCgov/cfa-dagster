@@ -1,7 +1,7 @@
-from dagster._core.host_representation.origin import GrpcServerRepositoryLocationOrigin
-from dagster._api.snapshot_repository import sync_get_external_repositories_data_grpc
+# from dagster._core.host_representation.origin import GrpcServerRepositoryLocationOrigin
+# from dagster._api.snapshot_repository import sync_get_external_repositories_data_grpc
 from dagster._core.remote_representation.code_location import GrpcServerCodeLocation
-from dagster._grpc.client import DagsterGrpcClient
+# from dagster._grpc.client import DagsterGrpcClient
 import json
 from collections.abc import Mapping
 from typing import Any, Optional
