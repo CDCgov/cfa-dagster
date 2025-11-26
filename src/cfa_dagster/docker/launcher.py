@@ -184,13 +184,22 @@ class DockerRunLauncher(RunLauncher, ConfigurableClass):
 
     def launch_run(self, context: LaunchRunContext) -> None:
         run: DagsterRun = context.dagster_run
+        # Determine which code location the run came from
+        if run.job_code_origin:
+            location_name = run.job_code_origin.repository_origin.code_location_origin.location_name
+        else:
+            location_name = run.remote_job_origin.location_name
+        print(f"location_name: '{location_name}'")
 
-        # Extract origin → this tells us which code location to query
-        repo_origin = self.get_code_location_origin(run)
-        print(f"repo_origin: '{repo_origin}'")
+        # THIS IS THE KEY LINE
+        code_location = context.workspace.get_code_location(location_name)
+        print(f"code_location: '{code_location}'")
 
-        repo_location: GrpcServerCodeLocation = GrpcServerCodeLocation(repo_origin, self._instance)
-        print(f"repo_location: '{repo_location}'")
+        # Now you can get the repository
+        repo = code_location.get_repository(run.job_code_origin.job_name
+                                            if run.job_code_origin
+                                            else run.remote_job_origin.job_name)
+        print(f"repo: '{repo}'")
 
         run = context.dagster_run
         job_code_origin = check.not_none(context.job_code_origin)
