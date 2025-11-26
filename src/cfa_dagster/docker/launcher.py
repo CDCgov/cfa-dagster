@@ -184,11 +184,16 @@ class DockerRunLauncher(RunLauncher, ConfigurableClass):
 
     def launch_run(self, context: LaunchRunContext) -> None:
         run: DagsterRun = context.dagster_run
-        # Determine which code location the run came from
         if run.job_code_origin:
-            location_name = run.job_code_origin.repository_origin.code_location_origin.location_name
-        else:
+            # LOCAL / IN-PROCESS RUN (dagster dev, etc)
+            location_name = run.job_code_origin.repository_origin.code_pointer.package_name \
+                            or run.job_code_origin.repository_origin.code_pointer.module_name \
+                            or run.job_code_origin.repository_origin.code_pointer.python_file
+        elif run.remote_job_origin:
+            # REMOTE / GRPC RUN (Docker, grpc server)
             location_name = run.remote_job_origin.location_name
+        else:
+            raise Exception("Run has no origin; cannot find code location")
         print(f"location_name: '{location_name}'")
 
         # THIS IS THE KEY LINE
