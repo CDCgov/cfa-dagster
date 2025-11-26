@@ -161,7 +161,7 @@ class DockerRunLauncher(RunLauncher, ConfigurableClass):
 
         container.start()
 
-    def get_code_location_origin(run):
+    def get_code_location_origin(self, run):
         if run.job_code_origin:
             repo_origin = run.job_code_origin.repository_origin
             loadable_target = LoadableTargetOrigin(
