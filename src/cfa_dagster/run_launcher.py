@@ -110,7 +110,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         launcher_name = cfa_dagster_metadata.get("runLauncher")
         launcher_config = cfa_dagster_metadata.get("config", {})
 
-        launcher_config['env_vars'] = self.parse_env_vars(
+        launcher_config['env_vars'] = self.patch_env_vars(
             launcher_config.get("env_vars", [])
         )
 
