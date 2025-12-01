@@ -114,7 +114,7 @@ docker_executor_configured = docker_executor.configured(
 
 # configuring an executor to run workflow steps on Azure Container App Jobs
 # add this to a job or the Definitions class to use it
-image = "ghcr.io/giomrella/ghcr/dagster_user:sandbox",
+image = "ghcr.io/giomrella/cfa_dagster:latest",
 azure_caj_executor_configured = azure_caj_executor.configured(
     {
         "container_app_job_name": "cfa-dagster",
@@ -221,7 +221,7 @@ defs = dg.Definitions(
                 "image": image,
                 "network": "postgres_network",
                 "container_kwargs": {
-                    # as;dlkfj;la;lkj
+                    # as;dlkfj;la;lkj;alskjd
                     # "auto_remove": True,
                     "volumes": [
                         # Make docker client accessible to any launched containers as well
