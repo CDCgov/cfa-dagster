@@ -25,7 +25,11 @@ from dagster._core.storage.dagster_run import DagsterRun
 from dagster._core.storage.tags import DOCKER_IMAGE_TAG
 from dagster._core.utils import parse_env_var
 from dagster._grpc.types import ExecuteRunArgs, ResumeRunArgs
-from dagster._serdes import ConfigurableClass
+from dagster._serdes import (
+        ConfigurableClass,
+        serialize_value,
+        deserialize_value,
+)
 from dagster._serdes.config_class import ConfigurableClassData
 from typing_extensions import Self
 
@@ -95,18 +99,19 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
                     clean_env_vars.append(var)
 
         user = os.getenv("DAGSTER_USER")
-        dagster_is_dev_cli = os.getenv("DAGSTER_IS_DEV_CLI", "false")
+        dagster_is_dev_cli = os.getenv("DAGSTER_IS_DEV_CLI")
         clean_env_vars.append(f"DAGSTER_USER={user}")
-        clean_env_vars.append(f"DAGSTER_IS_DEV_CLI={dagster_is_dev_cli}")
+        if dagster_is_dev_cli:
+            clean_env_vars.append(f"DAGSTER_IS_DEV_CLI={dagster_is_dev_cli}")
         return clean_env_vars
 
     def get_launcher(self, run: DagsterRun, workspace) -> tuple[str, RunLauncher]:
         metadata = self.get_location_metadata(run, workspace)
         cfa_dagster_metadata = metadata.get(
-            "cfa-dagster",
+            "cfa_dagster",
             JsonMetadataValue({})
         ).value
-        is_production = os.getenv("DAGSTER_IS_DEV_CLI", "false") == "false"
+        is_production = not os.getenv("DAGSTER_IS_DEV_CLI")
         launcher_name = cfa_dagster_metadata.get("runLauncher")
         launcher_config = cfa_dagster_metadata.get("config", {})
 
@@ -149,7 +154,10 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
 
         self._instance.add_run_tags(
             run.run_id,
-            {"RUN_LAUNCHER_TYPE": name, "RUN_LAUNCHER_INST_DATA": f"{launcher.inst_data}"},  # pyright: ignore[reportArgumentType]
+            {
+                "RUN_LAUNCHER_TYPE": name,
+                "RUN_LAUNCHER_INST_DATA": f"{serialize_value(launcher.inst_data)}"
+            },  # pyright: ignore[reportArgumentType]
         )
         launcher.launch_run(context)
 
@@ -164,12 +172,23 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
 
     @property
     def supports_check_run_worker_health(self):
-        return False
+        return True
 
-    # TODO: implement tagging system so we can determine the run launcher
-    # from the tags
     def check_run_worker_health(self, run: DagsterRun):
-        pass
+        serialized_inst_data = run.tags.get("RUN_LAUNCHER_INST_DATA")
+        inst_data: ConfigurableClassData = deserialize_value(
+            serialized_inst_data,
+            ConfigurableClassData
+        )
+        run_launcher: RunLauncher = inst_data.rehydrate(RunLauncher)
+        run_launcher.check_run_worker_health(run)
 
     def terminate(self, run_id):
-        pass
+        run = self._instance.get_run_by_id(run_id)
+        serialized_inst_data = run.tags.get("RUN_LAUNCHER_INST_DATA")
+        inst_data: ConfigurableClassData = deserialize_value(
+            serialized_inst_data,
+            ConfigurableClassData
+        )
+        run_launcher: RunLauncher = inst_data.rehydrate(RunLauncher)
+        run_launcher.terminate(run_id)
