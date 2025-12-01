@@ -16,7 +16,10 @@ from dagster._core.launcher.base import (
     RunLauncher,
     WorkerStatus,
 )
-from dagster import DefaultRunLauncher
+from dagster import (
+    DefaultRunLauncher,
+    JsonMetadataValue
+)
 from dagster_docker import DockerRunLauncher
 from dagster._core.storage.dagster_run import DagsterRun
 from dagster._core.storage.tags import DOCKER_IMAGE_TAG
@@ -81,12 +84,15 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
 
     def get_launcher(self, run: DagsterRun, workspace) -> tuple[str, RunLauncher]:
         metadata = self.get_location_metadata(run, workspace)
-        cfa_dagster_metadata = metadata.get("cfa-dagster")
+        cfa_dagster_metadata = metadata.get(
+            "cfa-dagster",
+            JsonMetadataValue({})
+        ).value
         is_production = os.getenv("DAGSTER_IS_DEV_CLI", "false") == "false"
         run_launcher = cfa_dagster_metadata.get("runLauncher")
         run_launcher_config = cfa_dagster_metadata.get("config")
         # TODO: ensure only CAJ launcher can be used in production
-        if not cfa_dagster_metadata or not run_launcher:
+        if not run_launcher:
             if is_production:
                 return DockerRunLauncher()
             else:
