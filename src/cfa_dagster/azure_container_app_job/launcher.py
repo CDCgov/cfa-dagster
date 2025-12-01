@@ -39,7 +39,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         inst_data: Optional[ConfigurableClassData] = None,
         container_app_job_name="cfa-dagster",
         cpu="0.5",
-        memory="1Gi",
+        memory="1.0",
         image=None,
         registry=None,
         env_vars=None,
