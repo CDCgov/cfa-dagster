@@ -82,6 +82,24 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         print(f"metadata: '{metadata}'")
         return metadata
 
+    def patch_env_vars(self, env_vars: list[str]):
+        # patch env vars
+        clean_env_vars = []
+        reserved_env_vars = [
+            "DAGSTER_USER",
+            "DAGSTER_IS_DEV_CLI"
+        ]
+        for var in env_vars:
+            for reserved_var in reserved_env_vars:
+                if not var.startswith(f"{reserved_var}="):
+                    clean_env_vars.append(var)
+
+        user = os.getenv("DAGSTER_USER")
+        dagster_is_dev_cli = os.getenv("DAGSTER_IS_DEV_CLI", "false")
+        clean_env_vars.append(f"DAGSTER_USER={user}")
+        clean_env_vars.append(f"DAGSTER_IS_DEV_CLI={dagster_is_dev_cli}")
+        return clean_env_vars
+
     def get_launcher(self, run: DagsterRun, workspace) -> tuple[str, RunLauncher]:
         metadata = self.get_location_metadata(run, workspace)
         cfa_dagster_metadata = metadata.get(
@@ -90,7 +108,12 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         ).value
         is_production = os.getenv("DAGSTER_IS_DEV_CLI", "false") == "false"
         launcher_name = cfa_dagster_metadata.get("runLauncher")
-        launcher_config = cfa_dagster_metadata.get("config")
+        launcher_config = cfa_dagster_metadata.get("config", {})
+
+        launcher_config['env_vars'] = self.parse_env_vars(
+            launcher_config.get("env_vars", [])
+        )
+
         run_launcher = DefaultRunLauncher()
         # TODO: ensure only CAJ launcher can be used in production
         if not launcher_name:
@@ -103,7 +126,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
                 inst_data = ConfigurableClassData(
                     module_name="dagster_docker",
                     class_name="DockerRunLauncher",
-                    config_yaml=yaml.dump(launcher_config)
+                    config_yaml=yaml.dump({"config": launcher_config})
                 )
                 run_launcher = DockerRunLauncher(
                     inst_data=inst_data,
