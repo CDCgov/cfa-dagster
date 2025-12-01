@@ -135,7 +135,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         labels["dagster/job_name"] = run.job_name
 
         job_template = client.jobs.get(
-            resource_group_name=self._resource_group, job_name=self._job_name
+            resource_group_name=self._resource_group, job_name=self.container_app_job_name
         ).template
         container = job_template.containers[0]
         container.image = docker_image
@@ -153,7 +153,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
 
         job_execution = client.jobs.begin_start(
             resource_group_name=self._resource_group,
-            job_name=self._job_name,
+            job_name=self.container_app_job_name,
             template=job_template,
         ).result()
         job_execution_id = job_execution.id.split("/").pop()
@@ -230,7 +230,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
     Content: "Reason: Not Found. Body: {\"error\":\"Requested job execution cfa-dagster-l70spvu not found\",\"success\":false}"
         """
         self._azure_caj_client.jobs.begin_stop_execution(
-            self._resource_group, self._job_name, job_execution_id
+            self._resource_group, self.container_app_job_name, job_execution_id
         )
 
         return True
@@ -249,7 +249,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
 
         client = self._azure_caj_client
         resource_group = self._resource_group
-        job_name = self._job_name
+        job_name = self.container_app_job_name
 
         execution = client.jobs_executions.list(
             resource_group_name=resource_group,
