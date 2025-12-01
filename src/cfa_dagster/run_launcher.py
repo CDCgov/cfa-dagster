@@ -1,21 +1,13 @@
 import os
 import yaml
-# from dagster._core.host_representation.origin import GrpcServerRepositoryLocationOrigin
-# from dagster._api.snapshot_repository import sync_get_external_repositories_data_grpc
-# from dagster._grpc.client import DagsterGrpcClient
-import json
 from collections.abc import Mapping
 from typing import Any, Optional
 
-import dagster._check as check
 from dagster._core.workspace.context import BaseWorkspaceRequestContext
-import docker
 from dagster._core.launcher.base import (
-    CheckRunHealthResult,
     LaunchRunContext,
     ResumeRunContext,
     RunLauncher,
-    WorkerStatus,
 )
 from dagster import (
     DefaultRunLauncher,
@@ -23,9 +15,6 @@ from dagster import (
 )
 from dagster_docker import DockerRunLauncher
 from dagster._core.storage.dagster_run import DagsterRun
-from dagster._core.storage.tags import DOCKER_IMAGE_TAG
-from dagster._core.utils import parse_env_var
-from dagster._grpc.types import ExecuteRunArgs, ResumeRunArgs
 from dagster._serdes import (
         ConfigurableClass,
         serialize_value,
@@ -33,9 +22,6 @@ from dagster._serdes import (
 )
 from dagster._serdes.config_class import ConfigurableClassData
 from typing_extensions import Self
-
-from dagster_docker.container_context import DockerContainerContext
-from dagster_docker.utils import DOCKER_CONFIG_SCHEMA, validate_docker_config, validate_docker_image
 
 LAUNCHER_CONFIG_KEY = "cfa_dagster/launcher"
 
@@ -145,8 +131,14 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
                     **launcher_config
                 )
             case (True, None) | (_, "azure_container_app_job_launcher"):
-                raise RuntimeError(
-                    f"{launcher_type} launcher not yet implemented!"
+                inst_data = ConfigurableClassData(
+                    module_name="cfa_dagster.azure_container_app_job.launcher",
+                    class_name="AzureContainerAppJobRunLauncher",
+                    config_yaml=yaml.dump(launcher_config)
+                )
+                run_launcher = DockerRunLauncher(
+                    inst_data=inst_data,
+                    **launcher_config
                 )
             case _:
                 raise RuntimeError(
@@ -162,7 +154,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         launcher = self.create_launcher(context.workspace)
 
         self._instance.report_engine_event(
-            message=f"Launching run using {launcher.__class__}",
+            message=f"Launching run using {launcher.__name__}",
             dagster_run=run,
             cls=self.__class__,
         )

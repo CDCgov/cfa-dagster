@@ -8,7 +8,7 @@
 #    "dagster-postgres>=0.27.4",
 #    "dagster-webserver==1.12.2",
 #    "dagster==1.12.2",
-#    "cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git",
+#    "cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git@gio-run-launcher",
 #    "pyyaml>=6.0.2",
 # ]
 # ///
@@ -30,6 +30,9 @@ from cfa_dagster.azure_container_app_job.executor import (
 )
 from cfa_dagster.docker.executor import docker_executor
 
+# aolksdjfaosidaa;sldkfj;alsdjf;alsdkjf;lksda;sldkjkf;ldk
+# aolksdjfaosidaa;sldkfj;alsdjf;alsdkjf;lksda;sldkjkf;ldk
+# aolksdjfaosidaa;sldkfj;alsdjf;alsdkjf;lksda;sldkjkf;ldk
 # function to start the dev server
 bootstrap_dev()
 
@@ -92,6 +95,7 @@ workdir = "/app"
 docker_executor_configured = docker_executor.configured(
     {
         # specify a default image
+        "network": "postgres_network",
         "image": "basic-r-asset",
         # set env vars here
         # "env_vars": [f"DAGSTER_USER={user}"],
@@ -101,7 +105,8 @@ docker_executor_configured = docker_executor.configured(
                 f"/home/{user}/.azure:/root/.azure",
                 # bind current file so we don't have to rebuild
                 # the container image for workflow changes
-                f"{__file__}:{workdir}/{os.path.basename(__file__)}",
+                # f"{__file__}:{workdir}/{os.path.basename(__file__)}",
+                f"/home/gio/Documents/CDC/cfa-dagster/examples/dagster_defs.py:{workdir}/dagster_defs.py",
             ]
         },
     }
@@ -113,7 +118,8 @@ azure_caj_executor_configured = azure_caj_executor.configured(
     {
         "container_app_job_name": "cfa-dagster",
         # specify a default image
-        "image": f"cfaprdbatchcr.azurecr.io/cfa-dagster:{user}",
+        # "image": f"cfaprdbatchcr.azurecr.io/cfa-dagster:{user}",
+        "image": f"ghcr.io/giomrella/ghcr/dagster_user:sandbox",
         # set env vars here
         # "env_vars": [f"DAGSTER_USER={user}"],
     }
@@ -174,7 +180,10 @@ schedule_every_wednesday = dg.ScheduleDefinition(
 )
 
 # env variable set by Dagster CLI
-is_production = os.getenv("DAGSTER_IS_DEV_CLI", "false") == "false"
+is_production = not os.getenv("DAGSTER_IS_DEV_CLI")
+
+is_dev = os.getenv("DAGSTER_IS_DEV_CLI")
+print(f"DAGSTER_IS_DEV_CLI '{is_dev}'")
 # change storage accounts between dev and prod
 storage_account = "cfadagster" if is_production else "cfadagsterdev"
 
@@ -203,5 +212,24 @@ defs = dg.Definitions(
     executor=docker_executor_configured,
     # executor=azure_caj_executor_configured,
     # executor=azure_batch_executor_configured,
+    metadata={
+        "cfa_dagster/launcher": {
+            "type": "docker",
+            "config": {
+                "image": "basic-r-asset",
+                "network": "postgres_network",
+                "container_kwargs": {
+                    # as;dlkfj;la;lkj
+                    # "auto_remove": True,
+                    "volumes": [
+                        # Make docker client accessible to any launched containers as well
+                        "/home/gio/.azure:/root/.azure",
+                        "/var/run/docker.sock:/var/run/docker.sock",
+                        "/home/gio/Documents/CDC/cfa-dagster/examples/dagster_defs.py:/app/dagster_defs.py"
+                    ]
+                }
+            }
+        }
+    }
 )
 

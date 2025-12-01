@@ -182,8 +182,10 @@ class DockerRunLauncher(RunLauncher, ConfigurableClass):
         else:
             return None
 
-    def launch_run(self, context: LaunchRunContext) -> None:
-        run: DagsterRun = context.dagster_run
+    def get_location_metadata(self, run: DagsterRun, context: LaunchRunContext):
+        """
+            Gets metadata from the Definitions for a code location
+        """
         code_location_names = context.workspace.code_location_names
         print(f"code_location_names: '{code_location_names}'")
         location_name = code_location_names[0]
@@ -204,11 +206,13 @@ class DockerRunLauncher(RunLauncher, ConfigurableClass):
         # display_metadata: '{'host': 'localhost', 'socket': '/tmp/tmpy8unnusp', 'python_file': 'dagster_defs.py', 'working_directory': '/app'}'
         metadata = repo.repository_snap.metadata
         print(f"metadata: '{metadata}'")
+        return metadata
 
-
+    def launch_run(self, context: LaunchRunContext) -> None:
         run = context.dagster_run
         job_code_origin = check.not_none(context.job_code_origin)
         docker_image = self._get_docker_image(job_code_origin)
+        self.get_location_metadata(run, context)
 
         command = ExecuteRunArgs(
             job_origin=job_code_origin,
