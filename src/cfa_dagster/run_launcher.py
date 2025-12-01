@@ -76,6 +76,8 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         print(f"repo: '{repo}'")
         # display_metadata: '{'host': 'localhost', 'socket': '/tmp/tmpy8unnusp', 'python_file': 'dagster_defs.py', 'working_directory': '/app'}'
         metadata = repo.repository_snap.metadata
+        if metadata:
+            metadata = metadata.value
         print(f"metadata: '{metadata}'")
         return metadata
 
