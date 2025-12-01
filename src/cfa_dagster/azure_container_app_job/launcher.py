@@ -141,10 +141,10 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         container.image = docker_image
         container.env = [{"name": k, "value": v} for k, v in docker_env.items()]
         container.command = command
-        if self._cpu is not None:
-            container.resources.cpu = self._cpu
-        if self._memory is not None:
-            container.resources.memory = f"{self._memory}Gi"
+        if self.cpu is not None:
+            container.resources.cpu = self.cpu
+        if self.memory is not None:
+            container.resources.memory = f"{self.memory}Gi"
         print(f"container.image: '{container.image}'")
         print(f"container.env: '{container.env}'")
         print(f"container.command: '{container.command}'")
