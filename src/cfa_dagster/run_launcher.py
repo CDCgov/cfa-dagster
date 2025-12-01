@@ -186,9 +186,12 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
     def terminate(self, run_id):
         run = self._instance.get_run_by_id(run_id)
         serialized_inst_data = run.tags.get("RUN_LAUNCHER_INST_DATA")
+        print(f"serialized_inst_data: '{serialized_inst_data}'")
         inst_data: ConfigurableClassData = deserialize_value(
             serialized_inst_data,
             ConfigurableClassData
         )
+        print(f"inst_data: '{inst_data}'")
         run_launcher: RunLauncher = inst_data.rehydrate(RunLauncher)
+        print(f"run_launcher: '{run_launcher}'")
         run_launcher.terminate(run_id)
