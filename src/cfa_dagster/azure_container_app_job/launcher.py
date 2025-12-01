@@ -111,7 +111,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         if not docker_image:
             raise Exception("No docker image specified by the instance config or repository")
 
-        # validate_docker_image(docker_image)
+        validate_docker_image(docker_image)
         return docker_image
 
     def _launch_container_with_command(self, run, docker_image, command):
