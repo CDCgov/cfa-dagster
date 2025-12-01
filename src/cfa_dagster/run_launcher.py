@@ -14,6 +14,7 @@ from dagster import (
     JsonMetadataValue
 )
 from dagster_docker import DockerRunLauncher
+from cfa_dagster.azure_container_app_job.launcher import AzureContainerAppJobRunLauncher
 from dagster._core.storage.dagster_run import DagsterRun
 from dagster._serdes import (
         ConfigurableClass,
@@ -136,7 +137,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
                     class_name="AzureContainerAppJobRunLauncher",
                     config_yaml=yaml.dump(launcher_config)
                 )
-                run_launcher = DockerRunLauncher(
+                run_launcher = AzureContainerAppJobRunLauncher(
                     inst_data=inst_data,
                     **launcher_config
                 )

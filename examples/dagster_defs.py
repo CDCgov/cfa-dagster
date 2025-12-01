@@ -221,7 +221,6 @@ defs = dg.Definitions(
                 "image": image,
                 "network": "postgres_network",
                 "container_kwargs": {
-                    # as;dlkfj;la;lkj;alskjd
                     # "auto_remove": True,
                     "volumes": [
                         # Make docker client accessible to any launched containers as well
