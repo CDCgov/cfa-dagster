@@ -176,8 +176,6 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
             },  # pyright: ignore[reportArgumentType]
         )
 
-        container.start()
-
     def launch_run(self, context: LaunchRunContext) -> None:
         run = context.dagster_run
         job_code_origin = check.not_none(context.job_code_origin)
