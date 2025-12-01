@@ -126,7 +126,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
 
         self._instance.add_run_tags(
             run.run_id,
-            {"RUN_LAUNCHER_TYPE": name, "RUN_LAUNCHER_INST_DATA": launcher.inst_data},  # pyright: ignore[reportArgumentType]
+            {"RUN_LAUNCHER_TYPE": name, "RUN_LAUNCHER_INST_DATA": f"{launcher.inst_data}"},  # pyright: ignore[reportArgumentType]
         )
         launcher.launch_run(context)
 
