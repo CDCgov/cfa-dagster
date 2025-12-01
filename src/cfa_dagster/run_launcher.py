@@ -154,7 +154,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         launcher = self.create_launcher(context.workspace)
 
         self._instance.report_engine_event(
-            message=f"Launching run using {launcher.__name__}",
+            message=f"Launching run using {launcher.__class__}",
             dagster_run=run,
             cls=self.__class__,
         )
