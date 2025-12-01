@@ -131,7 +131,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
                 inst_data = ConfigurableClassData(
                     module_name="dagster_docker",
                     class_name="DockerRunLauncher",
-                    config_yaml=yaml.dump({"config": launcher_config})
+                    config_yaml=yaml.dump(launcher_config)
                 )
                 run_launcher = DockerRunLauncher(
                     inst_data=inst_data,
@@ -175,7 +175,6 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         return True
 
     def check_run_worker_health(self, run: DagsterRun):
-        run = self._instance.get_run_by_id(run_id)
         serialized_inst_data = run.tags.get("RUN_LAUNCHER_INST_DATA")
         print(f"serialized_inst_data: '{serialized_inst_data}'")
         inst_data: ConfigurableClassData = deserialize_value(
