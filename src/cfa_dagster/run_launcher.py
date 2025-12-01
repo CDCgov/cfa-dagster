@@ -149,7 +149,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         self._instance.report_engine_event(
             message=f"Launching run using {name} launcher",
             dagster_run=run,
-            cls=launcher.__class__,
+            cls=self.__class__,
         )
 
         self._instance.add_run_tags(
@@ -184,6 +184,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         print(f"inst_data: '{inst_data}'")
         run_launcher: RunLauncher = inst_data.rehydrate(RunLauncher)
         print(f"run_launcher: '{run_launcher}'")
+        run_launcher.register_instance(self._instance)
         run_launcher.check_run_worker_health(run)
 
     def terminate(self, run_id):
@@ -197,4 +198,5 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         print(f"inst_data: '{inst_data}'")
         run_launcher: RunLauncher = inst_data.rehydrate(RunLauncher)
         print(f"run_launcher: '{run_launcher}'")
+        run_launcher.register_instance(self._instance)
         run_launcher.terminate(run_id)
