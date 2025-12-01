@@ -89,30 +89,30 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
             JsonMetadataValue({})
         ).value
         is_production = os.getenv("DAGSTER_IS_DEV_CLI", "false") == "false"
-        run_launcher = cfa_dagster_metadata.get("runLauncher")
-        run_launcher_config = cfa_dagster_metadata.get("config")
+        launcher_name = cfa_dagster_metadata.get("runLauncher")
+        launcher_config = cfa_dagster_metadata.get("config")
+        run_launcher = DefaultRunLauncher()
         # TODO: ensure only CAJ launcher can be used in production
-        if not run_launcher:
+        if not launcher_name:
             if is_production:
-                return DockerRunLauncher()
+                run_launcher = DockerRunLauncher()
             else:
-                return DefaultRunLauncher()
-        match run_launcher:
+                run_launcher = DefaultRunLauncher()
+        match launcher_name:
             case "docker":
                 inst_data = ConfigurableClassData(
                     module_name="dagster_docker",
                     class_name="DockerRunLauncher",
-                    config_yaml=yaml.dump(run_launcher_config)
+                    config_yaml=yaml.dump(launcher_config)
                 )
-                return (
-                    "docker",
-                    DockerRunLauncher(
-                        inst_data=inst_data,
-                        **run_launcher_config
-                    )
+                run_launcher = DockerRunLauncher(
+                    inst_data=inst_data,
+                    **launcher_config
                 )
             case "_":
-                return ("default", DefaultRunLauncher())
+                run_launcher = DefaultRunLauncher()
+        run_launcher.register_instance(self._instance)
+        return (launcher_name, run_launcher)
 
     def launch_run(self, context: LaunchRunContext) -> None:
         run = context.dagster_run
