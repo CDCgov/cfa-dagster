@@ -141,3 +141,6 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
     # from the tags
     def check_run_worker_health(self, run: DagsterRun):
         pass
+
+    def terminate(self, run_id):
+        pass
