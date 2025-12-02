@@ -18,23 +18,9 @@ from dagster_docker.utils import (
 
 
 @executor(
-    name="docker",
-    config_schema=merge_dicts(
-        DOCKER_CONFIG_SCHEMA,
-        {
-            "retries": get_retries_config(),
-            "max_concurrent": Field(
-                IntSource,
-                is_required=False,
-                description=(
-                    "Limit on the number of containers that will run concurrently within the scope "
-                    "of a Dagster run. Note that this limit is per run, not global."
-                ),
-            ),
-            "tag_concurrency_limits": get_tag_concurrency_limits_config(),
-        },
-    ),
-    requirements=multiple_process_executor_requirements(),
+    name=base_docker_executor.name,
+    config_schema=base_docker_executor.config_schema,
+    requirements=base_docker_executor._requirements_fn
 )
 @beta
 def docker_executor(init_context: InitExecutorContext) -> Executor:
@@ -66,4 +52,4 @@ def docker_executor(init_context: InitExecutorContext) -> Executor:
     env_vars.append("DAGSTER_USER")
     env_vars.append("DAGSTER_IS_DEV_CLI")
     modified_context = init_context._replace(executor_config=config)
-    return base_docker_executor(modified_context)
+    return base_docker_executor.executor_creation_fn(modified_context)
