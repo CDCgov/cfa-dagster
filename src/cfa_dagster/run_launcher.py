@@ -102,51 +102,41 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
             LAUNCHER_CONFIG_KEY, JsonMetadataValue({})
         ).value
         is_production = not os.getenv("DAGSTER_IS_DEV_CLI")
-        launcher_type = launcher_metadata.get("type")
+        launcher_class = launcher_metadata.get("class")
+
+        match (is_production, launcher_class):
+            case (False, None):
+                launcher_class = DefaultRunLauncher.__class__
+            case (True, None):
+                launcher_class = AzureContainerAppJobRunLauncher.__class__
+            case (True, _):
+                raise RuntimeError(
+                    "You can only use "
+                    f"{AzureContainerAppJobRunLauncher.__class__} in prod!"
+                )
+
+        launcher_cls = globals()[launcher_class]
+        launcher_module = launcher_cls.__module__
+
         launcher_config = launcher_metadata.get("config", {})
 
         launcher_config["env_vars"] = self.patch_env_vars(
             launcher_config.get("env_vars", [])
         )
 
-        run_launcher = None
-        match (is_production, launcher_type):
-            case (False, None) | (False, "default"):
-                inst_data = ConfigurableClassData(
-                    module_name="dagster",
-                    class_name="DefaultRunLauncher",
-                    config_yaml=yaml.dump({}),
-                )
-                run_launcher = DefaultRunLauncher(inst_data)
-            case (False, "docker"):
-                inst_data = ConfigurableClassData(
-                    module_name="dagster_docker",
-                    class_name="DockerRunLauncher",
-                    config_yaml=yaml.dump(launcher_config),
-                )
-                run_launcher = DockerRunLauncher(
-                    inst_data=inst_data, **launcher_config
-                )
-            case (True, None) | (_, "azure_container_app_job_launcher"):
-                inst_data = ConfigurableClassData(
-                    module_name="cfa_dagster.azure_container_app_job.launcher",
-                    class_name="AzureContainerAppJobRunLauncher",
-                    config_yaml=yaml.dump(launcher_config),
-                )
-                run_launcher = AzureContainerAppJobRunLauncher(
-                    inst_data=inst_data, **launcher_config
-                )
-            case _:
-                raise RuntimeError(
-                    "Only the azure_container_app_job_launcher is "
-                    "supported in production!"
-                )
+        inst_data = ConfigurableClassData(
+            module_name=launcher_module,
+            class_name=launcher_class,
+            config_yaml=yaml.dump(launcher_config),
+        )
+        run_launcher = launcher_class(inst_data, **launcher_config)
 
         run_launcher.register_instance(self._instance)
         return run_launcher
 
     def launch_run(self, context: LaunchRunContext) -> None:
         run = context.dagster_run
+        log.debug(f"run.run_config: '{run.run_config}'")
         launcher = self.create_launcher(context.workspace)
 
         self._instance.report_engine_event(
