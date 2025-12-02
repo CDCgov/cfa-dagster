@@ -25,6 +25,9 @@ from typing_extensions import Self
 from cfa_dagster.azure_container_app_job.launcher import (
     AzureContainerAppJobRunLauncher,
 )
+import logging
+
+log = logging.getLogger(__name__)
 
 LAUNCHER_CONFIG_KEY = "cfa_dagster/launcher"
 
@@ -54,25 +57,25 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         Gets metadata from the Definitions for a code location
         """
         code_location_names = workspace.code_location_names
-        print(f"code_location_names: '{code_location_names}'")
+        log.debug(f"code_location_names: '{code_location_names}'")
         location_name = code_location_names[0]
 
-        print(f"location_name: '{location_name}'")
+        log.debug(f"location_name: '{location_name}'")
 
         # THIS IS THE KEY LINE
         code_location = workspace.get_code_location(location_name)
-        print(f"code_location: '{code_location}'")
+        log.debug(f"code_location: '{code_location}'")
 
         # Now you can get the repository
         repo_names = code_location.get_repository_names()
-        print(f"repo_names: '{repo_names}'")
+        log.debug(f"repo_names: '{repo_names}'")
         repo_name = repo_names[0]
-        print(f"repo_name: '{repo_name}'")
+        log.debug(f"repo_name: '{repo_name}'")
         repo = code_location.get_repository(repo_name)
-        print(f"repo: '{repo}'")
+        log.debug(f"repo: '{repo}'")
         # display_metadata: '{'host': 'localhost', 'socket': '/tmp/tmpy8unnusp', 'python_file': 'dagster_defs.py', 'working_directory': '/app'}'
         metadata = repo.repository_snap.metadata
-        print(f"metadata: '{metadata}'")
+        log.debug(f"metadata: '{metadata}'")
         return metadata
 
     def patch_env_vars(self, env_vars: list[str]):
@@ -164,12 +167,12 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
 
     def get_launcher(self, run: DagsterRun) -> RunLauncher:
         serialized_inst_data = run.tags.get(LAUNCHER_CONFIG_KEY)
-        print(f"serialized_inst_data: '{serialized_inst_data}'")
+        log.debug(f"serialized_inst_data: '{serialized_inst_data}'")
         inst_data: ConfigurableClassData = deserialize_value(
             serialized_inst_data, ConfigurableClassData
         )
         run_launcher: RunLauncher = inst_data.rehydrate(RunLauncher)
-        print(f"run_launcher: '{run_launcher}'")
+        log.debug(f"run_launcher: '{run_launcher}'")
         run_launcher.register_instance(self._instance)
         return run_launcher
 
@@ -191,8 +194,8 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         return run_launcher.check_run_worker_health(run)
 
     def terminate(self, run_id):
-        print("Terminating run_id: " + run_id)
+        log.debug("Terminating run_id: " + run_id)
         run = self._instance.get_run_by_id(run_id)
         run_launcher = self.get_launcher(run)
-        print(f"Terminating run_id '{run_id}' with launcher '{run_launcher.__class__.__name__}'")
+        log.debug(f"Terminating run_id '{run_id}' with launcher '{run_launcher.__class__.__name__}'")
         return run_launcher.terminate(run_id)

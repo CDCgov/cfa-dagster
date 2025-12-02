@@ -43,6 +43,9 @@ from dagster_docker.utils import (
     validate_docker_image,
 )
 from msrest.authentication import BasicTokenAuthentication
+import logging
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     pass
@@ -153,7 +156,7 @@ class AzureBatchStepHandler(StepHandler):
         super().__init__()
         # self._pool_id = "cfa-dagster"
         self._pool_id = pool_name
-        print(f"Launching a new {self.name}")
+        log.debug(f"Launching a new {self.name}")
         credential_v2 = DefaultAzureCredential()
         token = {
             "access_token": credential_v2.get_token(
@@ -242,8 +245,8 @@ class AzureBatchStepHandler(StepHandler):
     def _get_job_id(self, step_handler_context: StepHandlerContext):
         run = step_handler_context.dagster_run
         backfill_id = run.tags.get("dagster/backfill")
-        print(f"backfill_id: '{backfill_id}'")
-        print(f"run_id: '{run.run_id}'")
+        log.debug(f"backfill_id: '{backfill_id}'")
+        log.debug(f"run_id: '{run.run_id}'")
         id = backfill_id or run.run_id
         job_id = f"dagster-run-{id}"
         return job_id
@@ -281,7 +284,7 @@ class AzureBatchStepHandler(StepHandler):
             if err.error.code != "JobExists":
                 raise
             else:
-                print(f"Job {job_id} already exists.")
+                log.debug(f"Job {job_id} already exists.")
 
         env_vars = dict(
             [parse_env_var(env_var) for env_var in container_context.env_vars]
