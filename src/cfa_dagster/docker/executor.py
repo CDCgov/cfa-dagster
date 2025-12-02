@@ -1,19 +1,10 @@
 import dagster._check as check
-from dagster import Field, IntSource, executor
+from dagster import executor
 from dagster._annotations import beta
-from dagster._core.definitions.executor_definition import (
-    multiple_process_executor_requirements,
-)
-from dagster._core.execution.retries import get_retries_config
-from dagster._core.execution.tags import get_tag_concurrency_limits_config
 from dagster._core.executor.base import Executor
 from dagster._core.executor.init import InitExecutorContext
-from dagster._utils.merger import merge_dicts
 from dagster_docker.docker_executor import (
     docker_executor as base_docker_executor
-)
-from dagster_docker.utils import (
-    DOCKER_CONFIG_SCHEMA,
 )
 
 
