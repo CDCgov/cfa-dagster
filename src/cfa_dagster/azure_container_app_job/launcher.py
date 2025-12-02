@@ -1,10 +1,10 @@
-from azure.identity import DefaultAzureCredential
-from azure.mgmt.appcontainers import ContainerAppsAPIClient
-from azure.mgmt.resource.subscriptions import SubscriptionClient
 from collections.abc import Mapping
 from typing import Any, Optional
 
 import dagster._check as check
+from azure.identity import DefaultAzureCredential
+from azure.mgmt.appcontainers import ContainerAppsAPIClient
+from azure.mgmt.resource.subscriptions import SubscriptionClient
 from dagster._core.launcher.base import (
     CheckRunHealthResult,
     LaunchRunContext,
@@ -18,14 +18,13 @@ from dagster._core.utils import parse_env_var
 from dagster._grpc.types import ExecuteRunArgs, ResumeRunArgs
 from dagster._serdes import ConfigurableClass
 from dagster._serdes.config_class import ConfigurableClassData
-from typing_extensions import Self
-
 from dagster_docker.container_context import DockerContainerContext
 from dagster_docker.utils import (
-        DOCKER_CONFIG_SCHEMA,
-        validate_docker_config,
-        validate_docker_image
+    DOCKER_CONFIG_SCHEMA,
+    validate_docker_config,
+    validate_docker_image,
 )
+from typing_extensions import Self
 
 DOCKER_CONTAINER_ID_TAG = "docker/container_id"
 CAJ_EXECUTION_ID_KEY = "AZURE_CONTAINER_APP_JOB_EXECUTION_ID"
@@ -99,7 +98,9 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
     ) -> Self:
         return cls(inst_data=inst_data, **config_value)
 
-    def get_container_context(self, dagster_run: DagsterRun) -> DockerContainerContext:
+    def get_container_context(
+        self, dagster_run: DagsterRun
+    ) -> DockerContainerContext:
         return DockerContainerContext.create_for_run(dagster_run, self)
 
     def _get_image(self, job_code_origin):
@@ -109,7 +110,9 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
             docker_image = self.image
 
         if not docker_image:
-            raise Exception("No docker image specified by the instance config or repository")
+            raise Exception(
+                "No docker image specified by the instance config or repository"
+            )
 
         validate_docker_image(docker_image)
         return docker_image
@@ -135,11 +138,14 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         labels["dagster/job_name"] = run.job_name
 
         job_template = client.jobs.get(
-            resource_group_name=self._resource_group, job_name=self.container_app_job_name
+            resource_group_name=self._resource_group,
+            job_name=self.container_app_job_name,
         ).template
         container = job_template.containers[0]
         container.image = docker_image
-        container.env = [{"name": k, "value": v} for k, v in docker_env.items()]
+        container.env = [
+            {"name": k, "value": v} for k, v in docker_env.items()
+        ]
         container.command = command
         if self.cpu is not None:
             container.resources.cpu = self.cpu
@@ -158,21 +164,21 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         ).result()
         job_execution_id = job_execution.id.split("/").pop()
         print(f"Started container app job with id: '{job_execution_id}'")
-        # self._step_caj_execution_ids[step_key] = job_execution_id
 
         self._instance.report_engine_event(
             message=(
                 "Launching run in a new container app job execution "
-                f"{job_execution_id} with image {docker_image}"),
+                f"{job_execution_id} with image {docker_image}"
+            ),
             dagster_run=run,
-            cls=self.__class__,
+            cls=self.__class__.__name__,
         )
 
         self._instance.add_run_tags(
             run.run_id,
             {
                 CAJ_EXECUTION_ID_KEY: job_execution_id,
-                DOCKER_IMAGE_TAG: docker_image
+                DOCKER_IMAGE_TAG: docker_image,
             },  # pyright: ignore[reportArgumentType]
         )
 
@@ -217,11 +223,6 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         job_execution_id = run.tags.get(CAJ_EXECUTION_ID_KEY)
         print(f"job_execution_id: '{job_execution_id}'")
 
-        yield DagsterEvent.engine_event(
-            step_handler_context.get_step_context(step_key),
-            message=f"Stopping container app job execution {job_execution_id} for step.",
-            event_specific_data=EngineEventData(),
-        )
         # TODO: handle this error:
         """
     azure.core.exceptions.HttpResponseError: Operation returned an invalid status 'Bad Request'
@@ -242,7 +243,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         if not job_execution_id:
             return CheckRunHealthResult(
                 WorkerStatus.NOT_FOUND,
-                msg=f"No tag found for {CAJ_EXECUTION_ID_KEY}!"
+                msg=f"No tag found for {CAJ_EXECUTION_ID_KEY}!",
             )
 
         client = self._azure_caj_client
@@ -258,7 +259,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         if not execution:
             return CheckRunHealthResult(
                 WorkerStatus.NOT_FOUND,
-                msg=f"No container app job execution found for {job_execution_id}"
+                msg=f"No container app job execution found for {job_execution_id}",
             )
 
         # print(f"execution: '{execution}'")
@@ -267,19 +268,13 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         # https://learn.microsoft.com/en-us/python/api/azure-mgmt-appcontainers/azure.mgmt.appcontainers.models.jobexecutionrunningstate?view=azure-python
         status = execution.status  # e.g., "Running", "Succeeded", "Failed"
         match status:
-            case (
-                "Running"
-                | "Processing"
-                | "Unknown"
-            ):
+            case "Running" | "Processing" | "Unknown":
                 return CheckRunHealthResult(WorkerStatus.RUNNING)
             case _:
                 return CheckRunHealthResult(
                     WorkerStatus.FAILED,
-                    msg=f"Container app execution {job_execution_id} in status {status}!"
+                    msg=f"Container app execution {job_execution_id} in status {status}!",
                 )
         return CheckRunHealthResult(
-            WorkerStatus.FAILED,
-            msg="Unknown failure!"
+            WorkerStatus.FAILED, msg="Unknown failure!"
         )
-
