@@ -11,5 +11,6 @@ from .run_launcher import DynamicRunLauncher
 from .utils import (
     bootstrap_dev,
     launch_asset_backfill,
-    get_latest_metadata_for_partition
+    get_latest_metadata_for_partition,
+    collect_definitions,
 )
