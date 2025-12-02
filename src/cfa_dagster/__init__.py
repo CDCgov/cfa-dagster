@@ -4,6 +4,7 @@
 from .azure_adls2.io_manager import ADLS2PickleIOManager
 from .azure_container_app_job.launcher import AzureContainerAppJobRunLauncher
 from .azure_container_app_job.executor import azure_container_app_job_executor
+from .azure_batch.executor import azure_batch_executor
 from .docker.launcher import DockerRunLauncher
 from .docker.executor import docker_executor
 from .run_launcher import DynamicRunLauncher
