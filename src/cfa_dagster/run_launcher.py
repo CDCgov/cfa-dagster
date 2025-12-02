@@ -188,6 +188,8 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         return run_launcher.check_run_worker_health(run)
 
     def terminate(self, run_id):
+        print("Terminating run_id: " + run_id)
         run = self._instance.get_run_by_id(run_id)
         run_launcher = self.get_launcher(run)
+        print(f"Terminating run_id '{run_id}' with launcher '{run_launcher.__class__.__name__}'")
         return run_launcher.terminate(run_id)
