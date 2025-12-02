@@ -25,6 +25,9 @@ from dagster_docker.utils import (
     validate_docker_image,
 )
 from typing_extensions import Self
+import logging
+
+log = logging.getLogger(__name__)
 
 DOCKER_CONTAINER_ID_TAG = "docker/container_id"
 CAJ_EXECUTION_ID_KEY = "AZURE_CONTAINER_APP_JOB_EXECUTION_ID"
@@ -151,11 +154,11 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
             container.resources.cpu = self.cpu
         if self.memory is not None:
             container.resources.memory = f"{self.memory}Gi"
-        print(f"container.image: '{container.image}'")
-        print(f"container.env: '{container.env}'")
-        print(f"container.command: '{container.command}'")
-        print(f"container.resources.cpu: '{container.resources.cpu}'")
-        print(f"container.resources.memory: '{container.resources.memory}'")
+        log.debug(f"container.image: '{container.image}'")
+        log.debug(f"container.env: '{container.env}'")
+        log.debug(f"container.command: '{container.command}'")
+        log.debug(f"container.resources.cpu: '{container.resources.cpu}'")
+        log.debug(f"container.resources.memory: '{container.resources.memory}'")
 
         job_execution = client.jobs.begin_start(
             resource_group_name=self._resource_group,
@@ -163,7 +166,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
             template=job_template,
         ).result()
         job_execution_id = job_execution.id.split("/").pop()
-        print(f"Started container app job with id: '{job_execution_id}'")
+        log.debug(f"Started container app job with id: '{job_execution_id}'")
 
         self._instance.report_engine_event(
             message=(
@@ -221,7 +224,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         self._instance.report_run_canceling(run)
 
         job_execution_id = run.tags.get(CAJ_EXECUTION_ID_KEY)
-        print(f"job_execution_id: '{job_execution_id}'")
+        log.debug(f"job_execution_id: '{job_execution_id}'")
 
         # TODO: handle this error:
         """
@@ -262,7 +265,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
                 msg=f"No container app job execution found for {job_execution_id}",
             )
 
-        # print(f"execution: '{execution}'")
+        # log.debug(f"execution: '{execution}'")
         # Check status
         # Status represented by enum, but property acces converts to Capital case
         # https://learn.microsoft.com/en-us/python/api/azure-mgmt-appcontainers/azure.mgmt.appcontainers.models.jobexecutionrunningstate?view=azure-python
