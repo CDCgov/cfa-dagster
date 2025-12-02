@@ -1,12 +1,13 @@
-from dagster_graphql import DagsterGraphQLClient
-import dagster as dg
-from dagster._core.definitions.unresolved_asset_job_definition import (
-    UnresolvedAssetJobDefinition
-)
 import os
+import subprocess
 import sys
 from pathlib import Path
-import subprocess
+
+import dagster as dg
+from dagster._core.definitions.unresolved_asset_job_definition import (
+    UnresolvedAssetJobDefinition,
+)
+from dagster_graphql import DagsterGraphQLClient
 
 
 def bootstrap_dev():
@@ -30,16 +31,18 @@ def bootstrap_dev():
 
         # Run the Dagster webserver
         try:
-            subprocess.run([
-                "dagster",
-                "dev",
-                "-h",
-                "127.0.0.1",
-                "-p",
-                "3000",
-                "-f",
-                script
-            ])
+            subprocess.run(
+                [
+                    "dagster",
+                    "dev",
+                    "-h",
+                    "127.0.0.1",
+                    "-p",
+                    "3000",
+                    "-f",
+                    script,
+                ]
+            )
         except KeyboardInterrupt:
             print("\nShutting down cleanly...")
 
@@ -48,10 +51,13 @@ def bootstrap_dev():
 
     # get the user from the environment, throw an error if variable is not set
     if not os.getenv("DAGSTER_USER"):
-        raise RuntimeError((
-            "Env var 'DAGSTER_USER' is not set. "
-            "If you are running locally, don't forget the '--dev' cli argument"
-            " e.g. uv run dagster_defs.py --dev"))
+        raise RuntimeError(
+            (
+                "Env var 'DAGSTER_USER' is not set. "
+                "If you are running locally, don't forget the '--dev' cli argument"
+                " e.g. uv run dagster_defs.py --dev"
+            )
+        )
 
 
 def collect_definitions(namespace):
@@ -81,8 +87,9 @@ def collect_definitions(namespace):
             assets.append(obj)
         if isinstance(obj, dg.AssetChecksDefinition):
             asset_checks.append(obj)
-        elif (isinstance(obj, dg.JobDefinition)
-              or isinstance(obj, UnresolvedAssetJobDefinition)):
+        elif isinstance(obj, dg.JobDefinition) or isinstance(
+            obj, UnresolvedAssetJobDefinition
+        ):
             jobs.append(obj)
         elif isinstance(obj, dg.ScheduleDefinition):
             schedules.append(obj)
@@ -148,9 +155,7 @@ def launch_asset_backfill(
 
 
 def get_latest_metadata_for_partition(
-    instance: dg.DagsterInstance,
-    asset_key_str: str,
-    partition_key: str
+    instance: dg.DagsterInstance, asset_key_str: str, partition_key: str
 ) -> dict:
     """
     Returns the metadata from the latest materialization for a given asset and partition.

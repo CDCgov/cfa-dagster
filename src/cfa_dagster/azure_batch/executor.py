@@ -1,27 +1,24 @@
+import os
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Optional, cast
-import os
 
 import dagster._check as check
-from azure.mgmt.resource.subscriptions import SubscriptionClient
 from azure.batch import BatchServiceClient
 from azure.batch.models import (
-    ContainerRegistry,
-    ComputeNodeIdentityReference,
+    AutoUserScope,
+    AutoUserSpecification,
     BatchErrorException,
-    CloudTask,
+    ComputeNodeIdentityReference,
+    ContainerRegistry,
+    ElevationLevel,
     JobAddParameter,
     PoolInformation,
     TaskAddParameter,
-    TaskConstraints,
     TaskContainerSettings,
     UserIdentity,
-    AutoUserSpecification,
-    AutoUserScope,
-    ElevationLevel,
 )
 from azure.identity import DefaultAzureCredential
-from msrest.authentication import BasicTokenAuthentication
+from azure.mgmt.resource.subscriptions import SubscriptionClient
 from dagster import Field, IntSource, StringSource, executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
@@ -45,9 +42,10 @@ from dagster_docker.utils import (
     validate_docker_config,
     validate_docker_image,
 )
+from msrest.authentication import BasicTokenAuthentication
 
 if TYPE_CHECKING:
-    from dagster._core.origin import JobPythonOrigin
+    pass
 
 
 @executor(
@@ -111,10 +109,12 @@ def azure_batch_executor(
     )
     working_dir = container_kwargs.get("working_dir")
     if not working_dir:
-        raise ValueError((
-            "Missing property 'container_kwargs.working_dir' "
-            f"is required and must match your Dockerfile WORKDIR"
-        ))
+        raise ValueError(
+            (
+                "Missing property 'container_kwargs.working_dir' "
+                "is required and must match your Dockerfile WORKDIR"
+            )
+        )
     retries = check.dict_elem(config, "retries", key_type=str)
     max_concurrent = check.opt_int_elem(config, "max_concurrent")
     tag_concurrency_limits = check.opt_list_elem(
@@ -162,7 +162,7 @@ class AzureBatchStepHandler(StepHandler):
         }
         credential_v1 = BasicTokenAuthentication(token)
 
-        batch_url = f"https://cfaprdba.eastus.batch.azure.com"
+        batch_url = "https://cfaprdba.eastus.batch.azure.com"
 
         self._subscription_id = (
             SubscriptionClient(credential_v2)
@@ -184,17 +184,18 @@ class AzureBatchStepHandler(StepHandler):
         step_key = self._get_step_key(step_handler_context)
         step_context = step_handler_context.get_step_context(step_key)
         image = (
-            step_context.run_config
-                        .get("ops", {})
-                        .get(step_key, {})
-                        .get("config", {})
-                        .get("image")
+            step_context.run_config.get("ops", {})
+            .get(step_key, {})
+            .get("config", {})
+            .get("image")
         )
         if not image:
             image = self._image
 
         if not image:
-            raise Exception("No docker image specified by the executor or run config")
+            raise Exception(
+                "No docker image specified by the executor or run config"
+            )
 
         return image
 
@@ -240,7 +241,7 @@ class AzureBatchStepHandler(StepHandler):
 
     def _get_job_id(self, step_handler_context: StepHandlerContext):
         run = step_handler_context.dagster_run
-        backfill_id = run.tags.get("dagster/backfill") 
+        backfill_id = run.tags.get("dagster/backfill")
         print(f"backfill_id: '{backfill_id}'")
         print(f"run_id: '{run.run_id}'")
         id = backfill_id or run.run_id
@@ -253,7 +254,9 @@ class AzureBatchStepHandler(StepHandler):
         partition_key: str = run.tags.get("dagster/partition") or ""
         task_id = f"dagster-step-{step_key}"
         if partition_key:
-            partition_key = partition_key.replace("|", "_")  # | char not valid for Batch
+            partition_key = partition_key.replace(
+                "|", "_"
+            )  # | char not valid for Batch
             task_id = f"{task_id}-{partition_key}"
         return task_id
 
@@ -311,7 +314,9 @@ class AzureBatchStepHandler(StepHandler):
             source, target = volume.split(":", 1)
             mount_options += f" --mount type=bind,source=$AZ_BATCH_NODE_MOUNTS_DIR/{source},target={target}"
 
-        workdir = container_context.container_kwargs.get("working_dir", "/app")  # TODO: validate this
+        workdir = container_context.container_kwargs.get(
+            "working_dir", "/app"
+        )  # TODO: validate this
 
         container_settings = TaskContainerSettings(
             image_name=step_image,
@@ -330,9 +335,11 @@ class AzureBatchStepHandler(StepHandler):
 
         task = TaskAddParameter(
             id=task_id,
-            command_line=f"/bin/bash -c \'{" ".join(command)}\'",
+            command_line=f"/bin/bash -c '{' '.join(command)}'",
             container_settings=container_settings,
-            environment_settings=[{"name": k, "value": v} for k, v in env_vars.items()],
+            environment_settings=[
+                {"name": k, "value": v} for k, v in env_vars.items()
+            ],
             user_identity=user_identity,
         )
 
@@ -350,7 +357,6 @@ class AzureBatchStepHandler(StepHandler):
     def check_step_health(
         self, step_handler_context: StepHandlerContext
     ) -> CheckStepHealthResult:
-        step_key = self._get_step_key(step_handler_context)
         job_id = self._get_job_id(step_handler_context)
         task_id = self._get_task_id(step_handler_context)
 
@@ -360,7 +366,7 @@ class AzureBatchStepHandler(StepHandler):
                 return CheckStepHealthResult.healthy()
             elif task.state == "completed":
                 if task.execution_info.exit_code == 0:
-                    return CheckStepHealthResult.healthy() # Consider it healthy and let the framework handle completion
+                    return CheckStepHealthResult.healthy()  # Consider it healthy and let the framework handle completion
                 else:
                     return CheckStepHealthResult.unhealthy(
                         reason=f"Azure Batch task {task_id} in job {job_id} failed with exit code {task.execution_info.exit_code}."

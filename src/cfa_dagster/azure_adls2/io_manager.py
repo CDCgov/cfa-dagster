@@ -1,5 +1,7 @@
+import os
 from typing import Any
 
+import dagster_azure.adls2 as dagster_azure_adls2
 from dagster import (
     InputContext,
     OutputContext,
@@ -7,17 +9,16 @@ from dagster import (
     # io_manager,
 )
 from dagster._utils.cached_method import cached_method
-from pydantic import Field
-
-import dagster_azure.adls2 as dagster_azure_adls2
 from dagster_azure.adls2 import (
-    PickledObjectADLS2IOManager,
     ADLS2DefaultAzureCredential,
+    PickledObjectADLS2IOManager,
 )
 from dagster_azure.adls2.resources import ADLS2Resource
-import os
+from pydantic import Field
 
-is_production = os.getenv("DAGSTER_IS_DEV_CLI", "false") == "false"  # set by dagster cli
+is_production = (
+    os.getenv("DAGSTER_IS_DEV_CLI", "false") == "false"
+)  # set by dagster cli
 
 
 class ADLS2PickleIOManager(dagster_azure_adls2.ADLS2PickleIOManager):
@@ -32,7 +33,8 @@ class ADLS2PickleIOManager(dagster_azure_adls2.ADLS2PickleIOManager):
         default=_storage_account,
     )
     adls2_prefix: str = Field(
-        default=f"dagster-files/{_user}", description="ADLS Gen2 file system prefix to write to."
+        default=f"dagster-files/{_user}",
+        description="ADLS Gen2 file system prefix to write to.",
     )
     lease_duration: int = Field(
         default=-1,
@@ -61,5 +63,3 @@ class ADLS2PickleIOManager(dagster_azure_adls2.ADLS2PickleIOManager):
 
     def handle_output(self, context: "OutputContext", obj: Any) -> None:
         super().handle_output(context, obj)
-
-
