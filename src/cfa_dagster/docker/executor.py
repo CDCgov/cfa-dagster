@@ -51,5 +51,6 @@ def docker_executor(init_context: InitExecutorContext) -> Executor:
     env_vars = check.opt_list_elem(config, "env_vars", of_type=str)
     env_vars.append("DAGSTER_USER")
     env_vars.append("DAGSTER_IS_DEV_CLI")
+    config['env_vars'] = env_vars
     modified_context = init_context._replace(executor_config=config)
     return base_docker_executor.executor_creation_fn(modified_context)
