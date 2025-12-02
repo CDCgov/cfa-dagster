@@ -113,7 +113,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
 
         inst_data = ConfigurableClassData(
             module_name=launcher_module,
-            class_name=launcher_class,
+            class_name=launcher_class_name,
             config_yaml=yaml.dump(launcher_config),
         )
         run_launcher = launcher_class(inst_data, **launcher_config)
