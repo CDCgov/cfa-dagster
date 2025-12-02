@@ -164,10 +164,12 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
 
     def get_launcher(self, run: DagsterRun) -> RunLauncher:
         serialized_inst_data = run.tags.get(LAUNCHER_CONFIG_KEY)
+        print(f"serialized_inst_data: '{serialized_inst_data}'")
         inst_data: ConfigurableClassData = deserialize_value(
             serialized_inst_data, ConfigurableClassData
         )
         run_launcher: RunLauncher = inst_data.rehydrate(RunLauncher)
+        print(f"run_launcher: '{run_launcher}'")
         run_launcher.register_instance(self._instance)
 
     def resume_run(self, context: ResumeRunContext) -> None:
