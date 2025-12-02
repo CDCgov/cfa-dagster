@@ -5,6 +5,8 @@ from typing import Any, Optional
 import yaml
 from dagster import DefaultRunLauncher, JsonMetadataValue
 from dagster._core.launcher.base import (
+    CheckRunHealthResult,
+    WorkerStatus,
     LaunchRunContext,
     ResumeRunContext,
     RunLauncher,
@@ -177,11 +179,15 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
     def supports_check_run_worker_health(self):
         return True
 
-    def check_run_worker_health(self, run: DagsterRun):
+    def check_run_worker_health(self, run: DagsterRun) -> CheckRunHealthResult:
         run_launcher = self.get_launcher(run)
-        run_launcher.check_run_worker_health(run)
+        if not run_launcher.supports_check_run_worker_health:
+            # Assume running if run worker doesn't support health check
+            # This should only be for the DefaultRunLauncher
+            return CheckRunHealthResult(WorkerStatus.RUNNING)
+        return run_launcher.check_run_worker_health(run)
 
     def terminate(self, run_id):
         run = self._instance.get_run_by_id(run_id)
         run_launcher = self.get_launcher(run)
-        run_launcher.terminate(run_id)
+        return run_launcher.terminate(run_id)
