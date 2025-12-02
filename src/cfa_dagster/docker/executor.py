@@ -10,7 +10,7 @@ from dagster_docker.docker_executor import (
 
 @executor(
     name=base_docker_executor.name,
-    config_schema=base_docker_executor.config_schema,
+    config_schema=base_docker_executor.config_schema.__dict__,
     requirements=base_docker_executor._requirements_fn
 )
 @beta

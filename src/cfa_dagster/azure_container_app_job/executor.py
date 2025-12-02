@@ -34,7 +34,7 @@ log = logging.getLogger(__name__)
 @executor(
     name="azure_container_app_job",
     config_schema=merge_dicts(
-        base_docker_executor.config_schema,
+        base_docker_executor.config_schema.__dict__,
         {
             "container_app_job_name": Field(
                 StringSource,

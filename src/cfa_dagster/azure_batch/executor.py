@@ -52,7 +52,7 @@ if TYPE_CHECKING:
 @executor(
     name="azure_batch",
     config_schema=merge_dicts(
-        base_docker_executor.config_schema,
+        base_docker_executor.config_schema.__dict__,
         {
             "pool_name": Field(
                 StringSource,
