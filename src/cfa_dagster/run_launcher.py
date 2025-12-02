@@ -129,7 +129,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
             class_name=launcher_class,
             config_yaml=yaml.dump(launcher_config),
         )
-        run_launcher = launcher_class(inst_data, **launcher_config)
+        run_launcher = launcher_cls(inst_data, **launcher_config)
 
         run_launcher.register_instance(self._instance)
         return run_launcher
