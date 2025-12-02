@@ -1,4 +1,3 @@
-import os
 from collections.abc import Iterator
 from typing import Optional, cast
 
@@ -6,13 +5,11 @@ import dagster._check as check
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.mgmt.resource.subscriptions import SubscriptionClient
-from dagster import Field, Float, IntSource, StringSource, executor
+from dagster import Field, Float, StringSource, executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
 from dagster._core.events import DagsterEvent, EngineEventData
-from dagster._core.execution.retries import RetryMode, get_retries_config
-from dagster._core.execution.tags import get_tag_concurrency_limits_config
 from dagster._core.executor.base import Executor
 from dagster._core.executor.init import InitExecutorContext
 from dagster._core.executor.step_delegating import StepDelegatingExecutor
@@ -23,9 +20,9 @@ from dagster._core.executor.step_delegating.step_handler.base import (
 )
 from dagster._core.utils import parse_env_var
 from dagster._utils.merger import merge_dicts
+from dagster_docker import docker_executor as base_docker_executor
 from dagster_docker.container_context import DockerContainerContext
 from dagster_docker.utils import (
-    DOCKER_CONFIG_SCHEMA,
     validate_docker_config,
     validate_docker_image,
 )
@@ -35,9 +32,9 @@ log = logging.getLogger(__name__)
 
 
 @executor(
-    name="docker",
+    name="azure_container_app_job",
     config_schema=merge_dicts(
-        DOCKER_CONFIG_SCHEMA,
+        base_docker_executor.config_schema,
         {
             "container_app_job_name": Field(
                 StringSource,
@@ -60,16 +57,6 @@ log = logging.getLogger(__name__)
                     "Memory value must be double CPU e.g. 0.25 cpu 0.5 memory"
                 ),
             ),
-            "retries": get_retries_config(),
-            "max_concurrent": Field(
-                IntSource,
-                is_required=False,
-                description=(
-                    "Limit on the number of containers that will run concurrently within the scope "
-                    "of a Dagster run. Note that this limit is per run, not global."
-                ),
-            ),
-            "tag_concurrency_limits": get_tag_concurrency_limits_config(),
         },
     ),
     requirements=multiple_process_executor_requirements(),
@@ -127,6 +114,10 @@ def azure_container_app_job_executor(
         config, "tag_concurrency_limits"
     )
 
+    # propagate user & dev env vars
+    env_vars.append("DAGSTER_USER")
+    env_vars.append("DAGSTER_IS_DEV_CLI")
+
     validate_docker_config(network, networks, container_kwargs)
 
     if network and not networks:
@@ -134,7 +125,7 @@ def azure_container_app_job_executor(
 
     container_context = DockerContainerContext(
         registry=registry,
-        env_vars=env_vars or [],
+        env_vars=env_vars,
         networks=networks or [],
         container_kwargs=container_kwargs,
     )
@@ -271,11 +262,6 @@ class AzureContainerAppJobStepHandler(StepHandler):
             step_handler_context.dagster_run.job_name
         )
         env_vars["DAGSTER_RUN_STEP_KEY"] = step_key
-        # propagate user & dev env vars
-        env_vars["DAGSTER_USER"] = os.getenv("DAGSTER_USER")
-        dagster_is_dev_cli = os.getenv("DAGSTER_IS_DEV_CLI")
-        if dagster_is_dev_cli:
-            env_vars["DAGSTER_IS_DEV_CLI"] = dagster_is_dev_cli
 
         # Download existing job template
         job_template = client.jobs.get(
