@@ -1,8 +1,8 @@
+import os
 from collections.abc import Iterator
 from typing import Optional, cast
 
 import dagster._check as check
-import os
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.mgmt.resource.subscriptions import SubscriptionClient
@@ -105,7 +105,9 @@ def azure_container_app_job_executor(
 
     # this is the config from the Launchpad
     print(f"config: '{config}'")
-    container_app_job_name = check.opt_str_elem(config, "container_app_job_name")
+    container_app_job_name = check.opt_str_elem(
+        config, "container_app_job_name"
+    )
     cpu = check.opt_float_elem(config, "cpu")
     memory = check.opt_float_elem(config, "memory")
     image = check.opt_str_elem(config, "image")
@@ -136,11 +138,7 @@ def azure_container_app_job_executor(
 
     return StepDelegatingExecutor(
         AzureContainerAppJobStepHandler(
-            image,
-            container_context,
-            container_app_job_name,
-            cpu,
-            memory
+            image, container_context, container_app_job_name, cpu, memory
         ),
         retries=check.not_none(RetryMode.from_config(retries)),
         max_concurrent=max_concurrent,
@@ -190,17 +188,18 @@ class AzureContainerAppJobStepHandler(StepHandler):
         step_key = self._get_step_key(step_handler_context)
         step_context = step_handler_context.get_step_context(step_key)
         image = (
-            step_context.run_config
-                        .get("ops", {})
-                        .get(step_key, {})
-                        .get("config", {})
-                        .get("image")
+            step_context.run_config.get("ops", {})
+            .get(step_key, {})
+            .get("config", {})
+            .get("image")
         )
         if not image:
             image = self._image
 
         if not image:
-            raise Exception("No docker image specified by the executor or run config")
+            raise Exception(
+                "No docker image specified by the executor or run config"
+            )
 
         return image
 
@@ -358,12 +357,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
         status = execution.status  # e.g., "Running", "Succeeded", "Failed"
         match status:
             case (
-                "Running"
-                | "Succeeded"
-                | "Processing"
-                | "Processing"
-                | "Stopped"
-                | "Unknown"
+                "Running" | "Succeeded" | "Processing" | "Stopped" | "Unknown"
             ):
                 return CheckStepHealthResult.healthy()
             case "Failed" | "Degraded":

@@ -171,7 +171,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
                 f"{job_execution_id} with image {docker_image}"
             ),
             dagster_run=run,
-            cls=self.__class__.__name__,
+            cls=self.__class__,
         )
 
         self._instance.add_run_tags(
