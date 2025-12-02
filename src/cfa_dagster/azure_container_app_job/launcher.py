@@ -30,7 +30,7 @@ import logging
 log = logging.getLogger(__name__)
 
 DOCKER_CONTAINER_ID_TAG = "docker/container_id"
-CAJ_EXECUTION_ID_KEY = "AZURE_CONTAINER_APP_JOB_EXECUTION_ID"
+CAJ_EXECUTION_ID_KEY = "cfa_dagster/caj_execution_id"
 
 
 class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):

@@ -78,22 +78,6 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         log.debug(f"metadata: '{metadata}'")
         return metadata
 
-    def patch_env_vars(self, env_vars: list[str]):
-        # patch env vars
-        clean_env_vars = []
-        reserved_env_vars = ["DAGSTER_USER", "DAGSTER_IS_DEV_CLI"]
-        for var in env_vars:
-            for reserved_var in reserved_env_vars:
-                if not var.startswith(f"{reserved_var}="):
-                    clean_env_vars.append(var)
-
-        user = os.getenv("DAGSTER_USER")
-        dagster_is_dev_cli = os.getenv("DAGSTER_IS_DEV_CLI")
-        clean_env_vars.append(f"DAGSTER_USER={user}")
-        if dagster_is_dev_cli:
-            clean_env_vars.append(f"DAGSTER_IS_DEV_CLI={dagster_is_dev_cli}")
-        return clean_env_vars
-
     def create_launcher(
         self, workspace: BaseWorkspaceRequestContext
     ) -> RunLauncher:
@@ -102,34 +86,37 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
             LAUNCHER_CONFIG_KEY, JsonMetadataValue({})
         ).value
         is_production = not os.getenv("DAGSTER_IS_DEV_CLI")
-        launcher_class = launcher_metadata.get("class")
+        launcher_class_name = launcher_metadata.get("class")
 
-        match (is_production, launcher_class):
+        match (is_production, launcher_class_name):
             case (False, None):
-                launcher_class = DefaultRunLauncher.__class__
+                launcher_class_name = DefaultRunLauncher.__class__
             case (True, None):
-                launcher_class = AzureContainerAppJobRunLauncher.__class__
+                launcher_class_name = AzureContainerAppJobRunLauncher.__class__
             case (True, _):
                 raise RuntimeError(
                     "You can only use "
                     f"{AzureContainerAppJobRunLauncher.__class__} in prod!"
                 )
 
-        launcher_cls = globals()[launcher_class]
-        launcher_module = launcher_cls.__module__
+        launcher_class = globals()[launcher_class_name]
+        launcher_module = launcher_class.__module__
 
         launcher_config = launcher_metadata.get("config", {})
 
-        launcher_config["env_vars"] = self.patch_env_vars(
-            launcher_config.get("env_vars", [])
-        )
+        # default run launcher throws an error for env vars
+        if launcher_class_name != DefaultRunLauncher.__name__:
+            env_vars = launcher_config.get("env_vars", [])
+            env_vars.append("DAGSTER_USER")
+            env_vars.append("DAGSTER_IS_DEV_CLI")
+            launcher_config["env_vars"] = env_vars
 
         inst_data = ConfigurableClassData(
             module_name=launcher_module,
             class_name=launcher_class,
             config_yaml=yaml.dump(launcher_config),
         )
-        run_launcher = launcher_cls(inst_data, **launcher_config)
+        run_launcher = launcher_class(inst_data, **launcher_config)
 
         run_launcher.register_instance(self._instance)
         return run_launcher
@@ -137,7 +124,19 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
     def launch_run(self, context: LaunchRunContext) -> None:
         run = context.dagster_run
         log.debug(f"run.run_config: '{run.run_config}'")
-        launcher = self.create_launcher(context.workspace)
+        try:
+            launcher = self.create_launcher(context.workspace)
+        except KeyError:
+            valid_launchers = [c.__name__ for c in [
+                DefaultRunLauncher,
+                DockerRunLauncher,
+                AzureContainerAppJobRunLauncher
+            ]]
+            raise RuntimeError(
+                "Invalid launcher class specified! "
+                "Must be one of: "
+                f"{valid_launchers}"
+            )
 
         self._instance.report_engine_event(
             message=f"Launching run using {launcher.__class__.__name__}",
