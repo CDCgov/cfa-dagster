@@ -171,6 +171,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         run_launcher: RunLauncher = inst_data.rehydrate(RunLauncher)
         print(f"run_launcher: '{run_launcher}'")
         run_launcher.register_instance(self._instance)
+        return run_launcher
 
     def resume_run(self, context: ResumeRunContext) -> None:
         run = context.dagster_run
