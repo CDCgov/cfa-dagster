@@ -48,18 +48,29 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         cpu: float = None,
         memory: float = None,
         image: str = None,
+        registry: str = None,
         env_vars: list[str] = None,
+        network: str = None,
+        networks: list[str] = None,
         container_kwargs=None,
-        **kwargs  # covering args created by rehydrated DockerContainerContext
+        **kwargs
     ):
         self._inst_data = inst_data
         self.image = image
         self.container_app_job_name = container_app_job_name
         self.cpu = cpu
         self.memory = memory
+        self.registry = registry
         self.env_vars = env_vars
 
-        validate_docker_config(None, None, container_kwargs)
+        validate_docker_config(network, networks, container_kwargs)
+
+        if network:
+            self.networks = [network]
+        elif networks:
+            self.networks = networks
+        else:
+            self.networks = []
 
         self.container_kwargs = check.opt_dict_param(
             container_kwargs, "container_kwargs", key_type=str
