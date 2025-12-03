@@ -23,15 +23,17 @@ from dagster_azure.blob import (
 )
 
 # from dagster_docker import DockerRunLauncher
-# noqa: ruff: F41
+# ruff: noqa: F401
 from cfa_dagster import (
     ADLS2PickleIOManager,
     AzureContainerAppJobRunLauncher,
     azure_batch_executor,
-    azure_container_app_job_executor as azure_caj_executor,
+    collect_definitions,
     docker_executor,
     start_dev_env,
-    collect_definitions,
+)
+from cfa_dagster import (
+    azure_container_app_job_executor as azure_caj_executor,
 )
 
 # function to start the dev server
@@ -113,7 +115,7 @@ docker_executor_configured = docker_executor.configured(
     }
 )
 
-image = f"cfaprdbatchcr.azurecr.io/cfa-dagster:{user}",
+image = f"cfaprdbatchcr.azurecr.io/cfa-dagster:{user}"
 
 # configuring an executor to run workflow steps on Azure Container App Jobs
 # add this to a job or the Definitions class to use it

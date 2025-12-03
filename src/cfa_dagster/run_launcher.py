@@ -1,3 +1,4 @@
+import logging
 import os
 from collections.abc import Mapping
 from typing import Any, Optional
@@ -6,10 +7,10 @@ import yaml
 from dagster import DefaultRunLauncher, JsonMetadataValue
 from dagster._core.launcher.base import (
     CheckRunHealthResult,
-    WorkerStatus,
     LaunchRunContext,
     ResumeRunContext,
     RunLauncher,
+    WorkerStatus,
 )
 from dagster._core.storage.dagster_run import DagsterRun
 from dagster._core.workspace.context import BaseWorkspaceRequestContext
@@ -25,7 +26,6 @@ from typing_extensions import Self
 from cfa_dagster.azure_container_app_job.launcher import (
     AzureContainerAppJobRunLauncher,
 )
-import logging
 
 log = logging.getLogger(__name__)
 
@@ -127,11 +127,14 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         try:
             launcher = self.create_launcher(context.workspace)
         except KeyError:
-            valid_launchers = [c.__name__ for c in [
-                DefaultRunLauncher,
-                DockerRunLauncher,
-                AzureContainerAppJobRunLauncher
-            ]]
+            valid_launchers = [
+                c.__name__
+                for c in [
+                    DefaultRunLauncher,
+                    DockerRunLauncher,
+                    AzureContainerAppJobRunLauncher,
+                ]
+            ]
             raise RuntimeError(
                 "Invalid launcher class specified! "
                 "Must be one of: "
@@ -175,22 +178,32 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         return True
 
     def check_run_worker_health(self, run: DagsterRun) -> CheckRunHealthResult:
-        log.debug(f"Starting check_run_worker_health for '{self.__class__.__name__}'")
+        log.debug(
+            f"Starting check_run_worker_health for '{self.__class__.__name__}'"
+        )
         run_launcher = self.get_launcher(run)
-        log.debug(f"Checking run worker health with launcher '{run_launcher.__class__.__name__}'")
+        log.debug(
+            f"Checking run worker health with launcher '{run_launcher.__class__.__name__}'"
+        )
         if not run_launcher.supports_check_run_worker_health:
-            log.debug(f"Skipping health check for launcher '{run_launcher.__class__.__name__}'")
+            log.debug(
+                f"Skipping health check for launcher '{run_launcher.__class__.__name__}'"
+            )
             # Assume running if run worker doesn't support health check
             # This should only be for the DefaultRunLauncher
             return CheckRunHealthResult(WorkerStatus.RUNNING)
         res = run_launcher.check_run_worker_health(run)
-        log.debug(f"Returned health check status '{res.status}' with message "
-                  f"'{res.msg}' for launcher '{run_launcher.__class__.__name__}'")
+        log.debug(
+            f"Returned health check status '{res.status}' with message "
+            f"'{res.msg}' for launcher '{run_launcher.__class__.__name__}'"
+        )
         return res
 
     def terminate(self, run_id):
         log.debug("Terminating run_id: " + run_id)
         run = self._instance.get_run_by_id(run_id)
         run_launcher = self.get_launcher(run)
-        log.debug(f"Terminating run_id '{run_id}' with launcher '{run_launcher.__class__.__name__}'")
+        log.debug(
+            f"Terminating run_id '{run_id}' with launcher '{run_launcher.__class__.__name__}'"
+        )
         return run_launcher.terminate(run_id)

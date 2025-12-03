@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Mapping
 from typing import Any, Optional
 
@@ -23,14 +24,9 @@ from dagster_docker.utils import (
     validate_docker_config,
     validate_docker_image,
 )
-from .utils import (
-    CAJ_CONFIG_SCHEMA,
-    start_caj,
-    stop_caj,
-    get_status_caj
-)
 from typing_extensions import Self
-import logging
+
+from .utils import CAJ_CONFIG_SCHEMA, get_status_caj, start_caj, stop_caj
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +49,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         network: str = None,
         networks: list[str] = None,
         container_kwargs=None,
-        **kwargs
+        **kwargs,
     ):
         self._inst_data = inst_data
         self.image = image
@@ -204,7 +200,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
             self._azure_caj_client,
             self._resource_group,
             self.container_app_job_name,
-            job_execution_id
+            job_execution_id,
         )
 
     @property
@@ -223,7 +219,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
             self._azure_caj_client,
             resource_group=self._resource_group,
             container_app_job_name=self.container_app_job_name,
-            job_execution_id=job_execution_id
+            job_execution_id=job_execution_id,
         )
 
         match status:

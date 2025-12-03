@@ -1,38 +1,39 @@
+import logging
+
+from azure.mgmt.appcontainers import ContainerAppsAPIClient
+from dagster import Field, Float, StringSource
 from dagster._utils.merger import merge_dicts
 from dagster_docker import docker_executor as base_docker_executor
-from dagster import Field, Float, StringSource
-from azure.mgmt.appcontainers import ContainerAppsAPIClient
-import logging
 
 log = logging.getLogger(__name__)
 
 CAJ_CONFIG_SCHEMA = merge_dicts(
-        base_docker_executor.config_schema.config_type.fields,
-        {
-            "container_app_job_name": Field(
-                StringSource,
-                is_required=False,
-                description="The name of the Container App Job. Default: cfa-dagster",
-                default_value="cfa-dagster"
+    base_docker_executor.config_schema.config_type.fields,
+    {
+        "container_app_job_name": Field(
+            StringSource,
+            is_required=False,
+            description="The name of the Container App Job. Default: cfa-dagster",
+            default_value="cfa-dagster",
+        ),
+        "cpu": Field(
+            Float,
+            is_required=False,
+            description=(
+                "Required CPU in cores. Min: 0.25 Max: 4.0. "
+                "CPU value must be half memory e.g. 0.25 cpu 0.5 memory"
             ),
-            "cpu": Field(
-                Float,
-                is_required=False,
-                description=(
-                    "Required CPU in cores. Min: 0.25 Max: 4.0. "
-                    "CPU value must be half memory e.g. 0.25 cpu 0.5 memory"
-                ),
+        ),
+        "memory": Field(
+            Float,
+            is_required=False,
+            description=(
+                "Required memory in GB from Min: 0.5 Max: 8.0"
+                "Memory value must be double CPU e.g. 0.25 cpu 0.5 memory"
             ),
-            "memory": Field(
-                Float,
-                is_required=False,
-                description=(
-                    "Required memory in GB from Min: 0.5 Max: 8.0"
-                    "Memory value must be double CPU e.g. 0.25 cpu 0.5 memory"
-                ),
-            ),
-        },
-    )
+        ),
+    },
+)
 
 
 def start_caj(
@@ -51,10 +52,9 @@ def start_caj(
     ).template
     container = job_template.containers[0]
     container.image = image
-    container.env = (
-        (container.env or []) +
-        [{"name": k, "value": v} for k, v in env_vars.items()]
-    )
+    container.env = (container.env or []) + [
+        {"name": k, "value": v} for k, v in env_vars.items()
+    ]
     container.command = command
     if cpu is not None:
         container.resources.cpu = cpu

@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Optional, cast
 
@@ -41,7 +42,6 @@ from dagster_docker.utils import (
     validate_docker_image,
 )
 from msrest.authentication import BasicTokenAuthentication
-import logging
 
 log = logging.getLogger(__name__)
 

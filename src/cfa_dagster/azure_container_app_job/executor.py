@@ -1,8 +1,8 @@
+import logging
 from collections.abc import Iterator
 from typing import Optional, cast
 
 import dagster._check as check
-from dagster._core.execution.retries import RetryMode
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.mgmt.resource.subscriptions import SubscriptionClient
@@ -11,6 +11,7 @@ from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
 from dagster._core.events import DagsterEvent, EngineEventData
+from dagster._core.execution.retries import RetryMode
 from dagster._core.executor.base import Executor
 from dagster._core.executor.init import InitExecutorContext
 from dagster._core.executor.step_delegating import StepDelegatingExecutor
@@ -25,13 +26,8 @@ from dagster_docker.utils import (
     validate_docker_config,
     validate_docker_image,
 )
-from .utils import (
-    CAJ_CONFIG_SCHEMA,
-    start_caj,
-    stop_caj,
-    get_status_caj
-)
-import logging
+
+from .utils import CAJ_CONFIG_SCHEMA, get_status_caj, start_caj, stop_caj
 
 log = logging.getLogger(__name__)
 
@@ -296,7 +292,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
             self._azure_caj_client,
             resource_group=self._resource_group,
             container_app_job_name=self.container_app_job_name,
-            job_execution_id=job_execution_id
+            job_execution_id=job_execution_id,
         )
 
         match status:
@@ -334,5 +330,5 @@ class AzureContainerAppJobStepHandler(StepHandler):
             self._azure_caj_client,
             self._resource_group,
             self.container_app_job_name,
-            job_execution_id
+            job_execution_id,
         )

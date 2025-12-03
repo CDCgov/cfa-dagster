@@ -4,13 +4,13 @@ import sys
 from pathlib import Path
 
 import dagster as dg
+import psycopg2
+from azure.identity import DefaultAzureCredential
+from azure.keyvault.secrets import SecretClient
 from dagster._core.definitions.unresolved_asset_job_definition import (
     UnresolvedAssetJobDefinition,
 )
 from dagster_graphql import DagsterGraphQLClient
-import psycopg2
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 
@@ -45,7 +45,9 @@ def create_dev_env():
         conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
         cursor = conn.cursor()
         try:
-            cursor.execute(f"CREATE DATABASE {user_db_name} TEMPLATE template0")
+            cursor.execute(
+                f"CREATE DATABASE {user_db_name} TEMPLATE template0"
+            )
             print(f"Database '{user_db_name}' created successfully.")
         except psycopg2.errors.DuplicateDatabase:
             print(f"Database '{user_db_name}' already exists.")
