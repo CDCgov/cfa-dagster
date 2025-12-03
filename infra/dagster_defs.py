@@ -1,18 +1,20 @@
 #!/usr/bin/env -S uv run --script
 import os
+
 import dagster as dg
 import requests
 import yaml
-from cfa_dagster.azure_adls2.io_manager import ADLS2PickleIOManager
-from cfa_dagster.utils import bootstrap_dev, collect_definitions
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.mgmt.containerinstance import ContainerInstanceManagementClient
 from azure.mgmt.loganalytics import LogAnalyticsManagementClient
 from azure.mgmt.resource.subscriptions import SubscriptionClient
 
+from cfa_dagster.azure_adls2.io_manager import ADLS2PickleIOManager
+from cfa_dagster.utils import start_dev_env, collect_definitions
+
 # Start the Dagster UI and set necessary env vars
-bootstrap_dev()
+start_dev_env()
 
 
 # get the user from the environment, throw an error if variable is not set
@@ -27,25 +29,26 @@ GRAPHQL_URL = "http://dagster.apps.edav.ext.cdc.gov/graphql"
 
 @dg.op(out={"registry_image": dg.Out(str), "code_location_name": dg.Out(str)})
 def get_code_location_name(
-        context: dg.OpExecutionContext,
-        registry_image: str
+    context: dg.OpExecutionContext, registry_image: str
 ) -> tuple[str, str]:
     image_name_with_tag = registry_image.split("/")[-1]
     image_name = image_name_with_tag.split(":")[0]
-    code_location_name = image_name.replace('_', '-')
+    code_location_name = image_name.replace("_", "-")
     context.log.info(f"code_location_name: '{code_location_name}'")
     return (registry_image, code_location_name)
 
 
-@dg.op(out={
-    "code_location_name": dg.Out(str),
-    "grpc_host": dg.Out(str),
-    "grpc_port": dg.Out(int),
-})
+@dg.op(
+    out={
+        "code_location_name": dg.Out(str),
+        "grpc_host": dg.Out(str),
+        "grpc_port": dg.Out(int),
+    }
+)
 def create_or_update_code_location_aci(
     context: dg.OpExecutionContext,
     registry_image: str,
-    code_location_name: str
+    code_location_name: str,
 ) -> tuple[str, str, int]:
     """
     Launches an Azure Container Instance with the given image.
@@ -53,7 +56,9 @@ def create_or_update_code_location_aci(
     credential = DefaultAzureCredential()
     first_subscription_id = (
         SubscriptionClient(credential)
-        .subscriptions.list().next().subscription_id
+        .subscriptions.list()
+        .next()
+        .subscription_id
     )
     subscription_id = first_subscription_id
 
@@ -74,11 +79,12 @@ def create_or_update_code_location_aci(
     la_resource_group = "DefaultResourceGroup-EUS"
     log_analytics_workspace_name = f"DefaultWorkspace-{subscription_id}-EUS"
 
-    log_analytics_client = LogAnalyticsManagementClient(credential,
-                                                        subscription_id)
+    log_analytics_client = LogAnalyticsManagementClient(
+        credential, subscription_id
+    )
     workspace = log_analytics_client.workspaces.get(
-        la_resource_group,
-        log_analytics_workspace_name)
+        la_resource_group, log_analytics_workspace_name
+    )
     log_analytics_workspace_id = workspace.customer_id
 
     shared_keys = log_analytics_client.shared_keys.get_shared_keys(
@@ -98,12 +104,12 @@ def create_or_update_code_location_aci(
         "location": "eastus",
         "identity": {
             "type": "UserAssigned",
-            "user_assigned_identities": {managed_identity_id: {}}
+            "user_assigned_identities": {managed_identity_id: {}},
         },
         "imageRegistryCredentials": [
             {
                 "server": "cfaprdbatchcr.azurecr.io",
-                "identity": managed_identity_id
+                "identity": managed_identity_id,
             }
         ],
         "containers": [
@@ -114,12 +120,21 @@ def create_or_update_code_location_aci(
                     "requests": container_resource_requests,
                     "limits": container_resource_limits,
                 },
-                "command": ["dagster", "api", "grpc", "-h", "0.0.0.0",
-                            "-p", f"{grpc_port}", "-f", "dagster_defs.py"],
+                "command": [
+                    "dagster",
+                    "api",
+                    "grpc",
+                    "-h",
+                    "0.0.0.0",
+                    "-p",
+                    f"{grpc_port}",
+                    "-f",
+                    "dagster_defs.py",
+                ],
                 "ports": [{"port": 4000, "protocol": "TCP"}],
                 "environment_variables": [
                     {"name": "DAGSTER_USER", "value": "prod"},
-                    {"name": "DAGSTER_IS_DEV_CLI", "value": "false"}
+                    {"name": "DAGSTER_IS_DEV_CLI", "value": "false"},
                 ],
             }
         ],
@@ -146,10 +161,14 @@ def create_or_update_code_location_aci(
         container_group,
     )
     new_cg = poller.result()
-    context.log.info(f"Container group '{new_cg.name}' "
-                     f"created with state '{new_cg.provisioning_state}'.")
-    context.log.info(f"Container group '{new_cg.name}' "
-                     f"has IP address '{new_cg.ip_address.ip}'.")
+    context.log.info(
+        f"Container group '{new_cg.name}' "
+        f"created with state '{new_cg.provisioning_state}'."
+    )
+    context.log.info(
+        f"Container group '{new_cg.name}' "
+        f"has IP address '{new_cg.ip_address.ip}'."
+    )
 
     return (code_location_name, new_cg.ip_address.ip, grpc_port)
 
@@ -159,7 +178,7 @@ def update_workspace_yaml(
     context: dg.OpExecutionContext,
     code_location_name: str,
     grpc_host: str,
-    grpc_port: int
+    grpc_port: int,
 ) -> bool:
     """
     Adds a new python_file entry to the load_from list in a Dagster
@@ -218,19 +237,21 @@ def restart_dagster_webserver(context: dg.OpExecutionContext):
     # Get first subscription for logged-in credential
     first_subscription_id = (
         SubscriptionClient(credential)
-        .subscriptions.list().next().subscription_id
+        .subscriptions.list()
+        .next()
+        .subscription_id
     )
 
     client = ContainerAppsAPIClient(
-        credential=credential,
-        subscription_id=first_subscription_id
+        credential=credential, subscription_id=first_subscription_id
     )
 
     # Find active revision
-    revisions = list(client.container_apps_revisions.list_revisions(
-        RESOURCE_GROUP,
-        CONTAINER_APP
-    ))
+    revisions = list(
+        client.container_apps_revisions.list_revisions(
+            RESOURCE_GROUP, CONTAINER_APP
+        )
+    )
     active_revision = next((r for r in revisions if r.active), None)
 
     if not active_revision:
@@ -240,7 +261,7 @@ def restart_dagster_webserver(context: dg.OpExecutionContext):
     client.container_apps_revisions.restart_revision(
         resource_group_name=RESOURCE_GROUP,
         container_app_name=CONTAINER_APP,
-        revision_name=rev_name
+        revision_name=rev_name,
     )
 
     context.log.info(f"Restarting container app: {CONTAINER_APP}")
@@ -284,11 +305,12 @@ def reload_dagster_workspace(context: dg.OpExecutionContext):
 @dg.job()
 def update_code_location():
     registry_image, code_location_name = get_code_location_name()
-    code_location_name, grpc_host, grpc_port = create_or_update_code_location_aci(
-        registry_image,
-        code_location_name
+    code_location_name, grpc_host, grpc_port = (
+        create_or_update_code_location_aci(registry_image, code_location_name)
     )
-    did_update = update_workspace_yaml(code_location_name, grpc_host, grpc_port)
+    did_update = update_workspace_yaml(
+        code_location_name, grpc_host, grpc_port
+    )
     reload_dagster_workspace(did_update)
 
 
