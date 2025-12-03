@@ -176,11 +176,16 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
 
     def check_run_worker_health(self, run: DagsterRun) -> CheckRunHealthResult:
         run_launcher = self.get_launcher(run)
+        log.debug(f"Checking run worker health with launcher '{run_launcher.__class__.__name__}'")
         if not run_launcher.supports_check_run_worker_health:
+            log.debug(f"Skipping health check for launcher '{run_launcher.__class__.__name__}'")
             # Assume running if run worker doesn't support health check
             # This should only be for the DefaultRunLauncher
             return CheckRunHealthResult(WorkerStatus.RUNNING)
-        return run_launcher.check_run_worker_health(run)
+        res = run_launcher.check_run_worker_health(run)
+        log.debug(f"Returned health check status '{res.status}' with message "
+                  f"'{res.msg}' for launcher '{run_launcher.__class__.__name__}'")
+        return res
 
     def terminate(self, run_id):
         log.debug("Terminating run_id: " + run_id)
