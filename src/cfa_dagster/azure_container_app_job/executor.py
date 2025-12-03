@@ -2,6 +2,7 @@ from collections.abc import Iterator
 from typing import Optional, cast
 
 import dagster._check as check
+from dagster._core.execution.retries import RetryMode
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.mgmt.resource.subscriptions import SubscriptionClient
@@ -269,7 +270,10 @@ class AzureContainerAppJobStepHandler(StepHandler):
         ).template
         container = job_template.containers[0]
         container.image = step_image
-        container.env = [{"name": k, "value": v} for k, v in env_vars.items()]
+        container.env = (
+            (container.env or []) +
+            [{"name": k, "value": v} for k, v in env_vars.items()]
+        )
         container.command = execute_step_args.get_command_args()
         if self._cpu is not None:
             container.resources.cpu = self._cpu

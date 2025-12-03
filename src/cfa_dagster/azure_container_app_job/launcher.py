@@ -40,13 +40,13 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         self,
         inst_data: Optional[ConfigurableClassData] = None,
         container_app_job_name="cfa-dagster",
-        cpu="0.5",
-        memory="1.0",
-        image=None,
-        registry=None,
-        env_vars=None,
-        network=None,
-        networks=None,
+        cpu: float = None,
+        memory: float = None,
+        image: str = None,
+        registry: str = None,
+        env_vars: list[str] = None,
+        network: str = None,
+        networks: list[str] = None,
         container_kwargs=None,
     ):
         self._inst_data = inst_data
@@ -122,10 +122,10 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
 
     def _launch_container_with_command(self, run, docker_image, command):
         container_context = self.get_container_context(run)
-        docker_env = dict(
+        env_vars = dict(
             [parse_env_var(env_var) for env_var in container_context.env_vars]
         )
-        docker_env["DAGSTER_RUN_JOB_NAME"] = run.job_name
+        env_vars["DAGSTER_RUN_JOB_NAME"] = run.job_name
 
         client = self._azure_caj_client
 
@@ -146,9 +146,10 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         ).template
         container = job_template.containers[0]
         container.image = docker_image
-        container.env = [
-            {"name": k, "value": v} for k, v in docker_env.items()
-        ]
+        container.env = (
+            (container.env or []) +
+            [{"name": k, "value": v} for k, v in env_vars.items()]
+        )
         container.command = command
         if self.cpu is not None:
             container.resources.cpu = self.cpu
