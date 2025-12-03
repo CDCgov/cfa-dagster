@@ -1,0 +1,10 @@
+BLUF
+- we've quickstart to get people developing locally with isolation
+- local development can execute in-process, Docker, CAJ, Batch
+- we've got a central server for scheduling
+- we've got a process for moving local workflows to production
+
+Show cfa-dagster repo
+
+Requests from Dylan:
+- custom prefix for batch job IDs

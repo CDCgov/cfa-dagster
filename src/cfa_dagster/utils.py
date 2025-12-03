@@ -8,23 +8,133 @@ from dagster._core.definitions.unresolved_asset_job_definition import (
     UnresolvedAssetJobDefinition,
 )
 from dagster_graphql import DagsterGraphQLClient
+import psycopg2
+from azure.identity import DefaultAzureCredential
+from azure.keyvault.secrets import SecretClient
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 
-def bootstrap_dev():
+def create_dev_env():
+    # Authenticate using DefaultAzureCredential
+    credential = DefaultAzureCredential()
+
+    # Connect to the CFA-Tools Key Vault
+    key_vault_url = "https://CFA-Predict.vault.azure.net/"
+    client = SecretClient(vault_url=key_vault_url, credential=credential)
+
+    # Fetch secrets
+    db_host = client.get_secret("cfa-pg-dagster-dev-host").value
+    db_username = client.get_secret("cfa-pg-dagster-dev-admin-username").value
+    db_password = client.get_secret("cfa-pg-dagster-dev-admin-password").value
+    existing_db_name = "postgres"
+
+    # Create a new database for the user based on home directory
+    # using the $USER env var includes the domain extension which is not
+    # valid for a postgres db name
+    user_db_name = Path.home().name
+
+    conn = None
+    try:
+        conn = psycopg2.connect(
+            dbname=existing_db_name,
+            user=db_username,
+            password=db_password,
+            host=db_host,
+            port="5432",
+        )
+        conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+        cursor = conn.cursor()
+        try:
+            cursor.execute(f"CREATE DATABASE {user_db_name} TEMPLATE template0")
+            print(f"Database '{user_db_name}' created successfully.")
+        except psycopg2.errors.DuplicateDatabase:
+            print(f"Database '{user_db_name}' already exists.")
+        finally:
+            cursor.close()
+    except psycopg2.Error as e:
+        print(f"Error connecting to or creating database: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+    # create a dagster.yaml file with the new database
+    dagster_yaml_raw = f"""
+    storage:
+      postgres:
+        postgres_db:
+          hostname: {db_host}
+          username: {db_username}
+          password: {db_password}
+          db_name: {user_db_name}
+          port: 5432
+
+    compute_logs:
+      module: dagster_azure.blob.compute_log_manager
+      class: AzureBlobComputeLogManager
+      config:
+        storage_account: cfadagsterdev
+        container: cfadagsterdev
+        default_azure_credential:
+        prefix: "log-files"
+        local_dir: "/tmp/dagster-logs"
+        upload_interval: 30
+        show_url_only: false
+
+    run_coordinator:
+      module: dagster.core.run_coordinator
+      class: QueuedRunCoordinator
+      config:
+        dequeue_use_threads: true
+        dequeue_num_workers: 4
+        dequeue_interval_seconds: 1
+
+    run_launcher:
+      module: cfa_dagster
+      class: DynamicRunLauncher
+
+    run_monitoring:
+      enabled: true
+
+    concurrency:
+      default_op_concurrency_limit: 1000
+      runs:
+        max_concurrent_runs: 1000
+
+    backfills:
+      use_threads: true
+      num_workers: 4
+      num_submit_workers: 4
+
+    """
+    # write to ~/.dagster_home/dagster.yaml
+    dagster_home = Path.home() / ".dagster_home"
+    dagster_home.mkdir(parents=True, exist_ok=True)
+    config_path = dagster_home / "dagster.yaml"
+    config_path.write_text(dagster_yaml_raw)
+    print("Created ~/.dagster_home/dagster.yaml")
+
+
+def start_dev_env():
     """
     Function to set up the local dev server by:
-    1. setting `DAGSTER_HOME` environment variable
-    2. setting `DAGSTER_USER` environment variable
-    3. running `dagster dev -f <script_name>.py` in a subprocess
-    4. Validating the DAGSTER_USER environment variable for non-dev scenarios
+    1. creating a database on the dev server (one time only, or with --configure)
+    2. creating a ~/.dagster_home/dagster.yaml file (one time only, or with --configure)
+    3. setting `DAGSTER_HOME` environment variable
+    4. setting `DAGSTER_USER` environment variable
+    5. running `dagster dev -f <script_name>.py` in a subprocess
+    6. Validating the DAGSTER_USER environment variable for non-dev scenarios
     """
+    home_dir = Path.home()
+    dagster_user = home_dir.name
+    dagster_home = home_dir / ".dagster_home"
+    dagster_yaml = dagster_home / "dagster.yaml"
+
+    if "--configure" in sys.argv or not os.path.exists(dagster_yaml):
+        create_dev_env()
+
     # Start the Dagster UI and set necessary env vars
     if "--dev" in sys.argv:
         # Set environment variables
-        home_dir = Path.home()
-        dagster_user = home_dir.name
-        dagster_home = home_dir / ".dagster_home"
-
         os.environ["DAGSTER_USER"] = dagster_user
         os.environ["DAGSTER_HOME"] = str(dagster_home)
         script = sys.argv[0]

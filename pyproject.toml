@@ -19,6 +19,8 @@ dependencies = [
     "dagster==1.12.2",
     "dagster-graphql==1.12.2",
     "aiofiles>=24.1.0",
+    "azure-keyvault-secrets",
+    "psycopg2-binary",
 ]
 
 [build-system]

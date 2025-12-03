@@ -1,0 +1,81 @@
+# used `docker network create postgres_network`
+networks:
+  postgres_network:
+    external: true
+
+services:
+  docker_postgres:
+    image: postgres:17
+    container_name: docker_postgres
+    environment:
+      POSTGRES_USER: "tinypgadmin"
+      POSTGRES_PASSWORD: "tinypgpassword"
+      POSTGRES_DB: "gio"
+    networks:
+      - postgres_network
+
+  dagster_devserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INSTALL_AZ_CLI: true
+    image: basic-r-asset
+    container_name: dagster_devserver
+    entrypoint:
+      - dagster
+      - dev
+      - -h
+      - "0.0.0.0"
+      - -p
+      - "3000"
+      - "-f"
+      - "dagster_defs.py"
+    expose:
+      - "3000"
+    ports:
+      - "3000:3000"
+    environment:
+      DAGSTER_USER: "gio"
+      DAGSTER_HOME: "/app"
+    volumes: # Make docker client accessible so we can terminate containers from the webserver
+      - ~/.azure:/root/.azure
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/gio/Documents/CDC/cfa-dagster/examples/dagster_defs.py:/app/dagster_defs.py
+      - /home/gio/.dagster_home/dagster.yaml:/app/dagster.yaml
+    networks:
+      - postgres_network
+    depends_on:
+      - docker_postgres
+
+  dagster_code_location:
+    container_name: dagster_code_location
+    image: basic-r-asset
+    restart: always
+    environment:
+      DAGSTER_USER: "gio"
+      DAGSTER_IS_DEV_CLI: "true"
+    volumes:
+      - ~/.azure:/root/.azure
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/gio/Documents/CDC/cfa-dagster/examples/dagster_defs.py:/app/dagster_defs.py
+      - /home/gio/.dagster_home/dagster.yaml:/app/dagster.yaml
+    networks:
+      - postgres_network
+    entrypoint:
+      - dagster
+      - code-server
+      - start
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "4000"
+      - --location-name
+      - my_repo
+      - -f
+      - /app/dagster_defs.py
+    expose:
+      - 4000
+    depends_on:
+      - docker_postgres
+      - dagster_devserver

@@ -22,19 +22,20 @@ from dagster_azure.blob import (
     AzureBlobStorageResource,
 )
 
-from cfa_dagster.azure_adls2.io_manager import ADLS2PickleIOManager
-from cfa_dagster.utils import bootstrap_dev, collect_definitions
-from cfa_dagster.azure_batch.executor import azure_batch_executor
-from cfa_dagster.azure_container_app_job.executor import (
+# from dagster_docker import DockerRunLauncher
+# noqa: ruff: F41
+from cfa_dagster import (
+    ADLS2PickleIOManager,
+    AzureContainerAppJobRunLauncher,
+    azure_batch_executor,
     azure_container_app_job_executor as azure_caj_executor,
+    docker_executor,
+    start_dev_env,
+    collect_definitions,
 )
-from cfa_dagster.docker.executor import docker_executor
 
-# aolksdjfaosidaa;sldkfj;alsdjf;alsdkjf;lksda;sldkjkf;ldk
-# aolksdjfaosidaa;sldkfj;alsdjf;alsdkjf;lksda;sldkjkf;ldk
-# aolksdjfaosidaa;sldkfj;alsdjf;alsdkjf;lksda;sldkjkf;ldk
 # function to start the dev server
-bootstrap_dev()
+start_dev_env()
 
 user = os.getenv("DAGSTER_USER")
 
@@ -49,7 +50,9 @@ def basic_blob_asset(azure_blob_storage: AzureBlobStorageResource):
     """
     container_name = "cfadagsterdev"
     with azure_blob_storage.get_client() as blob_storage_client:
-        container_client = blob_storage_client.get_container_client(container_name)
+        container_client = blob_storage_client.get_container_client(
+            container_name
+        )
     downloader = container_client.download_blob("test-files/test_config.json")
     print("Downloaded file from blob!")
     return downloader.readall().decode("utf-8")
@@ -95,34 +98,32 @@ workdir = "/app"
 docker_executor_configured = docker_executor.configured(
     {
         # specify a default image
-        "network": "postgres_network",
         "image": "basic-r-asset",
         # set env vars here
-        # "env_vars": [f"DAGSTER_USER={user}"],
+        # "env_vars": [f"DAGSTER_USER"],
         "container_kwargs": {
             "volumes": [
                 # bind the ~/.azure folder for optional cli login
                 f"/home/{user}/.azure:/root/.azure",
                 # bind current file so we don't have to rebuild
                 # the container image for workflow changes
-                # f"{__file__}:{workdir}/{os.path.basename(__file__)}",
-                f"/home/gio/Documents/CDC/cfa-dagster/examples/dagster_defs.py:{workdir}/dagster_defs.py",
+                f"{__file__}:{workdir}/{os.path.basename(__file__)}",
             ]
         },
     }
 )
 
+image = f"cfaprdbatchcr.azurecr.io/cfa-dagster:{user}",
+
 # configuring an executor to run workflow steps on Azure Container App Jobs
 # add this to a job or the Definitions class to use it
-image = "ghcr.io/giomrella/cfa_dagster:latest"
 azure_caj_executor_configured = azure_caj_executor.configured(
     {
         "container_app_job_name": "cfa-dagster",
         # specify a default image
-        # "image": f"cfaprdbatchcr.azurecr.io/cfa-dagster:{user}",
         "image": image,
         # set env vars here
-        # "env_vars": [f"DAGSTER_USER={user}"],
+        # "env_vars": [f"DAGSTER_USER"],
     }
 )
 
@@ -133,9 +134,9 @@ azure_batch_executor_configured = azure_batch_executor.configured(
         # change the pool_name to your existing pool name
         "pool_name": "cfa-dagster",
         # specify a default image
-        "image": f"cfaprdbatchcr.azurecr.io/cfa-dagster:{user}",
+        "image": image,
         # set env vars here
-        # "env_vars": [f"DAGSTER_USER={user}"],
+        # "env_vars": [f"DAGSTER_USER"],
         "container_kwargs": {
             # set the working directory to match your Dockerfile
             # required for Azure Batch
@@ -175,16 +176,12 @@ partitioned_r_asset_job = dg.define_asset_job(
 
 # schedule the job to run weekly
 schedule_every_wednesday = dg.ScheduleDefinition(
-    name="weekly_cron",
-    cron_schedule="0 9 * * 3",
-    job=basic_r_asset_job
+    name="weekly_cron", cron_schedule="0 9 * * 3", job=basic_r_asset_job
 )
 
 # env variable set by Dagster CLI
 is_production = not os.getenv("DAGSTER_IS_DEV_CLI")
 
-is_dev = os.getenv("DAGSTER_IS_DEV_CLI")
-print(f"DAGSTER_IS_DEV_CLI '{is_dev}'")
 # change storage accounts between dev and prod
 storage_account = "cfadagster" if is_production else "cfadagsterdev"
 
@@ -210,28 +207,17 @@ defs = dg.Definitions(
     },
     # setting Docker as the default executor. comment this out to use
     # the default executor that runs directly on your computer
-    executor=dg.in_process_executor,
-    # executor=docker_executor_configured,
+    executor=docker_executor_configured,
+    # executor=dg.in_process_executor,
     # executor=azure_caj_executor_configured,
     # executor=azure_batch_executor_configured,
-    metadata={
-        "cfa_dagster/launcher": {
-            "type": "azure_container_app_job_launcher",
-            "config": {
-                "image": image,
-                "network": "postgres_network",
-                "container_kwargs": {
-                    # a;sldkjfa;slkdj;alksjda;lkj;lkaj
-                    # "auto_remove": True,
-                    "volumes": [
-                        # Make docker client accessible to any launched containers as well
-                        "/home/gio/.azure:/root/.azure",
-                        "/var/run/docker.sock:/var/run/docker.sock",
-                        "/home/gio/Documents/CDC/cfa-dagster/examples/dagster_defs.py:/app/dagster_defs.py"
-                    ]
-                }
-            }
-        }
-    }
+    # uncomment the below to launch runs on Azure
+    # metadata={
+    #     "cfa_dagster/launcher": {
+    #         "class": AzureContainerAppJobRunLauncher.__name__,
+    #         "config": {
+    #             "image": image,
+    #         },
+    #     }
+    # },
 )
-
