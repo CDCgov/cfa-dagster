@@ -93,10 +93,9 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
                 launcher_class_name = DefaultRunLauncher.__name__
             case (True, None):
                 launcher_class_name = AzureContainerAppJobRunLauncher.__name__
-            case (True, _):
+            case (True, DockerRunLauncher.__name__):
                 raise RuntimeError(
-                    "You can only use "
-                    f"{AzureContainerAppJobRunLauncher.__name__} in prod!"
+                    f"You can't use {launcher_class_name} in production!"
                 )
 
         launcher_class = globals()[launcher_class_name]

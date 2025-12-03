@@ -337,4 +337,9 @@ defs = dg.Definitions(
         "io_manager": ADLS2PickleIOManager(),
     },
     executor=dg.in_process_executor,
+    metadata={
+        "cfa_dagster/launcher": {
+            "class": dg.DefaultRunLauncher.__name__
+        }
+    }
 )
