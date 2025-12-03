@@ -7,7 +7,7 @@ import logging
 log = logging.getLogger(__name__)
 
 CAJ_CONFIG_SCHEMA = merge_dicts(
-        base_docker_executor.config_schema.__dict__,
+        base_docker_executor.config_schema.config_type.fields,
         {
             "container_app_job_name": Field(
                 StringSource,
