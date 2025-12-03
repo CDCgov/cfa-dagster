@@ -86,7 +86,6 @@ def create_dev_env():
       config:
         dequeue_use_threads: true
         dequeue_num_workers: 4
-        dequeue_interval_seconds: 1
 
     run_launcher:
       module: cfa_dagster
