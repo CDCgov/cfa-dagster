@@ -96,8 +96,7 @@ def create_or_update_code_location_aci(
 
     container_group_name = f"dcl-{code_location_name}"
 
-    container_resource_requests = {"memory_in_gb": 0.5, "cpu": 0.25}
-    container_resource_limits = {"memory_in_gb": 0.5, "cpu": 0.25}
+    container_resource_requests = {"memory_in_gb": 1.0, "cpu": 0.5}
     grpc_port = 4000
 
     container_group = {
@@ -118,12 +117,11 @@ def create_or_update_code_location_aci(
                 "image": registry_image,
                 "resources": {
                     "requests": container_resource_requests,
-                    "limits": container_resource_limits,
                 },
                 "command": [
                     "dagster",
-                    "api",
-                    "grpc",
+                    "code-server",
+                    "start",
                     "-h",
                     "0.0.0.0",
                     "-p",
@@ -131,10 +129,9 @@ def create_or_update_code_location_aci(
                     "-f",
                     "dagster_defs.py",
                 ],
-                "ports": [{"port": 4000, "protocol": "TCP"}],
+                "ports": [{"port": grpc_port, "protocol": "TCP"}],
                 "environment_variables": [
                     {"name": "DAGSTER_USER", "value": "prod"},
-                    {"name": "DAGSTER_IS_DEV_CLI", "value": "false"},
                 ],
             }
         ],

@@ -125,12 +125,14 @@ def start_dev_env():
     5. running `dagster dev -f <script_name>.py` in a subprocess
     6. Validating the DAGSTER_USER environment variable for non-dev scenarios
     """
+    is_production = not os.getenv("DAGSTER_IS_DEV_CLI")  # set by dagster cli
     home_dir = Path.home()
     dagster_user = home_dir.name
     dagster_home = home_dir / ".dagster_home"
     dagster_yaml = dagster_home / "dagster.yaml"
 
-    if "--configure" in sys.argv or not os.path.exists(dagster_yaml):
+    if ("--configure" in sys.argv or 
+            (not is_production and not os.path.exists(dagster_yaml))):
         create_dev_env()
 
     # Start the Dagster UI and set necessary env vars
@@ -157,7 +159,7 @@ def start_dev_env():
         except KeyboardInterrupt:
             print("\nShutting down cleanly...")
 
-    if os.getenv("DAGSTER_IS_DEV_CLI") == "true":  # set by dagster cli
+    if not is_production:
         print("Running in local dev environment")
 
     # get the user from the environment, throw an error if variable is not set

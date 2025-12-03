@@ -11,7 +11,6 @@ It is highly recommended that you complete the Dagster quickstart [tutorial](htt
 
 ## Getting Started
 
-
 1. Build the initial image for your test asset: `docker build -t basic-r-asset .`
 2. Start the Dagster UI by running `uv run dagster_defs.py --dev` and clicking the link in your terminal (usually [http://127.0.0.1:3000/])
 3. Materialize an asset!
