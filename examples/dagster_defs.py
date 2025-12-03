@@ -211,7 +211,7 @@ defs = dg.Definitions(
     # executor=dg.in_process_executor,
     # executor=azure_caj_executor_configured,
     # executor=azure_batch_executor_configured,
-    # uncomment the below to launch runs on Azure
+    # uncomment the below to launch runs on Azure CAJ
     # metadata={
     #     "cfa_dagster/launcher": {
     #         "class": AzureContainerAppJobRunLauncher.__name__,
