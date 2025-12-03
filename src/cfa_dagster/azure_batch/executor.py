@@ -1,34 +1,30 @@
+import logging
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Optional, cast
-import os
 
 import dagster._check as check
-from azure.mgmt.resource.subscriptions import SubscriptionClient
 from azure.batch import BatchServiceClient
 from azure.batch.models import (
-    ContainerRegistry,
-    ComputeNodeIdentityReference,
+    AutoUserScope,
+    AutoUserSpecification,
     BatchErrorException,
-    CloudTask,
+    ComputeNodeIdentityReference,
+    ContainerRegistry,
+    ElevationLevel,
     JobAddParameter,
     PoolInformation,
     TaskAddParameter,
-    TaskConstraints,
     TaskContainerSettings,
     UserIdentity,
-    AutoUserSpecification,
-    AutoUserScope,
-    ElevationLevel,
 )
 from azure.identity import DefaultAzureCredential
-from msrest.authentication import BasicTokenAuthentication
-from dagster import Field, IntSource, StringSource, executor
+from azure.mgmt.resource.subscriptions import SubscriptionClient
+from dagster import Field, StringSource, executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
 from dagster._core.events import DagsterEvent, EngineEventData
-from dagster._core.execution.retries import RetryMode, get_retries_config
-from dagster._core.execution.tags import get_tag_concurrency_limits_config
+from dagster._core.execution.retries import RetryMode
 from dagster._core.executor.base import Executor
 from dagster._core.executor.init import InitExecutorContext
 from dagster._core.executor.step_delegating import StepDelegatingExecutor
@@ -39,37 +35,30 @@ from dagster._core.executor.step_delegating.step_handler.base import (
 )
 from dagster._core.utils import parse_env_var
 from dagster._utils.merger import merge_dicts
+from dagster_docker import docker_executor as base_docker_executor
 from dagster_docker.container_context import DockerContainerContext
 from dagster_docker.utils import (
-    DOCKER_CONFIG_SCHEMA,
     validate_docker_config,
     validate_docker_image,
 )
+from msrest.authentication import BasicTokenAuthentication
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from dagster._core.origin import JobPythonOrigin
+    pass
 
 
 @executor(
     name="azure_batch",
     config_schema=merge_dicts(
-        DOCKER_CONFIG_SCHEMA,
+        base_docker_executor.config_schema.config_type.fields,
         {
             "pool_name": Field(
                 StringSource,
                 is_required=True,
                 description="The name of the Azure Batch Pool.",
             ),
-            "retries": get_retries_config(),
-            "max_concurrent": Field(
-                IntSource,
-                is_required=False,
-                description=(
-                    "Limit on the number of tasks that will run concurrently within the scope "
-                    "of a Dagster run. Note that this limit is per run, not global."
-                ),
-            ),
-            "tag_concurrency_limits": get_tag_concurrency_limits_config(),
         },
     ),
     requirements=multiple_process_executor_requirements(),
@@ -111,15 +100,21 @@ def azure_batch_executor(
     )
     working_dir = container_kwargs.get("working_dir")
     if not working_dir:
-        raise ValueError((
-            "Missing property 'container_kwargs.working_dir' "
-            f"is required and must match your Dockerfile WORKDIR"
-        ))
+        raise ValueError(
+            (
+                "Missing property 'container_kwargs.working_dir' "
+                "is required and must match your Dockerfile WORKDIR"
+            )
+        )
     retries = check.dict_elem(config, "retries", key_type=str)
     max_concurrent = check.opt_int_elem(config, "max_concurrent")
     tag_concurrency_limits = check.opt_list_elem(
         config, "tag_concurrency_limits"
     )
+
+    # propagate user & dev env vars
+    env_vars.append("DAGSTER_USER")
+    env_vars.append("DAGSTER_IS_DEV_CLI")
 
     validate_docker_config(network, networks, container_kwargs)
 
@@ -128,7 +123,7 @@ def azure_batch_executor(
 
     container_context = DockerContainerContext(
         registry=registry,
-        env_vars=env_vars or [],
+        env_vars=env_vars,
         networks=networks or [],
         container_kwargs=container_kwargs,
     )
@@ -153,7 +148,7 @@ class AzureBatchStepHandler(StepHandler):
         super().__init__()
         # self._pool_id = "cfa-dagster"
         self._pool_id = pool_name
-        print(f"Launching a new {self.name}")
+        log.debug(f"Launching a new {self.name}")
         credential_v2 = DefaultAzureCredential()
         token = {
             "access_token": credential_v2.get_token(
@@ -162,7 +157,7 @@ class AzureBatchStepHandler(StepHandler):
         }
         credential_v1 = BasicTokenAuthentication(token)
 
-        batch_url = f"https://cfaprdba.eastus.batch.azure.com"
+        batch_url = "https://cfaprdba.eastus.batch.azure.com"
 
         self._subscription_id = (
             SubscriptionClient(credential_v2)
@@ -184,17 +179,18 @@ class AzureBatchStepHandler(StepHandler):
         step_key = self._get_step_key(step_handler_context)
         step_context = step_handler_context.get_step_context(step_key)
         image = (
-            step_context.run_config
-                        .get("ops", {})
-                        .get(step_key, {})
-                        .get("config", {})
-                        .get("image")
+            step_context.run_config.get("ops", {})
+            .get(step_key, {})
+            .get("config", {})
+            .get("image")
         )
         if not image:
             image = self._image
 
         if not image:
-            raise Exception("No docker image specified by the executor or run config")
+            raise Exception(
+                "No docker image specified by the executor or run config"
+            )
 
         return image
 
@@ -240,9 +236,9 @@ class AzureBatchStepHandler(StepHandler):
 
     def _get_job_id(self, step_handler_context: StepHandlerContext):
         run = step_handler_context.dagster_run
-        backfill_id = run.tags.get("dagster/backfill") 
-        print(f"backfill_id: '{backfill_id}'")
-        print(f"run_id: '{run.run_id}'")
+        backfill_id = run.tags.get("dagster/backfill")
+        log.debug(f"backfill_id: '{backfill_id}'")
+        log.debug(f"run_id: '{run.run_id}'")
         id = backfill_id or run.run_id
         job_id = f"dagster-run-{id}"
         return job_id
@@ -253,7 +249,9 @@ class AzureBatchStepHandler(StepHandler):
         partition_key: str = run.tags.get("dagster/partition") or ""
         task_id = f"dagster-step-{step_key}"
         if partition_key:
-            partition_key = partition_key.replace("|", "_")  # | char not valid for Batch
+            partition_key = partition_key.replace(
+                "|", "_"
+            )  # | char not valid for Batch
             task_id = f"{task_id}-{partition_key}"
         return task_id
 
@@ -278,7 +276,7 @@ class AzureBatchStepHandler(StepHandler):
             if err.error.code != "JobExists":
                 raise
             else:
-                print(f"Job {job_id} already exists.")
+                log.debug(f"Job {job_id} already exists.")
 
         env_vars = dict(
             [parse_env_var(env_var) for env_var in container_context.env_vars]
@@ -287,11 +285,6 @@ class AzureBatchStepHandler(StepHandler):
             step_handler_context.dagster_run.job_name
         )
         env_vars["DAGSTER_RUN_STEP_KEY"] = step_key
-        # propagate user & dev env vars
-        env_vars["DAGSTER_USER"] = os.getenv("DAGSTER_USER")
-        dagster_is_dev_cli = os.getenv("DAGSTER_IS_DEV_CLI")
-        if dagster_is_dev_cli:
-            env_vars["DAGSTER_IS_DEV_CLI"] = dagster_is_dev_cli
         command = execute_step_args.get_command_args()
 
         resource_group_name = "ext-edav-cfa-network-prd"
@@ -311,7 +304,9 @@ class AzureBatchStepHandler(StepHandler):
             source, target = volume.split(":", 1)
             mount_options += f" --mount type=bind,source=$AZ_BATCH_NODE_MOUNTS_DIR/{source},target={target}"
 
-        workdir = container_context.container_kwargs.get("working_dir", "/app")  # TODO: validate this
+        workdir = container_context.container_kwargs.get(
+            "working_dir", "/app"
+        )  # TODO: validate this
 
         container_settings = TaskContainerSettings(
             image_name=step_image,
@@ -330,9 +325,11 @@ class AzureBatchStepHandler(StepHandler):
 
         task = TaskAddParameter(
             id=task_id,
-            command_line=f"/bin/bash -c \'{" ".join(command)}\'",
+            command_line=f"/bin/bash -c '{' '.join(command)}'",
             container_settings=container_settings,
-            environment_settings=[{"name": k, "value": v} for k, v in env_vars.items()],
+            environment_settings=[
+                {"name": k, "value": v} for k, v in env_vars.items()
+            ],
             user_identity=user_identity,
         )
 
@@ -350,7 +347,6 @@ class AzureBatchStepHandler(StepHandler):
     def check_step_health(
         self, step_handler_context: StepHandlerContext
     ) -> CheckStepHealthResult:
-        step_key = self._get_step_key(step_handler_context)
         job_id = self._get_job_id(step_handler_context)
         task_id = self._get_task_id(step_handler_context)
 
@@ -360,7 +356,7 @@ class AzureBatchStepHandler(StepHandler):
                 return CheckStepHealthResult.healthy()
             elif task.state == "completed":
                 if task.execution_info.exit_code == 0:
-                    return CheckStepHealthResult.healthy() # Consider it healthy and let the framework handle completion
+                    return CheckStepHealthResult.healthy()  # Consider it healthy and let the framework handle completion
                 else:
                     return CheckStepHealthResult.unhealthy(
                         reason=f"Azure Batch task {task_id} in job {job_id} failed with exit code {task.execution_info.exit_code}."

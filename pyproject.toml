@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "Giovanni Rella", email = "giomrella@gmail.com" }
 ]
-requires-python = ">=3.9,<3.14"
+requires-python = ">=3.10,<3.14"
 dependencies = [
     "azure-identity>=1.23.1",
     "msrest==0.7.1",
@@ -19,6 +19,8 @@ dependencies = [
     "dagster==1.12.2",
     "dagster-graphql==1.12.2",
     "aiofiles>=24.1.0",
+    "azure-keyvault-secrets",
+    "psycopg2-binary",
 ]
 
 [build-system]

@@ -1,18 +1,17 @@
+import logging
 from collections.abc import Iterator
 from typing import Optional, cast
 
 import dagster._check as check
-import os
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.mgmt.resource.subscriptions import SubscriptionClient
-from dagster import Field, Float, IntSource, StringSource, executor
+from dagster import executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
 from dagster._core.events import DagsterEvent, EngineEventData
-from dagster._core.execution.retries import RetryMode, get_retries_config
-from dagster._core.execution.tags import get_tag_concurrency_limits_config
+from dagster._core.execution.retries import RetryMode
 from dagster._core.executor.base import Executor
 from dagster._core.executor.init import InitExecutorContext
 from dagster._core.executor.step_delegating import StepDelegatingExecutor
@@ -22,53 +21,20 @@ from dagster._core.executor.step_delegating.step_handler.base import (
     StepHandlerContext,
 )
 from dagster._core.utils import parse_env_var
-from dagster._utils.merger import merge_dicts
 from dagster_docker.container_context import DockerContainerContext
 from dagster_docker.utils import (
-    DOCKER_CONFIG_SCHEMA,
     validate_docker_config,
     validate_docker_image,
 )
 
+from .utils import CAJ_CONFIG_SCHEMA, get_status_caj, start_caj, stop_caj
+
+log = logging.getLogger(__name__)
+
 
 @executor(
-    name="docker",
-    config_schema=merge_dicts(
-        DOCKER_CONFIG_SCHEMA,
-        {
-            "container_app_job_name": Field(
-                StringSource,
-                is_required=True,
-                description="The name of the Container App Job",
-            ),
-            "cpu": Field(
-                Float,
-                is_required=False,
-                description=(
-                    "Required CPU in cores. Min: 0.25 Max: 4.0. "
-                    "CPU value must be half memory e.g. 0.25 cpu 0.5 memory"
-                ),
-            ),
-            "memory": Field(
-                Float,
-                is_required=False,
-                description=(
-                    "Required memory in GB from Min: 0.5 Max: 8.0"
-                    "Memory value must be double CPU e.g. 0.25 cpu 0.5 memory"
-                ),
-            ),
-            "retries": get_retries_config(),
-            "max_concurrent": Field(
-                IntSource,
-                is_required=False,
-                description=(
-                    "Limit on the number of containers that will run concurrently within the scope "
-                    "of a Dagster run. Note that this limit is per run, not global."
-                ),
-            ),
-            "tag_concurrency_limits": get_tag_concurrency_limits_config(),
-        },
-    ),
+    name="azure_container_app_job",
+    config_schema=CAJ_CONFIG_SCHEMA,
     requirements=multiple_process_executor_requirements(),
 )
 def azure_container_app_job_executor(
@@ -101,11 +67,13 @@ def azure_container_app_job_executor(
     launcher will also be set on the containers that are created for each step.
     """
     config = init_context.executor_config
-    print(f"init_context: '{init_context}'")
+    log.debug(f"init_context: '{init_context}'")
 
     # this is the config from the Launchpad
-    print(f"config: '{config}'")
-    container_app_job_name = check.opt_str_elem(config, "container_app_job_name")
+    log.debug(f"config: '{config}'")
+    container_app_job_name = check.opt_str_elem(
+        config, "container_app_job_name"
+    )
     cpu = check.opt_float_elem(config, "cpu")
     memory = check.opt_float_elem(config, "memory")
     image = check.opt_str_elem(config, "image")
@@ -122,6 +90,10 @@ def azure_container_app_job_executor(
         config, "tag_concurrency_limits"
     )
 
+    # propagate user & dev env vars
+    env_vars.append("DAGSTER_USER")
+    env_vars.append("DAGSTER_IS_DEV_CLI")
+
     validate_docker_config(network, networks, container_kwargs)
 
     if network and not networks:
@@ -129,18 +101,14 @@ def azure_container_app_job_executor(
 
     container_context = DockerContainerContext(
         registry=registry,
-        env_vars=env_vars or [],
+        env_vars=env_vars,
         networks=networks or [],
         container_kwargs=container_kwargs,
     )
 
     return StepDelegatingExecutor(
         AzureContainerAppJobStepHandler(
-            image,
-            container_context,
-            container_app_job_name,
-            cpu,
-            memory
+            image, container_context, container_app_job_name, cpu, memory
         ),
         retries=check.not_none(RetryMode.from_config(retries)),
         max_concurrent=max_concurrent,
@@ -158,7 +126,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
         memory: float,
     ):
         super().__init__()
-        print(f"Launching a new {self.name}")
+        log.debug(f"Launching a new {self.name}")
         self._step_container_ids = {}
         self._step_caj_execution_ids = {}
 
@@ -190,17 +158,18 @@ class AzureContainerAppJobStepHandler(StepHandler):
         step_key = self._get_step_key(step_handler_context)
         step_context = step_handler_context.get_step_context(step_key)
         image = (
-            step_context.run_config
-                        .get("ops", {})
-                        .get(step_key, {})
-                        .get("config", {})
-                        .get("image")
+            step_context.run_config.get("ops", {})
+            .get(step_key, {})
+            .get("config", {})
+            .get("image")
         )
         if not image:
             image = self._image
 
         if not image:
-            raise Exception("No docker image specified by the executor or run config")
+            raise Exception(
+                "No docker image specified by the executor or run config"
+            )
 
         return image
 
@@ -269,37 +238,17 @@ class AzureContainerAppJobStepHandler(StepHandler):
             step_handler_context.dagster_run.job_name
         )
         env_vars["DAGSTER_RUN_STEP_KEY"] = step_key
-        # propagate user & dev env vars
-        env_vars["DAGSTER_USER"] = os.getenv("DAGSTER_USER")
-        dagster_is_dev_cli = os.getenv("DAGSTER_IS_DEV_CLI")
-        if dagster_is_dev_cli:
-            env_vars["DAGSTER_IS_DEV_CLI"] = dagster_is_dev_cli
 
-        # Download existing job template
-        job_template = client.jobs.get(
-            resource_group_name=self._resource_group, job_name=self._job_name
-        ).template
-        container = job_template.containers[0]
-        container.image = step_image
-        container.env = [{"name": k, "value": v} for k, v in env_vars.items()]
-        container.command = execute_step_args.get_command_args()
-        if self._cpu is not None:
-            container.resources.cpu = self._cpu
-        if self._memory is not None:
-            container.resources.memory = f"{self._memory}Gi"
-        print(f"container.image: '{container.image}'")
-        print(f"container.env: '{container.env}'")
-        print(f"container.command: '{container.command}'")
-        print(f"container.resources.cpu: '{container.resources.cpu}'")
-        print(f"container.resources.memory: '{container.resources.memory}'")
-
-        job_execution = client.jobs.begin_start(
-            resource_group_name=self._resource_group,
-            job_name=self._job_name,
-            template=job_template,
-        ).result()
-        job_execution_id = job_execution.id.split("/").pop()
-        print(f"Started container app job with id: '{job_execution_id}'")
+        job_execution_id = start_caj(
+            self._azure_caj_client,
+            resource_group=self._resource_group,
+            container_app_job_name=self.container_app_job_name,
+            image=step_image,
+            env_vars=env_vars,
+            command=execute_step_args.get_command_args(),
+            cpu=self.cpu,
+            memory=self.memory,
+        )
         self._step_caj_execution_ids[step_key] = job_execution_id
         return job_execution_id
 
@@ -336,34 +285,23 @@ class AzureContainerAppJobStepHandler(StepHandler):
     ) -> CheckStepHealthResult:
         step_key = self._get_step_key(step_handler_context)
         job_execution_id = self._step_caj_execution_ids[step_key]
-        print(f"job_execution_id: '{job_execution_id}'")
+        log.debug(f"job_execution_id: '{job_execution_id}'")
         # return CheckStepHealthResult.healthy()
 
-        client = self._azure_caj_client
-        resource_group = self._resource_group
-        job_name = self._job_name
+        status = get_status_caj(
+            self._azure_caj_client,
+            resource_group=self._resource_group,
+            container_app_job_name=self.container_app_job_name,
+            job_execution_id=job_execution_id,
+        )
 
-        execution = client.jobs_executions.list(
-            resource_group_name=resource_group,
-            job_name=job_name,
-            filter=f"Name eq '{job_execution_id}'",
-        ).next()  # only expecting one execution since we have the exact name
-
-        # print(f"execution: '{execution}'")
-        # Check status
-        # TODO: try and get max cpu/memory and add to Dagster UI
-        # TODO: try and get container exit code
-        # Status represented by enum, but property acces converts to Capital case
-        # https://learn.microsoft.com/en-us/python/api/azure-mgmt-appcontainers/azure.mgmt.appcontainers.models.jobexecutionrunningstate?view=azure-python
-        status = execution.status  # e.g., "Running", "Succeeded", "Failed"
         match status:
+            case None:
+                return CheckStepHealthResult.unhealthy(
+                    reason=f"Container App Job {job_execution_id} not found!"
+                )
             case (
-                "Running"
-                | "Succeeded"
-                | "Processing"
-                | "Processing"
-                | "Stopped"
-                | "Unknown"
+                "Running" | "Succeeded" | "Processing" | "Stopped" | "Unknown"
             ):
                 return CheckStepHealthResult.healthy()
             case "Failed" | "Degraded":
@@ -380,18 +318,17 @@ class AzureContainerAppJobStepHandler(StepHandler):
     ) -> Iterator[DagsterEvent]:
         step_key = self._get_step_key(step_handler_context)
         job_execution_id = self._step_caj_execution_ids[step_key]
-        print(f"job_execution_id: '{job_execution_id}'")
+        log.debug(f"job_execution_id: '{job_execution_id}'")
 
         yield DagsterEvent.engine_event(
             step_handler_context.get_step_context(step_key),
             message=f"Stopping container app job execution {job_execution_id} for step.",
             event_specific_data=EngineEventData(),
         )
-        # TODO: handle this error:
-        """
-    azure.core.exceptions.HttpResponseError: Operation returned an invalid status 'Bad Request'
-    Content: "Reason: Not Found. Body: {\"error\":\"Requested job execution cfa-dagster-l70spvu not found\",\"success\":false}"
-        """
-        self._azure_caj_client.jobs.begin_stop_execution(
-            self._resource_group, self._job_name, job_execution_id
+
+        return stop_caj(
+            self._azure_caj_client,
+            self._resource_group,
+            self.container_app_job_name,
+            job_execution_id,
         )
