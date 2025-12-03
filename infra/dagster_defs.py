@@ -11,7 +11,7 @@ from azure.mgmt.loganalytics import LogAnalyticsManagementClient
 from azure.mgmt.resource.subscriptions import SubscriptionClient
 
 from cfa_dagster.azure_adls2.io_manager import ADLS2PickleIOManager
-from cfa_dagster.utils import start_dev_env, collect_definitions
+from cfa_dagster.utils import collect_definitions, start_dev_env
 
 # Start the Dagster UI and set necessary env vars
 start_dev_env()
