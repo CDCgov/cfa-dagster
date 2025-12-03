@@ -20,10 +20,10 @@ from dagster._serdes import ConfigurableClass
 from dagster._serdes.config_class import ConfigurableClassData
 from dagster_docker.container_context import DockerContainerContext
 from dagster_docker.utils import (
-    DOCKER_CONFIG_SCHEMA,
     validate_docker_config,
     validate_docker_image,
 )
+from .utils import CAJ_CONFIG_SCHEMA
 from typing_extensions import Self
 import logging
 
@@ -93,7 +93,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
 
     @classmethod
     def config_type(cls):
-        return DOCKER_CONFIG_SCHEMA
+        return CAJ_CONFIG_SCHEMA
 
     @classmethod
     def from_config_value(
@@ -130,15 +130,8 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         client = self._azure_caj_client
 
         container_kwargs = {**container_context.container_kwargs}
-        labels = container_kwargs.pop("labels", {})
 
         container_kwargs.pop("stop_timeout", None)
-
-        if isinstance(labels, list):
-            labels = {key: "" for key in labels}
-
-        labels["dagster/run_id"] = run.run_id
-        labels["dagster/job_name"] = run.job_name
 
         job_template = client.jobs.get(
             resource_group_name=self._resource_group,

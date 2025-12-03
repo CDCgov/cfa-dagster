@@ -6,7 +6,7 @@ from dagster._core.execution.retries import RetryMode
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.mgmt.resource.subscriptions import SubscriptionClient
-from dagster import Field, Float, StringSource, executor
+from dagster import executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
@@ -20,12 +20,16 @@ from dagster._core.executor.step_delegating.step_handler.base import (
     StepHandlerContext,
 )
 from dagster._core.utils import parse_env_var
-from dagster._utils.merger import merge_dicts
-from dagster_docker import docker_executor as base_docker_executor
 from dagster_docker.container_context import DockerContainerContext
 from dagster_docker.utils import (
     validate_docker_config,
     validate_docker_image,
+)
+from .utils import (
+    CAJ_CONFIG_SCHEMA,
+    start_caj,
+    stop_caj,
+    get_status_caj
 )
 import logging
 
@@ -34,32 +38,7 @@ log = logging.getLogger(__name__)
 
 @executor(
     name="azure_container_app_job",
-    config_schema=merge_dicts(
-        base_docker_executor.config_schema.__dict__,
-        {
-            "container_app_job_name": Field(
-                StringSource,
-                is_required=True,
-                description="The name of the Container App Job",
-            ),
-            "cpu": Field(
-                Float,
-                is_required=False,
-                description=(
-                    "Required CPU in cores. Min: 0.25 Max: 4.0. "
-                    "CPU value must be half memory e.g. 0.25 cpu 0.5 memory"
-                ),
-            ),
-            "memory": Field(
-                Float,
-                is_required=False,
-                description=(
-                    "Required memory in GB from Min: 0.5 Max: 8.0"
-                    "Memory value must be double CPU e.g. 0.25 cpu 0.5 memory"
-                ),
-            ),
-        },
-    ),
+    config_schema=CAJ_CONFIG_SCHEMA,
     requirements=multiple_process_executor_requirements(),
 )
 def azure_container_app_job_executor(
@@ -264,34 +243,16 @@ class AzureContainerAppJobStepHandler(StepHandler):
         )
         env_vars["DAGSTER_RUN_STEP_KEY"] = step_key
 
-        # Download existing job template
-        job_template = client.jobs.get(
-            resource_group_name=self._resource_group, job_name=self._job_name
-        ).template
-        container = job_template.containers[0]
-        container.image = step_image
-        container.env = (
-            (container.env or []) +
-            [{"name": k, "value": v} for k, v in env_vars.items()]
+        job_execution_id = start_caj(
+            self._azure_caj_client,
+            resource_group=self._resource_group,
+            container_app_job_name=self.container_app_job_name,
+            image=step_image,
+            env_vars=env_vars,
+            command=execute_step_args.get_command_args(),
+            cpu=self.cpu,
+            memory=self.memory,
         )
-        container.command = execute_step_args.get_command_args()
-        if self._cpu is not None:
-            container.resources.cpu = self._cpu
-        if self._memory is not None:
-            container.resources.memory = f"{self._memory}Gi"
-        log.debug(f"container.image: '{container.image}'")
-        log.debug(f"container.env: '{container.env}'")
-        log.debug(f"container.command: '{container.command}'")
-        log.debug(f"container.resources.cpu: '{container.resources.cpu}'")
-        log.debug(f"container.resources.memory: '{container.resources.memory}'")
-
-        job_execution = client.jobs.begin_start(
-            resource_group_name=self._resource_group,
-            job_name=self._job_name,
-            template=job_template,
-        ).result()
-        job_execution_id = job_execution.id.split("/").pop()
-        log.debug(f"Started container app job with id: '{job_execution_id}'")
         self._step_caj_execution_ids[step_key] = job_execution_id
         return job_execution_id
 
@@ -331,24 +292,18 @@ class AzureContainerAppJobStepHandler(StepHandler):
         log.debug(f"job_execution_id: '{job_execution_id}'")
         # return CheckStepHealthResult.healthy()
 
-        client = self._azure_caj_client
-        resource_group = self._resource_group
-        job_name = self._job_name
+        status = get_status_caj(
+            self._azure_caj_client,
+            resource_group=self._resource_group,
+            container_app_job_name=self.container_app_job_name,
+            job_execution_id=job_execution_id
+        )
 
-        execution = client.jobs_executions.list(
-            resource_group_name=resource_group,
-            job_name=job_name,
-            filter=f"Name eq '{job_execution_id}'",
-        ).next()  # only expecting one execution since we have the exact name
-
-        # log.debug(f"execution: '{execution}'")
-        # Check status
-        # TODO: try and get max cpu/memory and add to Dagster UI
-        # TODO: try and get container exit code
-        # Status represented by enum, but property acces converts to Capital case
-        # https://learn.microsoft.com/en-us/python/api/azure-mgmt-appcontainers/azure.mgmt.appcontainers.models.jobexecutionrunningstate?view=azure-python
-        status = execution.status  # e.g., "Running", "Succeeded", "Failed"
         match status:
+            case None:
+                return CheckStepHealthResult.unhealthy(
+                    reason=f"Container App Job {job_execution_id} not found!"
+                )
             case (
                 "Running" | "Succeeded" | "Processing" | "Stopped" | "Unknown"
             ):
@@ -374,11 +329,10 @@ class AzureContainerAppJobStepHandler(StepHandler):
             message=f"Stopping container app job execution {job_execution_id} for step.",
             event_specific_data=EngineEventData(),
         )
-        # TODO: handle this error:
-        """
-    azure.core.exceptions.HttpResponseError: Operation returned an invalid status 'Bad Request'
-    Content: "Reason: Not Found. Body: {\"error\":\"Requested job execution cfa-dagster-l70spvu not found\",\"success\":false}"
-        """
-        self._azure_caj_client.jobs.begin_stop_execution(
-            self._resource_group, self._job_name, job_execution_id
+
+        return stop_caj(
+            self._azure_caj_client,
+            self._resource_group,
+            self.container_app_job_name,
+            job_execution_id
         )
