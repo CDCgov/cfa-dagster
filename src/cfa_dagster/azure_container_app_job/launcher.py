@@ -23,7 +23,12 @@ from dagster_docker.utils import (
     validate_docker_config,
     validate_docker_image,
 )
-from .utils import CAJ_CONFIG_SCHEMA
+from .utils import (
+    CAJ_CONFIG_SCHEMA,
+    start_caj,
+    stop_caj,
+    get_status_caj
+)
 from typing_extensions import Self
 import logging
 
@@ -43,28 +48,18 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         cpu: float = None,
         memory: float = None,
         image: str = None,
-        registry: str = None,
         env_vars: list[str] = None,
-        network: str = None,
-        networks: list[str] = None,
         container_kwargs=None,
+        **kwargs  # covering args created by rehydrated DockerContainerContext
     ):
         self._inst_data = inst_data
         self.image = image
         self.container_app_job_name = container_app_job_name
         self.cpu = cpu
         self.memory = memory
-        self.registry = registry
         self.env_vars = env_vars
 
-        validate_docker_config(network, networks, container_kwargs)
-
-        if network:
-            self.networks = [network]
-        elif networks:
-            self.networks = networks
-        else:
-            self.networks = []
+        validate_docker_config(None, None, container_kwargs)
 
         self.container_kwargs = check.opt_dict_param(
             container_kwargs, "container_kwargs", key_type=str
@@ -127,40 +122,16 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         )
         env_vars["DAGSTER_RUN_JOB_NAME"] = run.job_name
 
-        client = self._azure_caj_client
-
-        container_kwargs = {**container_context.container_kwargs}
-
-        container_kwargs.pop("stop_timeout", None)
-
-        job_template = client.jobs.get(
-            resource_group_name=self._resource_group,
-            job_name=self.container_app_job_name,
-        ).template
-        container = job_template.containers[0]
-        container.image = docker_image
-        container.env = (
-            (container.env or []) +
-            [{"name": k, "value": v} for k, v in env_vars.items()]
+        job_execution_id = start_caj(
+            self._azure_caj_client,
+            resource_group=self._resource_group,
+            container_app_job_name=self.container_app_job_name,
+            image=docker_image,
+            env_vars=env_vars,
+            command=command,
+            cpu=self.cpu,
+            memory=self.memory,
         )
-        container.command = command
-        if self.cpu is not None:
-            container.resources.cpu = self.cpu
-        if self.memory is not None:
-            container.resources.memory = f"{self.memory}Gi"
-        log.debug(f"container.image: '{container.image}'")
-        log.debug(f"container.env: '{container.env}'")
-        log.debug(f"container.command: '{container.command}'")
-        log.debug(f"container.resources.cpu: '{container.resources.cpu}'")
-        log.debug(f"container.resources.memory: '{container.resources.memory}'")
-
-        job_execution = client.jobs.begin_start(
-            resource_group_name=self._resource_group,
-            job_name=self.container_app_job_name,
-            template=job_template,
-        ).result()
-        job_execution_id = job_execution.id.split("/").pop()
-        log.debug(f"Started container app job with id: '{job_execution_id}'")
 
         self._instance.report_engine_event(
             message=(
@@ -218,18 +189,12 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         self._instance.report_run_canceling(run)
 
         job_execution_id = run.tags.get(CAJ_EXECUTION_ID_KEY)
-        log.debug(f"job_execution_id: '{job_execution_id}'")
-
-        # TODO: handle this error:
-        """
-    azure.core.exceptions.HttpResponseError: Operation returned an invalid status 'Bad Request'
-    Content: "Reason: Not Found. Body: {\"error\":\"Requested job execution cfa-dagster-l70spvu not found\",\"success\":false}"
-        """
-        self._azure_caj_client.jobs.begin_stop_execution(
-            self._resource_group, self.container_app_job_name, job_execution_id
+        return stop_caj(
+            self._azure_caj_client,
+            self._resource_group,
+            self.container_app_job_name,
+            job_execution_id
         )
-
-        return True
 
     @property
     def supports_check_run_worker_health(self):
@@ -243,28 +208,19 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
                 msg=f"No tag found for {CAJ_EXECUTION_ID_KEY}!",
             )
 
-        client = self._azure_caj_client
-        resource_group = self._resource_group
-        job_name = self.container_app_job_name
+        status = get_status_caj(
+            self._azure_caj_client,
+            resource_group=self._resource_group,
+            container_app_job_name=self.container_app_job_name,
+            job_execution_id=job_execution_id
+        )
 
-        execution = client.jobs_executions.list(
-            resource_group_name=resource_group,
-            job_name=job_name,
-            filter=f"Name eq '{job_execution_id}'",
-        ).next()  # only expecting one execution since we have the exact name
-
-        if not execution:
-            return CheckRunHealthResult(
-                WorkerStatus.NOT_FOUND,
-                msg=f"No container app job execution found for {job_execution_id}",
-            )
-
-        # log.debug(f"execution: '{execution}'")
-        # Check status
-        # Status represented by enum, but property acces converts to Capital case
-        # https://learn.microsoft.com/en-us/python/api/azure-mgmt-appcontainers/azure.mgmt.appcontainers.models.jobexecutionrunningstate?view=azure-python
-        status = execution.status  # e.g., "Running", "Succeeded", "Failed"
         match status:
+            case None:
+                return CheckRunHealthResult(
+                    WorkerStatus.NOT_FOUND,
+                    msg=f"No container app job execution found for {job_execution_id}",
+                )
             case "Running" | "Processing" | "Unknown":
                 return CheckRunHealthResult(WorkerStatus.RUNNING)
             case _:
