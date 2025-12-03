@@ -11,8 +11,9 @@ CAJ_CONFIG_SCHEMA = merge_dicts(
         {
             "container_app_job_name": Field(
                 StringSource,
-                is_required=True,
-                description="The name of the Container App Job",
+                is_required=False,
+                description="The name of the Container App Job. Default: cfa-dagster",
+                default_value="cfa-dagster"
             ),
             "cpu": Field(
                 Float,
