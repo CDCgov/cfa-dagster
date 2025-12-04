@@ -102,8 +102,12 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         # default run launcher throws an error for env vars
         if launcher_class_name != DefaultRunLauncher.__name__:
             env_vars = launcher_config.get("env_vars", [])
-            env_vars.append("DAGSTER_USER")
-            if os.getenv("DAGSTER_IS_DEV_CLI"):
+            # Need to check if env vars are present first or
+            # each run will append them again
+            if "DAGSTER_USER" not in env_vars:
+                env_vars.append("DAGSTER_USER")
+            if ("DAGSTER_IS_DEV_CLI" not in env_vars 
+                    and os.getenv("DAGSTER_IS_DEV_CLI")):
                 env_vars.append("DAGSTER_IS_DEV_CLI")
             launcher_config["env_vars"] = env_vars
 
