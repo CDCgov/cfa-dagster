@@ -52,17 +52,13 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
     ) -> Self:
         return cls(inst_data=inst_data, **config_value)
 
-    def get_location_metadata(self, workspace: BaseWorkspaceRequestContext):
+    def get_location_metadata(
+        self, workspace: BaseWorkspaceRequestContext, location_name: str
+    ):
         """
         Gets metadata from the Definitions for a code location
         """
-        code_location_names = workspace.code_location_names
-        log.debug(f"code_location_names: '{code_location_names}'")
-        location_name = code_location_names[0]
-
         log.debug(f"location_name: '{location_name}'")
-
-        # THIS IS THE KEY LINE
         code_location = workspace.get_code_location(location_name)
         log.debug(f"code_location: '{code_location}'")
 
@@ -79,9 +75,9 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         return metadata
 
     def create_launcher(
-        self, workspace: BaseWorkspaceRequestContext
+        self, workspace: BaseWorkspaceRequestContext, location_name: str
     ) -> RunLauncher:
-        metadata = self.get_location_metadata(workspace)
+        metadata = self.get_location_metadata(workspace, location_name)
         launcher_metadata = metadata.get(
             LAUNCHER_CONFIG_KEY, JsonMetadataValue({})
         ).value
@@ -122,9 +118,17 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
 
     def launch_run(self, context: LaunchRunContext) -> None:
         run = context.dagster_run
+        log.debug(f"run.job_code_origin: '{run.job_code_origin}'")
+        log.debug(f"run.remote_job_origin: '{run.remote_job_origin}'")
         log.debug(f"run.run_config: '{run.run_config}'")
+        location_name = (
+            run.remote_job_origin
+            .repository_origin
+            .code_location_origin
+            .location_name
+        )
         try:
-            launcher = self.create_launcher(context.workspace)
+            launcher = self.create_launcher(context.workspace, location_name)
         except KeyError:
             valid_launchers = [
                 c.__name__

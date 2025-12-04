@@ -370,7 +370,7 @@ wheels = [
 [[package]]
 name = "cfa-dagster"
 version = "0.1.0"
-source = { git = "https://github.com/cdcgov/cfa-dagster.git#beddff4c4f1959d0e70746c4e3acd1cc6adbc77b" }
+source = { git = "https://github.com/cdcgov/cfa-dagster.git#09e0c31e1349fda6f22396743bc91964355ec491" }
 dependencies = [
     { name = "aiofiles" },
     { name = "azure-batch" },
