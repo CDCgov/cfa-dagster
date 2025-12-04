@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import Any, Optional
 
 import yaml
+import json
 from dagster import DefaultRunLauncher, JsonMetadataValue
 from dagster._core.launcher.base import (
     CheckRunHealthResult,
@@ -14,11 +15,7 @@ from dagster._core.launcher.base import (
 )
 from dagster._core.storage.dagster_run import DagsterRun
 from dagster._core.workspace.context import BaseWorkspaceRequestContext
-from dagster._serdes import (
-    ConfigurableClass,
-    deserialize_value,
-    serialize_value,
-)
+from dagster._serdes import ConfigurableClass
 from dagster._serdes.config_class import ConfigurableClassData
 from dagster_docker import DockerRunLauncher
 from typing_extensions import Self
@@ -74,16 +71,32 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         log.debug(f"metadata: '{metadata}'")
         return metadata
 
-    def create_launcher(
-        self, workspace: BaseWorkspaceRequestContext, location_name: str
-    ) -> RunLauncher:
-        metadata = self.get_location_metadata(workspace, location_name)
-        launcher_metadata = metadata.get(
+    def get_launcher_config_from_tags(self, tags: dict):
+        launcher_config_str = tags.get(LAUNCHER_CONFIG_KEY, "{}")
+        try:
+            return json.loads(launcher_config_str)
+        except json.decoder.JSONDecodeError:
+            raise RuntimeError(
+                f"Invalid JSON for '{LAUNCHER_CONFIG_KEY}'. "
+                f"Received: '{launcher_config_str}'"
+            )
+
+    def get_launcher_config_from_repo(self, context: LaunchRunContext):
+        location_name = (
+            context.dagster_run.remote_job_origin
+            .repository_origin
+            .code_location_origin
+            .location_name
+        )
+        metadata = self.get_location_metadata(context.workspace, location_name)
+        launcher_config = metadata.get(
             LAUNCHER_CONFIG_KEY, JsonMetadataValue({})
         ).value
-        is_production = not os.getenv("DAGSTER_IS_DEV_CLI")
-        launcher_class_name = launcher_metadata.get("class")
+        return launcher_config
 
+    def create_launcher(self, launcher_config: dict):
+        is_production = not os.getenv("DAGSTER_IS_DEV_CLI")
+        launcher_class_name = launcher_config.get("class")
         match (is_production, launcher_class_name):
             case (False, None):
                 launcher_class_name = DefaultRunLauncher.__name__
@@ -94,10 +107,25 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
                     f"You can't use {launcher_class_name} in production!"
                 )
 
-        launcher_class = globals()[launcher_class_name]
+        try:
+            launcher_class = globals()[launcher_class_name]
+        except KeyError:
+            valid_launchers = [
+                c.__name__
+                for c in [
+                    DefaultRunLauncher,
+                    DockerRunLauncher,
+                    AzureContainerAppJobRunLauncher,
+                ]
+            ]
+            raise RuntimeError(
+                f"Invalid launcher class specified: '{launcher_class_name}'. "
+                "Must be one of: "
+                f"{valid_launchers}"
+            )
         launcher_module = launcher_class.__module__
 
-        launcher_config = launcher_metadata.get("config", {})
+        launcher_config = launcher_config.get("config", {})
 
         # default run launcher throws an error for env vars
         if launcher_class_name != DefaultRunLauncher.__name__:
@@ -121,64 +149,46 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         run_launcher.register_instance(self._instance)
         return run_launcher
 
+    # check run tags for launcher config
+    # if not there, check repo metadata for launcher config
+    # create_launcher from config
+    # add launcher config as tags
     def launch_run(self, context: LaunchRunContext) -> None:
         run = context.dagster_run
         log.debug(f"run.job_code_origin: '{run.job_code_origin}'")
         log.debug(f"run.remote_job_origin: '{run.remote_job_origin}'")
         log.debug(f"run.run_config: '{run.run_config}'")
-        location_name = (
-            run.remote_job_origin
-            .repository_origin
-            .code_location_origin
-            .location_name
-        )
-        try:
-            launcher = self.create_launcher(context.workspace, location_name)
-        except KeyError:
-            valid_launchers = [
-                c.__name__
-                for c in [
-                    DefaultRunLauncher,
-                    DockerRunLauncher,
-                    AzureContainerAppJobRunLauncher,
-                ]
-            ]
-            raise RuntimeError(
-                "Invalid launcher class specified! "
-                "Must be one of: "
-                f"{valid_launchers}"
-            )
 
+        launcher_config = self.get_launcher_config_from_tags(run.tags)
+        log.debug(f"tags.launcher_config: '{launcher_config}'")
+        if not launcher_config:
+            launcher_config = self.get_launcher_config_from_repo(context)
+
+        launcher = self.create_launcher(launcher_config)
+
+        self._instance.add_run_tags(
+            run.run_id,
+            {LAUNCHER_CONFIG_KEY: f"{json.dumps(launcher_config)}"},  # pyright: ignore[reportArgumentType]
+        )
         self._instance.report_engine_event(
             message=f"Launching run using {launcher.__class__.__name__}",
             dagster_run=run,
             cls=self.__class__,
         )
 
-        self._instance.add_run_tags(
-            run.run_id,
-            {LAUNCHER_CONFIG_KEY: f"{serialize_value(launcher.inst_data)}"},  # pyright: ignore[reportArgumentType]
-        )
         launcher.launch_run(context)
 
     @property
     def supports_resume_run(self):
         return True
 
-    def get_launcher(self, run: DagsterRun) -> RunLauncher:
-        serialized_inst_data = run.tags.get(LAUNCHER_CONFIG_KEY)
-        log.debug(f"serialized_inst_data: '{serialized_inst_data}'")
-        inst_data: ConfigurableClassData = deserialize_value(
-            serialized_inst_data, ConfigurableClassData
-        )
-        run_launcher: RunLauncher = inst_data.rehydrate(RunLauncher)
-        log.debug(f"run_launcher: '{run_launcher}'")
-        run_launcher.register_instance(self._instance)
-        return run_launcher
-
     def resume_run(self, context: ResumeRunContext) -> None:
         run = context.dagster_run
-        run_launcher = self.get_launcher(run)
+        launcher_config = self.get_launcher_config_from_tags(run.tags)
+        log.debug(f"tags.launcher_config: '{launcher_config}'")
+        if not launcher_config:
+            launcher_config = self.get_launcher_config_from_repo(context)
+        run_launcher = self.create_launcher(launcher_config)
         run_launcher.resume_run(context)
 
     @property
@@ -189,7 +199,8 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         log.debug(
             f"Starting check_run_worker_health for '{self.__class__.__name__}'"
         )
-        run_launcher = self.get_launcher(run)
+        launcher_config = self.get_launcher_config_from_tags(run.tags)
+        run_launcher = self.create_launcher(launcher_config)
         log.debug(
             f"Checking run worker health with launcher '{run_launcher.__class__.__name__}'"
         )
@@ -210,7 +221,8 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
     def terminate(self, run_id):
         log.debug("Terminating run_id: " + run_id)
         run = self._instance.get_run_by_id(run_id)
-        run_launcher = self.get_launcher(run)
+        launcher_config = self.get_launcher_config_from_tags(run.tags)
+        run_launcher = self.create_launcher(launcher_config)
         log.debug(
             f"Terminating run_id '{run_id}' with launcher '{run_launcher.__class__.__name__}'"
         )
