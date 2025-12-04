@@ -221,9 +221,10 @@ def collect_definitions(namespace):
 def launch_asset_backfill(
     asset_keys: list[str],
     partition_keys: list[str],
-    tags: dict = {"programmed_backfill": "true"},
+    tags: dict = {},
     run_config: dg.RunConfig = dg.RunConfig(),
 ):
+    tags["programmed_backfill"] = "true"
     """
     Function to launch an asset backfill via the GraphQL client
     """
