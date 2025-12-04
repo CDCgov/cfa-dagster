@@ -37,7 +37,7 @@ from cfa_dagster import (
 )
 
 # function to start the dev server
-start_dev_env()
+start_dev_env(__name__)
 
 user = os.getenv("DAGSTER_USER")
 

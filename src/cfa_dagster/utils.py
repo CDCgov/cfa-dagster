@@ -115,8 +115,13 @@ def create_dev_env():
     print("Created ~/.dagster_home/dagster.yaml")
 
 
-def start_dev_env():
+def start_dev_env(caller_name: str):
     """
+    Parameters:
+    -----------
+    caller_name: str
+        Pass in the module's __name__ (e.g. `start_dev_env(__name__)`).
+
     Function to set up the local dev server by:
     1. creating a database on the dev server (one time only, or with --configure)
     2. creating a ~/.dagster_home/dagster.yaml file (one time only, or with --configure)
@@ -135,8 +140,9 @@ def start_dev_env():
             (not is_production and not os.path.exists(dagster_yaml))):
         create_dev_env()
 
-    # Start the Dagster UI and set necessary env vars
-    if "--dev" in sys.argv:
+    # Start the Dagster UI and set necessary env vars if 
+    # called directly via `uv run`
+    if caller_name == "__main__":
         # Set environment variables
         os.environ["DAGSTER_USER"] = dagster_user
         os.environ["DAGSTER_HOME"] = str(dagster_home)
@@ -164,13 +170,7 @@ def start_dev_env():
 
     # get the user from the environment, throw an error if variable is not set
     if not os.getenv("DAGSTER_USER"):
-        raise RuntimeError(
-            (
-                "Env var 'DAGSTER_USER' is not set. "
-                "If you are running locally, don't forget the '--dev' cli argument"
-                " e.g. uv run dagster_defs.py --dev"
-            )
-        )
+        raise RuntimeError("Env var 'DAGSTER_USER' is not set!")
 
 
 def collect_definitions(namespace):
@@ -229,7 +229,7 @@ def launch_asset_backfill(
     Function to launch an asset backfill via the GraphQL client
     """
 
-    if os.getenv("DAGSTER_IS_DEV_CLI") == "true":  # set by dagster cli
+    if os.getenv("DAGSTER_IS_DEV_CLI"):  # set by dagster cli
         client = DagsterGraphQLClient(hostname="127.0.0.1", port_number=3000)
     else:
         client = DagsterGraphQLClient(hostname="dagster.apps.edav.ext.cdc.gov")
