@@ -1,4 +1,5 @@
 import logging
+import os
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Optional, cast
 
@@ -114,7 +115,9 @@ def azure_batch_executor(
 
     # propagate user & dev env vars
     env_vars.append("DAGSTER_USER")
-    env_vars.append("DAGSTER_IS_DEV_CLI")
+    if os.getenv("DAGSTER_IS_DEV_CLI"):
+        env_vars.append("DAGSTER_IS_DEV_CLI")
+
 
     validate_docker_config(network, networks, container_kwargs)
 

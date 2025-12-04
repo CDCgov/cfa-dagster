@@ -103,7 +103,8 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         if launcher_class_name != DefaultRunLauncher.__name__:
             env_vars = launcher_config.get("env_vars", [])
             env_vars.append("DAGSTER_USER")
-            env_vars.append("DAGSTER_IS_DEV_CLI")
+            if os.getenv("DAGSTER_IS_DEV_CLI"):
+                env_vars.append("DAGSTER_IS_DEV_CLI")
             launcher_config["env_vars"] = env_vars
 
         inst_data = ConfigurableClassData(
