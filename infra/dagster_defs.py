@@ -301,7 +301,6 @@ def reload_dagster_workspace(context: dg.OpExecutionContext):
 
 @dg.op
 def update_defs(context: dg.OpExecutionContext):
-
     # location of this file in github
     url = "https://raw.githubusercontent.com/CDCgov/cfa-dagster/main/infra/dagster_defs.py"
 
@@ -345,7 +344,6 @@ def restart_webserver():
 @dg.job
 def reload_workspace():
     reload_dagster_workspace()
-
 
 
 # collect Dagster definitions from the current file

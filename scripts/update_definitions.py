@@ -2,7 +2,6 @@
 # requires-python = ">=3.11"
 # dependencies = [ "requests" ]
 # ///
-import argparse
 import json
 
 import requests
@@ -17,7 +16,7 @@ DAGSTER_GRAPHQL_URL = f"{DAGSTER_BASE_URL}/graphql"
 
 
 def main():
-    """ Script to update infra/dagster_defs.py on the Dagster instance"""
+    """Script to update infra/dagster_defs.py on the Dagster instance"""
 
     query = """
     mutation runJob {
