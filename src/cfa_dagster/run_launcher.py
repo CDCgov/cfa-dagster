@@ -1,10 +1,10 @@
+import json
 import logging
 import os
 from collections.abc import Mapping
 from typing import Any, Optional
 
 import yaml
-import json
 from dagster import DefaultRunLauncher, JsonMetadataValue
 from dagster._core.launcher.base import (
     CheckRunHealthResult,
@@ -82,12 +82,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
             )
 
     def get_launcher_config_from_repo(self, context: LaunchRunContext):
-        location_name = (
-            context.dagster_run.remote_job_origin
-            .repository_origin
-            .code_location_origin
-            .location_name
-        )
+        location_name = context.dagster_run.remote_job_origin.repository_origin.code_location_origin.location_name
         metadata = self.get_location_metadata(context.workspace, location_name)
         launcher_config = metadata.get(
             LAUNCHER_CONFIG_KEY, JsonMetadataValue({})
@@ -134,8 +129,9 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
             # each run will append them again
             if "DAGSTER_USER" not in env_vars:
                 env_vars.append("DAGSTER_USER")
-            if ("DAGSTER_IS_DEV_CLI" not in env_vars 
-                    and os.getenv("DAGSTER_IS_DEV_CLI")):
+            if "DAGSTER_IS_DEV_CLI" not in env_vars and os.getenv(
+                "DAGSTER_IS_DEV_CLI"
+            ):
                 env_vars.append("DAGSTER_IS_DEV_CLI")
             launcher_config["env_vars"] = env_vars
 

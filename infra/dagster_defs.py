@@ -338,8 +338,6 @@ defs = dg.Definitions(
     },
     executor=dg.in_process_executor,
     metadata={
-        "cfa_dagster/launcher": {
-            "class": dg.DefaultRunLauncher.__name__
-        }
-    }
+        "cfa_dagster/launcher": {"class": dg.DefaultRunLauncher.__name__}
+    },
 )

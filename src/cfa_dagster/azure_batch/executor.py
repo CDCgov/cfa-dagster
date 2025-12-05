@@ -118,7 +118,6 @@ def azure_batch_executor(
     if os.getenv("DAGSTER_IS_DEV_CLI"):
         env_vars.append("DAGSTER_IS_DEV_CLI")
 
-
     validate_docker_config(network, networks, container_kwargs)
 
     if network and not networks:

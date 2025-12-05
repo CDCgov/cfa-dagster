@@ -289,7 +289,7 @@ wheels = [
 
 [[package]]
 name = "azure-monitor-opentelemetry-exporter"
-version = "1.0.0b45"
+version = "1.0.0b46"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "azure-core" },
@@ -299,9 +299,9 @@ dependencies = [
     { name = "opentelemetry-sdk" },
     { name = "psutil" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0f/02/a4f6d50ee43a25680b46f82d985c0920c5f8422b0fb9b408efc484b498f8/azure_monitor_opentelemetry_exporter-1.0.0b45.tar.gz", hash = "sha256:b2d495b318710c521d6611cfb9cb4b36d990e3d613cf10ebdaa957099ddbe351", size = 277588, upload-time = "2025-11-13T23:12:01.461Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/63/57/4dd223fcded4955f85ecfae721802cf4bc5a9a95efd8a9a00271f80d4e6b/azure_monitor_opentelemetry_exporter-1.0.0b46.tar.gz", hash = "sha256:a2fd5837c41b5b10316b089ccbe694fc8a69c23db92a5555b298b1eec3eb38bd", size = 277957, upload-time = "2025-12-04T21:22:41.654Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3a/05/4007d55d7fa88992bf70cdfdf9e7c4ec0734fd853c4c548da9fd36623892/azure_monitor_opentelemetry_exporter-1.0.0b45-py2.py3-none-any.whl", hash = "sha256:10d6363ac971fb4530511df464898fe69c0499e85841febad800572d1e8e8ec6", size = 200419, upload-time = "2025-11-13T23:12:02.7Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/f9/5b1273d134743b59a271000c08ea3b686f184bfbd73e5ab3a7feae2d0e5f/azure_monitor_opentelemetry_exporter-1.0.0b46-py2.py3-none-any.whl", hash = "sha256:12935e72dcad4a162636eaa5f861e106fcdc3c19928e79cd58b52653fe15625a", size = 200542, upload-time = "2025-12-04T21:22:43.003Z" },
 ]
 
 [[package]]
@@ -370,7 +370,7 @@ wheels = [
 [[package]]
 name = "cfa-dagster"
 version = "0.1.0"
-source = { git = "https://github.com/cdcgov/cfa-dagster.git#7f05617949045ff55b583fa548231739a9772030" }
+source = { git = "https://github.com/cdcgov/cfa-dagster.git#bb38e2e5980a55fea9d73caf43f1eecfb344a0bd" }
 dependencies = [
     { name = "aiofiles" },
     { name = "azure-batch" },
