@@ -14,7 +14,7 @@ from cfa_dagster.azure_adls2.io_manager import ADLS2PickleIOManager
 from cfa_dagster.utils import collect_definitions, start_dev_env
 
 # Start the Dagster UI and set necessary env vars
-start_dev_env()
+start_dev_env(__name__)
 
 
 # get the user from the environment, throw an error if variable is not set
@@ -299,6 +299,32 @@ def reload_dagster_workspace(context: dg.OpExecutionContext):
     context.log.info("Reloaded workspace")
 
 
+@dg.op
+def update_defs(context: dg.OpExecutionContext):
+
+    # location of this file in github
+    url = "https://raw.githubusercontent.com/CDCgov/cfa-dagster/main/infra/dagster_defs.py"
+
+    # Download the file
+    response = requests.get(url)
+    response.raise_for_status()  # Raise error if request fails
+
+    context.log.debug(f"File location: '{__file__}'")
+    content = response.text
+    context.log.debug(f"File content: \n{content}")
+
+    with open(__file__, "wb") as f:
+        f.write(response.content)
+    context.log.info("Updated definitions!")
+    return True
+
+
+@dg.job()
+def update_definitions():
+    did_update = update_defs()
+    reload_dagster_workspace(did_update)
+
+
 @dg.job()
 def update_code_location():
     registry_image, code_location_name = get_code_location_name()
@@ -319,6 +345,7 @@ def restart_webserver():
 @dg.job
 def reload_workspace():
     reload_dagster_workspace()
+
 
 
 # collect Dagster definitions from the current file
