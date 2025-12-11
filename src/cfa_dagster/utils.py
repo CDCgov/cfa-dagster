@@ -143,6 +143,7 @@ def start_dev_env(caller_name: str):
 
     if "--configure-only" in sys.argv:
         create_dev_env()
+        print("Configuration complete. Exiting as --configure-only was set.")
         sys.exit(0)
 
     # Start the Dagster UI and set necessary env vars if
