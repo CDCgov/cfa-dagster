@@ -141,6 +141,10 @@ def start_dev_env(caller_name: str):
     ):
         create_dev_env()
 
+    if "--configure-only" in sys.argv:
+        create_dev_env()
+        sys.exit(0)
+
     # Start the Dagster UI and set necessary env vars if
     # called directly via `uv run`
     if caller_name == "__main__":
