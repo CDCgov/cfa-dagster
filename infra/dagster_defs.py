@@ -94,7 +94,7 @@ def create_or_update_code_location_aci(
 
     aci_client = ContainerInstanceManagementClient(credential, subscription_id)
 
-    container_group_name = f"dcl-{code_location_name}"
+    container_group_name = f"dcl--{code_location_name}"
 
     container_resource_requests = {"memory_in_gb": 1.0, "cpu": 0.5}
     grpc_port = 4000
@@ -128,6 +128,8 @@ def create_or_update_code_location_aci(
                     f"{grpc_port}",
                     "-f",
                     "dagster_defs.py",
+                    "--container-image",
+                    registry_image,
                 ],
                 "ports": [{"port": grpc_port, "protocol": "TCP"}],
                 "environment_variables": [

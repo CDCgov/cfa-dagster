@@ -109,10 +109,11 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         return DockerContainerContext.create_for_run(dagster_run, self)
 
     def _get_image(self, job_code_origin):
-        docker_image = job_code_origin.repository_origin.container_image
+        docker_image = self.image
 
+        # fall back to code location image if none configured
         if not docker_image:
-            docker_image = self.image
+            docker_image = job_code_origin.repository_origin.container_image
 
         if not docker_image:
             raise Exception(
