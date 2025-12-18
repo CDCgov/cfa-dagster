@@ -7,10 +7,9 @@ on:
       - main
     paths:
       - 'src/**'
-      - 'infra/**'
-    paths-ignore:
-      - 'infra/README.md'
-      - 'infra/dagster_defs.py'
+      - 'infra/Dockerfile'
+      - 'infra/pyproject.toml'
+      - 'infra/uv.lock'
 
 jobs:
   build-and-push-image:
