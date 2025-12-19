@@ -16,11 +16,11 @@ properties:
           - "3000"
         env:
           - name: DAGSTER_POSTGRES_HOST
-            secretRef: cfa-pg-dagster-host
+            secretRef: cfa-pg-dagster-host #pragma: allowlist secret
           - name: DAGSTER_POSTGRES_USER
-            secretRef: cfa-pg-dagster-admin-username
+            secretRef: cfa-pg-dagster-admin-username #pragma: allowlist secret
           - name: DAGSTER_POSTGRES_PASSWORD
-            secretRef: cfa-pg-dagster-admin-password
+            secretRef: cfa-pg-dagster-admin-password #pragma: allowlist secret
           - name: DAGSTER_POSTGRES_DB
             value: postgres
           - name: DAGSTER_USER
