@@ -1,4 +1,4 @@
-name: Deploy Infrastructure Docker Image
+name: Deploy server
 
 on:
   workflow_dispatch:
@@ -31,3 +31,21 @@ jobs:
 
       - name: Build and push Docker image
         run: docker build -t ghcr.io/cdcgov/cfa-dagster:latest -f infra/Dockerfile infra/ --push
+
+  deploy-container-app:
+    runs-on: ubuntu-latest
+    needs: build-and-push-image
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZ_CLIENT_ID }}
+          subscription-id: ${{ secrets.AZ_SUBSCRIPTION_ID }}
+          tenant-id: ${{ secrets.AZ_TENANT_ID }}
+
+      - name: Deploy Container App
+        run: bash infra/deploy-container-app.sh

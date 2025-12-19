@@ -1,0 +1,86 @@
+name: dagster
+properties:
+  template:
+    containers:
+      - name: dagster
+        image: ghcr.io/cdcgov/cfa-dagster:latest
+        resources:
+          cpu: 1
+          memory: 2Gi
+        command:
+          - dagster-webserver
+        args:
+          - "-h"
+          - "0.0.0.0"
+          - "-p"
+          - "3000"
+        env:
+          - name: DAGSTER_POSTGRES_HOST
+            secretRef: cfa-pg-dagster-host
+          - name: DAGSTER_POSTGRES_USER
+            secretRef: cfa-pg-dagster-admin-username
+          - name: DAGSTER_POSTGRES_PASSWORD
+            secretRef: cfa-pg-dagster-admin-password
+          - name: DAGSTER_POSTGRES_DB
+            value: postgres
+          - name: DAGSTER_USER
+            value: prod
+          - name: AZURE_CLIENT_ID
+            value: bdca4f03-d071-4928-914e-def0dcdbe460
+          - name: CFA_DAGSTER_LOG_LEVEL
+            value: INFO
+          - name: DEPLOY_DATE
+            value: __DEPLOY_DATE__
+        volumeMounts:
+          - volumeName: cfadagster
+            mountPath: /opt/dagster
+      - name: dagster-daemon
+        image: ghcr.io/cdcgov/cfa-dagster:latest
+        resources:
+          cpu: 1
+          memory: 2Gi
+        command:
+          - dagster-daemon
+        args:
+          - run
+        env:
+          - name: DAGSTER_HOME
+            value: /opt/dagster/dagster_home
+          - name: DAGSTER_USER
+            value: prod
+          - name: AZURE_CLIENT_ID
+            value: bdca4f03-d071-4928-914e-def0dcdbe460
+          - name: CFA_DAGSTER_LOG_LEVEL
+            value: INFO
+        volumeMounts:
+          - volumeName: cfadagster
+            mountPath: /opt/dagster
+    scale:
+      minReplicas: 0
+      maxReplicas: 10
+    volumes:
+      - name: cfadagster
+        storageType: AzureFile
+        storageName: cfadagster
+  configuration:
+    secrets:
+      - name: cfa-pg-dagster-admin-password
+        keyVaultUrl: https://cfa-tools.vault.azure.net/secrets/cfa-pg-dagster-admin-password
+        identity: /subscriptions/ef340bd6-2809-4635-b18b-7e6583a8803b/resourcegroups/EXT-EDAV-CFA-PRD/providers/Microsoft.ManagedIdentity/userAssignedIdentities/dagster-daemon-mi
+      - name: cfa-pg-dagster-admin-username
+        keyVaultUrl: https://cfa-tools.vault.azure.net/secrets/cfa-pg-dagster-admin-username
+        identity: /subscriptions/ef340bd6-2809-4635-b18b-7e6583a8803b/resourcegroups/EXT-EDAV-CFA-PRD/providers/Microsoft.ManagedIdentity/userAssignedIdentities/dagster-daemon-mi
+      - name: cfa-pg-dagster-host
+        keyVaultUrl: https://cfa-tools.vault.azure.net/secrets/cfa-pg-dagster-host
+        identity: /subscriptions/ef340bd6-2809-4635-b18b-7e6583a8803b/resourcegroups/EXT-EDAV-CFA-PRD/providers/Microsoft.ManagedIdentity/userAssignedIdentities/dagster-daemon-mi
+    registries:
+      - server: cfaprdbatchcr.azurecr.io
+        identity: system-environment
+    ingress:
+      external: true
+      targetPort: 3000
+      allowInsecure: true
+identity:
+  type: UserAssigned
+  userAssignedIdentities:
+    '/subscriptions/ef340bd6-2809-4635-b18b-7e6583a8803b/resourcegroups/EXT-EDAV-CFA-PRD/providers/Microsoft.ManagedIdentity/userAssignedIdentities/dagster-daemon-mi': {}
