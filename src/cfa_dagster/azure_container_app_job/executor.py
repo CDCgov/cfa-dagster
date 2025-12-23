@@ -132,7 +132,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
         self._step_container_ids = {}
         self._step_caj_execution_ids = {}
 
-        self._job_name = container_app_job_name
+        self._container_app_job_name = container_app_job_name
         self._cpu = cpu
         self._memory = memory
         self._resource_group = "ext-edav-cfa-prd"  # TODO: move to config?
@@ -244,7 +244,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
         job_execution_id = start_caj(
             self._azure_caj_client,
             resource_group=self._resource_group,
-            container_app_job_name=self.container_app_job_name,
+            container_app_job_name=self._container_app_job_name,
             image=step_image,
             env_vars=env_vars,
             command=execute_step_args.get_command_args(),
@@ -293,7 +293,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
         status = get_status_caj(
             self._azure_caj_client,
             resource_group=self._resource_group,
-            container_app_job_name=self.container_app_job_name,
+            container_app_job_name=self._container_app_job_name,
             job_execution_id=job_execution_id,
         )
 
@@ -331,6 +331,6 @@ class AzureContainerAppJobStepHandler(StepHandler):
         return stop_caj(
             self._azure_caj_client,
             self._resource_group,
-            self.container_app_job_name,
+            self._container_app_job_name,
             job_execution_id,
         )
