@@ -136,14 +136,13 @@ def start_dev_env(caller_name: str):
     dagster_home = home_dir / ".dagster_home"
     dagster_yaml = dagster_home / "dagster.yaml"
 
-    if "--configure" in sys.argv or (
-        not is_production and not os.path.exists(dagster_yaml)
-    ):
-        create_dev_env()
-
     # Start the Dagster UI and set necessary env vars if
     # called directly via `uv run`
     if caller_name == "__main__":
+        if "--configure" in sys.argv or (
+            not is_production and not os.path.exists(dagster_yaml)
+        ):
+            create_dev_env()
         # Set environment variables
         os.environ["DAGSTER_USER"] = dagster_user
         os.environ["DAGSTER_HOME"] = str(dagster_home)
