@@ -248,8 +248,8 @@ class AzureContainerAppJobStepHandler(StepHandler):
             image=step_image,
             env_vars=env_vars,
             command=execute_step_args.get_command_args(),
-            cpu=self.cpu,
-            memory=self.memory,
+            cpu=self._cpu,
+            memory=self._memory,
         )
         self._step_caj_execution_ids[step_key] = job_execution_id
         return job_execution_id
