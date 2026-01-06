@@ -130,11 +130,11 @@ def start_dev_env(caller_name: str):
     5. running `dagster dev -f <script_name>.py` in a subprocess
     6. Validating the DAGSTER_USER environment variable for non-dev scenarios
     """
+    is_production = not os.getenv("DAGSTER_IS_DEV_CLI")  # set by dagster cli
     home_dir = Path.home()
     dagster_user = home_dir.name
     dagster_home = home_dir / ".dagster_home"
     dagster_yaml = dagster_home / "dagster.yaml"
-    is_production = not os.getenv("DAGSTER_IS_DEV_CLI")
 
     # Start the Dagster UI and set necessary env vars if
     # called directly via `uv run`
