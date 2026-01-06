@@ -8,7 +8,7 @@
 #    "dagster-postgres>=0.27.4",
 #    "dagster-webserver==1.12.2",
 #    "dagster==1.12.2",
-#    "cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git",
+#    "cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git@gio-configure",
 #    "pyyaml>=6.0.2",
 # ]
 # ///
