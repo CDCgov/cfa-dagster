@@ -133,7 +133,6 @@ def start_dev_env(caller_name: str):
     print(f"sys.argv: '{sys.argv}'")
     print(f"__name__: '{__name__}'")
     print(f"caller_name: '{caller_name}'")
-    is_production = not os.getenv("DAGSTER_IS_DEV_CLI")  # set by dagster cli
     home_dir = Path.home()
     dagster_user = home_dir.name
     dagster_home = home_dir / ".dagster_home"
@@ -143,7 +142,9 @@ def start_dev_env(caller_name: str):
     # called directly via `uv run`
     if caller_name == "__main__":
         if "--configure" in sys.argv or (
-            not is_production and not os.path.exists(dagster_yaml)
+            # check if this is being called directly or from a workflow run
+            not "execute_step" in sys.argv
+            and not os.path.exists(dagster_yaml)
         ):
             create_dev_env()
         # Set environment variables
