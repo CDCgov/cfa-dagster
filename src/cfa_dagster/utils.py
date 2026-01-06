@@ -142,11 +142,7 @@ def start_dev_env(caller_name: str):
     # Start the Dagster UI and set necessary env vars if
     # called directly via `uv run`
     if caller_name == "__main__":
-        if "--configure" in sys.argv or (
-            # check if this is being called directly or from a workflow run
-            not "execute_step" in sys.argv
-            and not os.path.exists(dagster_yaml)
-        ):
+        if "--configure" in sys.argv or not os.path.exists(dagster_yaml):
             create_dev_env()
         # Set environment variables
         os.environ["DAGSTER_USER"] = dagster_user
