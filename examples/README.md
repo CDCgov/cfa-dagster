@@ -4,11 +4,6 @@ This basic example should help you get up and running with local Dagster develop
 
 It is highly recommended that you complete the Dagster quickstart [tutorial](https://docs.dagster.io/getting-started/quickstart) (~10 mins) before following these steps to familiarize yourself with basic Dagster concepts and the UI.
 
-## Basic Terminology
-- Materialize: to run an Asset or Job to get its output
-- Asset: a python function that returns some output
-- Job: a python function that materializes an Asset with specific configuration
-
 ## Getting Started
 
 1. Build the initial image for your test asset: `docker build -t basic-r-asset .`

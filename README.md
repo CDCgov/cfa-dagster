@@ -2,7 +2,22 @@
 
 ## Overview
 
-This repo serves as the base for CFA's Dagster software including custom executors, IO Managers, etc.
+This repo serves as the base for CFA's Dagster software including custom executors, IO Managers, Infrastructure as Code, etc.
+
+## What is Dagster?
+
+[Dagster](https://docs.dagster.io/) is an orchestration platform that provides observability into your workflows as they are transparently executed in either local or cloud environments. 
+
+Dagster unifies logic that is often distributed between GitHub Actions workflows, Makefiles, Bash and Python Scripts, and configured in the Azure Portal.
+
+## Why use Dagster?
+
+Dagster allows you to run the same code on your machine, in Docker, on Azure Batch, or on Azure Container App Jobs with a simple configuration change
+
+Dagster provides a clear user interface to expose events, metadata, stdout, and stdin logs for your workload regardless of the compute environment.
+
+Dagster has built-in schedulers and event-based triggers to run your workload when you want.
+
 
 ## Getting started
 
@@ -15,6 +30,7 @@ This repo serves as the base for CFA's Dagster software including custom executo
  ]
 
 ```
+
 ## Moving local workflow to production
 If you would like to schedule your workflow to run on a schedule or triggered based on other workflows, you can move your workflows to the production server (http://dagster.apps.edav.ext.cdc.gov) with the following:
 
