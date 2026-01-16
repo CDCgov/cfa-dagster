@@ -3,13 +3,20 @@ import json
 import yaml
 import os
 from collections.abc import Iterator
+from dagster._core.execution.tags import get_tag_concurrency_limits_config
 from typing import cast
 from dagster._serdes.config_class import ConfigurableClassData
 
+from dagster import Field, IntSource, executor
 import dagster._check as check
 from dagster import executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
+)
+
+from dagster._core.execution.step_dependency_config import (
+    StepDependencyConfig,
+    get_step_dependency_config_field,
 )
 from dagster._core.events import DagsterEvent, EngineEventData
 from dagster._core.execution.retries import RetryMode
@@ -21,6 +28,7 @@ from dagster._core.executor.step_delegating.step_handler.base import (
     StepHandler,
     StepHandlerContext,
 )
+from dagster._core.execution.retries import RetryMode, get_retries_config
 from dagster._core.utils import parse_env_var
 from dagster_docker.container_context import DockerContainerContext
 from dagster_docker.utils import (
@@ -44,7 +52,20 @@ log = logging.getLogger(__name__)
 
 @executor(
     name="dynamic_executor",
-    config_schema={},
+    config_schema={
+        "retries": get_retries_config(),
+        "max_concurrent": Field(
+            IntSource,
+            is_required=False,
+            description=(
+                "Limit on the number of containers that will run concurrently within the scope "
+                    "of a Dagster run. Note that this limit is per run, not global."
+            ),
+        ),
+        "tag_concurrency_limits": get_tag_concurrency_limits_config(),
+        "step_dependency_config": get_step_dependency_config_field(),
+    }
+    ,
     requirements=multiple_process_executor_requirements(),
 )
 def dynamic_executor(
