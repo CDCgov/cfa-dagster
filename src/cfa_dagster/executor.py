@@ -119,7 +119,10 @@ class DynamicStepHandler(StepHandler):
                 f"{valid_executors}"
             )
 
-        executor_config = executor_config.get("config", {})
+        executor_config = executor_config.get(
+            "config",
+            executor_class.config_schema.config_type.fields
+        )
 
         # default run launcher throws an error for env vars
         # if executor_class_name != DefaultRunLauncher.__name__:
@@ -134,7 +137,10 @@ class DynamicStepHandler(StepHandler):
         #         env_vars.append("DAGSTER_IS_DEV_CLI")
         #     executor_config["env_vars"] = env_vars
 
-        run_executor = executor_class.executor_creation_fn(self._init_context)
+        run_executor = executor_class.executor_creation_fn(
+            self._init_context, 
+            **executor_config
+        )
         return run_executor
 
     def _get_executor_config_from_tags(self, tags: dict):
