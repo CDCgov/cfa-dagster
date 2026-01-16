@@ -136,7 +136,7 @@ class DynamicStepHandler(StepHandler):
                 ]
             ]
             raise RuntimeError(
-                f"Invalid launcher class specified: '{executor_class_name}'. "
+                f"Invalid executor class specified: '{executor_class_name}'. "
                 "Must be one of: "
                 f"{valid_executors}"
             )
@@ -181,6 +181,9 @@ class DynamicStepHandler(StepHandler):
     def _get_step_handler(self, step_handler_context: StepHandlerContext) -> StepHandler:
         if not self._executor:
             tags = step_handler_context.step_tags
+            log.debug(f"tags: '{tags}'")
+            run_tags = step_handler_context.dagster_run.tags
+            log.debug(f"run_tags: '{run_tags}'")
             executor_config = self._get_executor_config_from_tags(tags)
             self._executor = self._create_executor(executor_config)
 
