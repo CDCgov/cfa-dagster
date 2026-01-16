@@ -106,6 +106,7 @@ class DynamicStepHandler(StepHandler):
     ):
         super().__init__()
         self._init_context = init_context # TODO: add env vars
+        self._executor = None
         log.debug(f"Launching a new {self.name}")
 
     @property
