@@ -119,6 +119,8 @@ class DynamicStepHandler(StepHandler):
                 f"{valid_executors}"
             )
 
+        default_config = executor_class.config_schema.config_type.fields
+        log.debug(f"default_config: '{default_config}'")
         executor_config = executor_config.get(
             "config",
             executor_class.config_schema.config_type.fields
@@ -141,6 +143,7 @@ class DynamicStepHandler(StepHandler):
             self._init_context, 
             **executor_config
         )
+        log.debug(f"run_executor: '{run_executor}'")
         return run_executor
 
     def _get_executor_config_from_tags(self, tags: dict):
