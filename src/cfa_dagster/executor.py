@@ -145,18 +145,7 @@ class DynamicStepHandler(StepHandler):
                 f"{valid_executors}"
             )
 
-        schema = executor_class.config_schema
-
-        if not schema or schema is False:
-            default_config = {}
-        elif isinstance(schema, DefinitionConfigSchema):
-            result = process_config(schema.as_field(), {})
-            if not result.success:
-                raise Exception(result.errors)
-            default_config = result.value
-        else:
-            raise TypeError(f"Unexpected config_schema type: {type(schema)}")
-
+        default_config = executor_class.config_schema.as_field().default_value
         log.debug(f"default_config: '{default_config}'")
 
         config = executor_config.get(
