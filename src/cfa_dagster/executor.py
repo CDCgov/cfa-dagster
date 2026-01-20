@@ -1,6 +1,7 @@
 import logging
 import json
 import yaml
+from dagster._utils.merger import merge_dicts
 from dagster._core.execution.context.system import PlanOrchestrationContext
 from dagster._core.execution.plan.plan import ExecutionPlan
 import os
@@ -303,10 +304,7 @@ class DynamicStepHandler(StepHandler):
         default_config = executor_class.config_schema.as_field().default_value
         log.debug(f"default_config: '{default_config}'")
 
-        config = executor_config.get(
-            "config",
-            default_config
-        )
+        config = merge_dicts(executor_config.get("config", {}), default_config)
 
         # default executors throw an error for env vars
         if (executor_class_name != in_process_executor and
