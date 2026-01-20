@@ -83,7 +83,8 @@ class DynamicExecutor(Executor):
     ):
         self._init_context = init_context
         # default to multiprocess_executor
-        self._executor = multiprocess_executor.executor_creation_fn(init_context)
+        default_executor_config = {"class": multiprocess_executor.__name__}
+        self._executor = self._create_executor(default_executor_config)
 
     @property
     def retries(self):
