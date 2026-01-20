@@ -15,6 +15,9 @@ from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
 
+from dagster._core.definitions.definition_config_schema import (
+    DefinitionConfigSchema
+)
 from dagster._core.execution.step_dependency_config import (
     StepDependencyConfig,
     get_step_dependency_config_field,
@@ -142,8 +145,20 @@ class DynamicStepHandler(StepHandler):
                 f"{valid_executors}"
             )
 
-        default_config = process_config(executor_class.config_schema, {}).value
+        schema = executor_class.config_schema
+
+        if not schema or schema is False:
+            default_config = {}
+        elif isinstance(schema, DefinitionConfigSchema):
+            result = process_config(schema.as_field(), {})
+            if not result.success:
+                raise Exception(result.errors)
+            default_config = result.value
+        else:
+            raise TypeError(f"Unexpected config_schema type: {type(schema)}")
+
         log.debug(f"default_config: '{default_config}'")
+
         config = executor_config.get(
             "config",
             default_config
