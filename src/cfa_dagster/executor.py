@@ -143,28 +143,27 @@ class DynamicStepHandler(StepHandler):
 
         default_config = executor_class.config_schema.config_type.fields
         log.debug(f"default_config: '{default_config}'")
-        executor_config = executor_config.get(
+        config = executor_config.get(
             "config",
             executor_class.config_schema.config_type.fields
         )
 
-        # default run launcher throws an error for env vars
-        # if executor_class_name != DefaultRunLauncher.__name__:
-        #     env_vars = executor_config.get("env_vars", [])
-        #     # Need to check if env vars are present first or
-        #     # each run will append them again
-        #     if "DAGSTER_USER" not in env_vars:
-        #         env_vars.append("DAGSTER_USER")
-        #     if "DAGSTER_IS_DEV_CLI" not in env_vars and os.getenv(
-        #         "DAGSTER_IS_DEV_CLI"
-        #     ):
-        #         env_vars.append("DAGSTER_IS_DEV_CLI")
-        #     executor_config["env_vars"] = env_vars
+        # default executors throw an error for env vars
+        if (executor_class_name != in_process_executor and
+                executor_class_name != multiprocess_executor):
+            env_vars = config.get("env_vars", [])
+            # Need to check if env vars are present first or
+            # each run will append them again
+            if "DAGSTER_USER" not in env_vars:
+                env_vars.append("DAGSTER_USER")
+            if "DAGSTER_IS_DEV_CLI" not in env_vars and os.getenv(
+                "DAGSTER_IS_DEV_CLI"
+            ):
+                env_vars.append("DAGSTER_IS_DEV_CLI")
+            config["env_vars"] = env_vars
 
-        run_executor = executor_class.executor_creation_fn(
-            self._init_context, 
-            **executor_config
-        )
+        updated_context = self._init_context._replace(executor_config=config)
+        run_executor = executor_class.executor_creation_fn(updated_context)
         log.debug(f"run_executor: '{run_executor}'")
         return run_executor
 
