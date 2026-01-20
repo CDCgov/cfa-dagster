@@ -57,24 +57,7 @@ from cfa_dagster import (
 log = logging.getLogger(__name__)
 
 
-@executor(
-    name="dynamic_executor",
-    config_schema={
-        "retries": get_retries_config(),
-        "max_concurrent": Field(
-            IntSource,
-            is_required=False,
-            description=(
-                "Limit on the number of containers that will run concurrently within the scope "
-                    "of a Dagster run. Note that this limit is per run, not global."
-            ),
-        ),
-        "tag_concurrency_limits": get_tag_concurrency_limits_config(),
-        "step_dependency_config": get_step_dependency_config_field(),
-    }
-    ,
-    requirements=multiple_process_executor_requirements(),
-)
+@executor(name="dynamic_executor")
 def dynamic_executor(
     init_context: InitExecutorContext,
 ) -> Executor:
@@ -84,88 +67,30 @@ def dynamic_executor(
 
     # this is the config from the Launchpad
     log.debug(f"config: '{config}'")
-    env_vars = check.opt_list_elem(config, "env_vars", of_type=str)
-    retries = check.dict_elem(config, "retries", key_type=str)
-    max_concurrent = check.opt_int_elem(config, "max_concurrent")
-    tag_concurrency_limits = check.opt_list_elem(
-        config, "tag_concurrency_limits"
-    )
-    # propagate user & dev env vars
-    env_vars.append("DAGSTER_USER")
-    if os.getenv("DAGSTER_IS_DEV_CLI"):
-        env_vars.append("DAGSTER_IS_DEV_CLI")
 
     return DynamicExecutor(
         init_context=init_context,
-        retries=check.not_none(RetryMode.from_config(retries)),
-        max_concurrent=max_concurrent,
-        tag_concurrency_limits=tag_concurrency_limits,
     )
 
 
 EXECUTOR_CONFIG_KEY = "cfa_dagster/executor"
 
 
-def _default_sleep_seconds():
-    return float(os.environ.get("DAGSTER_STEP_DELEGATING_EXECUTOR_SLEEP_SECONDS", "1.0"))
-
-
 class DynamicExecutor(Executor):
     def __init__(
         self,
-        # step_handler: StepHandler,
         init_context: InitExecutorContext,
-        retries: RetryMode,
-        sleep_seconds: Optional[float] = None,
-        check_step_health_interval_seconds: Optional[int] = None,
-        max_concurrent: Optional[int] = None,
-        tag_concurrency_limits: Optional[list[dict[str, Any]]] = None,
-        should_verify_step: bool = False,
-        step_dependency_config: StepDependencyConfig = StepDependencyConfig.default(),
     ):
         self._init_context = init_context
-        # self._step_handler = step_handler
-        self._retries = retries
-        self._step_dependency_config = step_dependency_config
-
-        self._max_concurrent = check.opt_int_param(max_concurrent, "max_concurrent")
-        self._tag_concurrency_limits = check.opt_list_param(
-            tag_concurrency_limits, "tag_concurrency_limits"
-        )
-
-        if self._max_concurrent is not None:
-            check.invariant(
-                self._max_concurrent > 0,
-                "max_concurrent must be > 0"
-            )
-
-        self._sleep_seconds = cast(
-            "float",
-            check.opt_float_param(
-                sleep_seconds,
-                "sleep_seconds",
-                default=_default_sleep_seconds()
-            ),
-        )
-        self._check_step_health_interval_seconds = cast(
-            "int",
-            check.opt_int_param(
-                check_step_health_interval_seconds, "check_step_health_interval_seconds", default=20
-            ),
-        )
-        self._should_verify_step = should_verify_step
-
-        self._event_cursor: Optional[str] = None
-
-        self._pop_events_limit = int(os.getenv("DAGSTER_EXECUTOR_POP_EVENTS_LIMIT", "1000"))
+        self._executor: Executor = in_process_executor
 
     @property
     def retries(self):
-        return self._retries
+        return self._executor.retries
 
     @property
     def step_dependency_config(self) -> StepDependencyConfig:
-        return self._step_dependency_config
+        return self._executor.step_dependency_config
 
     def _create_executor(self, executor_config: dict) -> StepDelegatingExecutor:
         is_production = not os.getenv("DAGSTER_IS_DEV_CLI")
@@ -241,5 +166,5 @@ class DynamicExecutor(Executor):
         check.inst_param(execution_plan, "execution_plan", ExecutionPlan)
         tags = plan_context.plan_data.dagster_run.tags
         executor_config = self._get_executor_config_from_tags(tags)
-        executor = self._create_executor(executor_config)
-        return executor.execute(plan_context, execution_plan)
+        self._executor = self._create_executor(executor_config)
+        return self._executor.execute(plan_context, execution_plan)
