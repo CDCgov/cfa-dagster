@@ -101,6 +101,7 @@ def dynamic_executor(
     #     tag_concurrency_limits=tag_concurrency_limits,
     # )
     return DynamicExecutor(
+        init_context=init_context,
         retries=check.not_none(RetryMode.from_config(retries)),
         max_concurrent=max_concurrent,
         tag_concurrency_limits=tag_concurrency_limits,
@@ -118,6 +119,7 @@ class DynamicExecutor(Executor):
     def __init__(
         self,
         # step_handler: StepHandler,
+        init_context: InitExecutorContext,
         retries: RetryMode,
         sleep_seconds: Optional[float] = None,
         check_step_health_interval_seconds: Optional[int] = None,
@@ -126,6 +128,7 @@ class DynamicExecutor(Executor):
         should_verify_step: bool = False,
         step_dependency_config: StepDependencyConfig = StepDependencyConfig.default(),
     ):
+        self._init_context = init_context
         # self._step_handler = step_handler
         self._retries = retries
         self._step_dependency_config = step_dependency_config
