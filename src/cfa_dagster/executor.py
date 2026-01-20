@@ -10,6 +10,7 @@ from dagster._serdes.config_class import ConfigurableClassData
 from dagster import Field, IntSource, executor
 import dagster._check as check
 from dagster import executor
+from dagster._config import process_config
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
@@ -141,11 +142,11 @@ class DynamicStepHandler(StepHandler):
                 f"{valid_executors}"
             )
 
-        default_config = executor_class.config_schema.config_type.fields
+        default_config = process_config(executor_class.config_schema, {}).value
         log.debug(f"default_config: '{default_config}'")
         config = executor_config.get(
             "config",
-            executor_class.config_schema.config_type.fields
+            default_config
         )
 
         # default executors throw an error for env vars
