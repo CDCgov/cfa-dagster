@@ -82,7 +82,8 @@ class DynamicExecutor(Executor):
         init_context: InitExecutorContext,
     ):
         self._init_context = init_context
-        self._executor: Executor = in_process_executor
+        # default to multiprocess_executor
+        self._executor = multiprocess_executor.executor_creation_fn(init_context)
 
     @property
     def retries(self):
@@ -129,8 +130,10 @@ class DynamicExecutor(Executor):
         )
 
         # default executors throw an error for env vars
-        if (executor_class_name != in_process_executor and
-                executor_class_name != multiprocess_executor):
+        if executor_class_name not in (
+            in_process_executor.__name__,
+            multiprocess_executor.__name__
+        ):
             env_vars = config.get("env_vars", [])
             # Need to check if env vars are present first or
             # each run will append them again
