@@ -247,8 +247,7 @@ class DynamicExecutor(Executor):
         tags = plan_context.plan_data.dagster_run.tags
         executor_config = self._get_executor_config_from_tags(tags)
         executor = self._create_executor(executor_config)
-        plan_context._executor = executor
-        executor.execute(plan_context, execution_plan)
+        return executor.execute(plan_context, execution_plan)
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
