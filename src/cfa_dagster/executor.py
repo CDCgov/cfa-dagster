@@ -1,10 +1,12 @@
 import logging
 import json
 import yaml
+from dagster._core.execution.context.system import PlanOrchestrationContext
+from dagster._core.execution.plan.plan import ExecutionPlan
 import os
 from collections.abc import Iterator
 from dagster._core.execution.tags import get_tag_concurrency_limits_config
-from typing import cast
+from typing import Optional, cast, Any
 from dagster._serdes.config_class import ConfigurableClassData
 
 from dagster import Field, IntSource, executor
@@ -92,8 +94,13 @@ def dynamic_executor(
     if os.getenv("DAGSTER_IS_DEV_CLI"):
         env_vars.append("DAGSTER_IS_DEV_CLI")
 
-    return StepDelegatingExecutor(
-        DynamicStepHandler(init_context),
+    # return StepDelegatingExecutor(
+    #     DynamicStepHandler(init_context),
+    #     retries=check.not_none(RetryMode.from_config(retries)),
+    #     max_concurrent=max_concurrent,
+    #     tag_concurrency_limits=tag_concurrency_limits,
+    # )
+    return DynamicExecutor(
         retries=check.not_none(RetryMode.from_config(retries)),
         max_concurrent=max_concurrent,
         tag_concurrency_limits=tag_concurrency_limits,
@@ -101,6 +108,143 @@ def dynamic_executor(
 
 
 EXECUTOR_CONFIG_KEY = "cfa_dagster/executor"
+
+
+def _default_sleep_seconds():
+    return float(os.environ.get("DAGSTER_STEP_DELEGATING_EXECUTOR_SLEEP_SECONDS", "1.0"))
+
+
+class DynamicExecutor(Executor):
+    def __init__(
+        self,
+        # step_handler: StepHandler,
+        retries: RetryMode,
+        sleep_seconds: Optional[float] = None,
+        check_step_health_interval_seconds: Optional[int] = None,
+        max_concurrent: Optional[int] = None,
+        tag_concurrency_limits: Optional[list[dict[str, Any]]] = None,
+        should_verify_step: bool = False,
+        step_dependency_config: StepDependencyConfig = StepDependencyConfig.default(),
+    ):
+        # self._step_handler = step_handler
+        self._retries = retries
+        self._step_dependency_config = step_dependency_config
+
+        self._max_concurrent = check.opt_int_param(max_concurrent, "max_concurrent")
+        self._tag_concurrency_limits = check.opt_list_param(
+            tag_concurrency_limits, "tag_concurrency_limits"
+        )
+
+        if self._max_concurrent is not None:
+            check.invariant(
+                self._max_concurrent > 0,
+                "max_concurrent must be > 0"
+            )
+
+        self._sleep_seconds = cast(
+            "float",
+            check.opt_float_param(
+                sleep_seconds,
+                "sleep_seconds",
+                default=_default_sleep_seconds()
+            ),
+        )
+        self._check_step_health_interval_seconds = cast(
+            "int",
+            check.opt_int_param(
+                check_step_health_interval_seconds, "check_step_health_interval_seconds", default=20
+            ),
+        )
+        self._should_verify_step = should_verify_step
+
+        self._event_cursor: Optional[str] = None
+
+        self._pop_events_limit = int(os.getenv("DAGSTER_EXECUTOR_POP_EVENTS_LIMIT", "1000"))
+
+    @property
+    def retries(self):
+        return self._retries
+
+    @property
+    def step_dependency_config(self) -> StepDependencyConfig:
+        return self._step_dependency_config
+
+    def _create_executor(self, executor_config: dict) -> StepDelegatingExecutor:
+        is_production = not os.getenv("DAGSTER_IS_DEV_CLI")
+        executor_class_name = executor_config.get("class")
+        match (is_production, executor_class_name):
+            case (True, docker_executor.__name__):
+                raise RuntimeError(
+                    f"You can't use {executor_class_name} in production!"
+                )
+
+        try:
+            executor_class: ExecutorDefinition = globals()[executor_class_name]
+        except KeyError:
+            valid_executors = [
+                c.__name__
+                for c in [
+                    in_process_executor,
+                    multiprocess_executor,
+                    docker_executor,
+                    azure_batch_executor,
+                    azure_container_app_job_executor,
+                ]
+            ]
+            raise RuntimeError(
+                f"Invalid executor class specified: '{executor_class_name}'. "
+                "Must be one of: "
+                f"{valid_executors}"
+            )
+
+        default_config = executor_class.config_schema.as_field().default_value
+        log.debug(f"default_config: '{default_config}'")
+
+        config = executor_config.get(
+            "config",
+            default_config
+        )
+
+        # default executors throw an error for env vars
+        if (executor_class_name != in_process_executor and
+                executor_class_name != multiprocess_executor):
+            env_vars = config.get("env_vars", [])
+            # Need to check if env vars are present first or
+            # each run will append them again
+            if "DAGSTER_USER" not in env_vars:
+                env_vars.append("DAGSTER_USER")
+            if "DAGSTER_IS_DEV_CLI" not in env_vars and os.getenv(
+                "DAGSTER_IS_DEV_CLI"
+            ):
+                env_vars.append("DAGSTER_IS_DEV_CLI")
+            config["env_vars"] = env_vars
+
+        updated_context = self._init_context._replace(executor_config=config)
+        run_executor = executor_class.executor_creation_fn(updated_context)
+        log.debug(f"run_executor: '{run_executor}'")
+        return run_executor
+
+    def _get_executor_config_from_tags(self, tags: dict):
+        executor_config_str = tags.get(EXECUTOR_CONFIG_KEY, "{}")
+        try:
+            return json.loads(executor_config_str)
+        except json.decoder.JSONDecodeError:
+            raise RuntimeError(
+                f"Invalid JSON for '{EXECUTOR_CONFIG_KEY}'. "
+                f"Received: '{executor_config_str}'"
+            )
+
+    def execute(
+        self,
+        plan_context: PlanOrchestrationContext,
+        execution_plan: ExecutionPlan
+    ):
+        check.inst_param(plan_context, "plan_context", PlanOrchestrationContext)
+        check.inst_param(execution_plan, "execution_plan", ExecutionPlan)
+        tags = plan_context.plan_data.dagster_run.tags
+        executor_config = self._get_executor_config_from_tags(tags)
+        executor = self._create_executor(executor_config)
+        executor.execute(plan_context, execution_plan)
 
 
 class DynamicStepHandler(StepHandler):
