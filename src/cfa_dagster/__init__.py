@@ -11,6 +11,7 @@ from .azure_container_app_job.launcher import AzureContainerAppJobRunLauncher
 from .docker.executor import docker_executor
 from .run_launcher import DynamicRunLauncher
 from .utils import (
+    get_webserver_hostname,
     collect_definitions,
     get_latest_metadata_for_partition,
     launch_asset_backfill,

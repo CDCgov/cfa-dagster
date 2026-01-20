@@ -1,47 +1,19 @@
 import logging
 import json
-import yaml
 from dagster._utils.merger import merge_dicts
 from dagster._core.execution.context.system import PlanOrchestrationContext
 from dagster._core.execution.plan.plan import ExecutionPlan
 import os
-from collections.abc import Iterator
-from dagster._core.execution.tags import get_tag_concurrency_limits_config
-from typing import Optional, cast, Any
-from dagster._serdes.config_class import ConfigurableClassData
 
-from dagster import Field, IntSource, executor
-import dagster._check as check
 from dagster import executor
-from dagster._config import process_config
-from dagster._core.definitions.executor_definition import (
-    multiple_process_executor_requirements,
-)
+import dagster._check as check
 
-from dagster._core.definitions.definition_config_schema import (
-    DefinitionConfigSchema
-)
 from dagster._core.execution.step_dependency_config import (
     StepDependencyConfig,
-    get_step_dependency_config_field,
 )
-from dagster._core.events import DagsterEvent, EngineEventData
-from dagster._core.execution.retries import RetryMode
 from dagster._core.executor.base import Executor
 from dagster._core.executor.init import InitExecutorContext
 from dagster._core.executor.step_delegating import StepDelegatingExecutor
-from dagster._core.executor.step_delegating.step_handler.base import (
-    CheckStepHealthResult,
-    StepHandler,
-    StepHandlerContext,
-)
-from dagster._core.execution.retries import RetryMode, get_retries_config
-from dagster._core.utils import parse_env_var
-from dagster_docker.container_context import DockerContainerContext
-from dagster_docker.utils import (
-    validate_docker_config,
-    validate_docker_image,
-)
 from dagster import (
     in_process_executor,
     multiprocess_executor,
@@ -82,7 +54,6 @@ class DynamicExecutor(Executor):
         init_context: InitExecutorContext,
     ):
         self._init_context = init_context
-        # default to multiprocess_executor
         default_executor_config = {"class": multiprocess_executor.__name__}
         self._executor = self._create_executor(default_executor_config)
 

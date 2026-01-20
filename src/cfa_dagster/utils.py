@@ -14,6 +14,17 @@ from dagster_graphql import DagsterGraphQLClient
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 
+def get_graphql_client() -> DagsterGraphQLClient:
+    if os.getenv("DAGSTER_IS_DEV_CLI"):  # set by dagster cli
+        return DagsterGraphQLClient(hostname="127.0.0.1", port_number=3000)
+    else:
+        return DagsterGraphQLClient(hostname="dagster.apps.edav.ext.cdc.gov")
+
+
+def get_webserver_hostname() -> str:
+    get_graphql_client()._hostname
+
+
 def create_dev_env():
     # Authenticate using DefaultAzureCredential
     credential = DefaultAzureCredential()
@@ -226,11 +237,7 @@ def launch_asset_backfill(
     """
     Function to launch an asset backfill via the GraphQL client
     """
-
-    if os.getenv("DAGSTER_IS_DEV_CLI"):  # set by dagster cli
-        client = DagsterGraphQLClient(hostname="127.0.0.1", port_number=3000)
-    else:
-        client = DagsterGraphQLClient(hostname="dagster.apps.edav.ext.cdc.gov")
+    client = get_graphql_client()
 
     query = """
     mutation LaunchPartitionBackfill(
