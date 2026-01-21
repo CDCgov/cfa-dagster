@@ -124,7 +124,7 @@ class DynamicExecutor(Executor):
             )
 
         default_config = extract_defaults_from_user_schema(
-            executor_class.config_schema.as_field()
+            executor_class.config_schema
         )
         log.debug(f"default_config: '{default_config}'")
 
