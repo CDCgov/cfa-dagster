@@ -1,6 +1,8 @@
 import logging
 import os
+import uuid
 from collections.abc import Iterator
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional, cast
 
 import dagster._check as check
@@ -237,13 +239,65 @@ class AzureBatchStepHandler(StepHandler):
         return step_keys_to_execute[0]
 
     def _get_job_id(self, step_handler_context: StepHandlerContext):
+        """
+        Creates a unique job id for Azure Batch
+        Automatically tries to generate based off a schedule or sensor tick id
+        falling back to a backfill id, finally falling back to a run id
+
+        The schedule/sensor tick id is seeded by user and the current date to
+        avoid collisions. The date component means that it is possible
+        for a triggered job to put tasks into two different Batch job ids
+        if the job is launched before midnight and some of the runs don't start
+        until after midnight.
+        The main priority of using a semi-stable job id is to avoid creating
+        more Batch jobs than Azure can handle, so one trigger launching two
+        Batch jobs is acceptable
+        """
         run = step_handler_context.dagster_run
+
+        tag_tick_id = run.tags.get("dagster/tick")
         backfill_id = run.tags.get("dagster/backfill")
-        log.debug(f"backfill_id: '{backfill_id}'")
-        log.debug(f"run_id: '{run.run_id}'")
-        id = backfill_id or run.run_id
-        job_id = f"dagster-run-{id}"
-        return job_id
+
+        base_id = run.run_id
+
+        if tag_tick_id:
+            tag_schedule_name = run.tags.get("dagster/schedule_name")
+            tag_sensor_name = run.tags.get("dagster/sensor_name")
+
+            match (tag_schedule_name, tag_sensor_name):
+                case (str() as schedule, None):
+                    kind = "schedule"
+                    owner = schedule
+                case (None, str() as sensor):
+                    kind = "sensor"
+                    owner = sensor
+                case (None, None):
+                    raise ValueError(
+                        "Run has dagster/ticket but neither schedule nor "
+                        "sensor tag"
+                    )
+                case _:
+                    raise ValueError(
+                        "Run has both schedule and sensor tags - "
+                        "unexpected state"
+                    )
+
+            base_id = uuid.uuid5(
+                uuid.NAMESPACE_DNS,
+                ":".join(
+                    datetime.now(timezone.utc).date().isoformat(),
+                    os.getenv("DAGSTER_USER"),
+                    kind,
+                    owner,
+                    tag_tick_id
+                )
+            )
+        elif backfill_id:
+            base_id = backfill_id
+        else:
+            base_id = run.run_id
+
+        return f"dagster-run-{base_id}"
 
     def _get_task_id(self, step_handler_context: StepHandlerContext):
         run = step_handler_context.dagster_run
