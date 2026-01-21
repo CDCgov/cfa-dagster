@@ -93,7 +93,9 @@ class DynamicExecutor(Executor):
                 f"{valid_executors}"
             )
 
-        default_config = executor_class.config_schema.as_field().default_value
+        config_schema_field = executor_class.config_schema.as_field()
+        if config_schema_field.default_provided:
+            default_config = config_schema_field.default_value
         log.debug(f"default_config: '{default_config}'")
 
         config = merge_dicts(
