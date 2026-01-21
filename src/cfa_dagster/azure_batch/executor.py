@@ -15,6 +15,7 @@ from azure.batch.models import (
     ContainerRegistry,
     ElevationLevel,
     JobAddParameter,
+    OnAllTasksComplete,
     PoolInformation,
     TaskAddParameter,
     TaskContainerSettings,
@@ -326,7 +327,11 @@ class AzureBatchStepHandler(StepHandler):
         log.debug(f"job_id: '{job_id}'")
 
         pool_info = PoolInformation(pool_id=self._pool_id)
-        job = JobAddParameter(id=job_id, pool_info=pool_info)
+        job = JobAddParameter(
+            id=job_id,
+            pool_info=pool_info,
+            on_all_tasks_complete=OnAllTasksComplete.terminate_job
+        )
         try:
             self._batch_client.job.add(job)
         except BatchErrorException as err:
