@@ -323,6 +323,7 @@ class AzureBatchStepHandler(StepHandler):
         execute_step_args = step_handler_context.execute_step_args
 
         job_id = self._get_job_id(step_handler_context)
+        log.debug(f"job_id: '{job_id}'")
 
         pool_info = PoolInformation(pool_id=self._pool_id)
         job = JobAddParameter(id=job_id, pool_info=pool_info)
