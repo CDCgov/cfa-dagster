@@ -284,13 +284,13 @@ class AzureBatchStepHandler(StepHandler):
 
             base_id = uuid.uuid5(
                 uuid.NAMESPACE_DNS,
-                ":".join(
+                ":".join([
                     datetime.now(timezone.utc).date().isoformat(),
                     os.getenv("DAGSTER_USER"),
                     kind,
                     owner,
                     tag_tick_id
-                )
+                ])
             )
         elif backfill_id:
             base_id = backfill_id
