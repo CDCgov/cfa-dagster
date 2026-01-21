@@ -24,7 +24,7 @@ from cfa_dagster import (
     azure_batch_executor,
     docker_executor
 )
-from dagster._config.config_type import Shape, Selector
+from dagster._config import Shape, Selector
 
 
 log = logging.getLogger(__name__)
