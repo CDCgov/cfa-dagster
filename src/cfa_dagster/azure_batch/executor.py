@@ -1,4 +1,5 @@
 import logging
+import hashlib
 import os
 import uuid
 from collections.abc import Iterator
@@ -276,26 +277,67 @@ class AzureBatchStepHandler(StepHandler):
 
         return f"dagster-{base_id}"
 
-    def _get_task_id(self, step_handler_context: StepHandlerContext):
+    def _clamp_with_hash(self, value: str, max_len: int) -> str:
+        if len(value) <= max_len:
+            return value
+
+        # Reserve 6 chars for hash + "-"
+        hash_len = 6
+        keep_len = max_len - hash_len - 1
+        digest = hashlib.sha1(value.encode()).hexdigest()[:hash_len]
+        return f"{value[:keep_len]}-{digest}"
+
+    def _get_task_id(self, step_handler_context: StepHandlerContext) -> str:
+        MAX_ID_LEN = 64  # max length of azure batch task id
+        PREFIX = "dg-"
+        SHORT_RUN_ID_LEN = 8
         run = step_handler_context.dagster_run
+
+        short_run_id = run.run_id.split("-", 1)[0]  # always 8 chars
+
         step_key = self._get_step_key(step_handler_context)
-        partition_key: str = run.tags.get("dagster/partition") or ""
-        task_id = f"dagster-step-{step_key}"
+
+        partition_key = run.tags.get("dagster/partition") or ""
         if partition_key:
-            partition_key = partition_key.replace(
-                "|", "_"
-            )  # | char not valid for Batch
-            task_id = f"{task_id}-{partition_key}"
+            partition_key = partition_key.replace("|", "_")
 
         if step_handler_context.execute_step_args.known_state:
-            retry_count = step_handler_context.execute_step_args.known_state.get_retry_state().get_attempt_count(
-                step_key
+            retry_count = (
+                step_handler_context
+                .execute_step_args.known_state
+                .get_retry_state()
+                .get_attempt_count(step_key)
             )
         else:
             retry_count = 0
-        return f"{task_id}-{run.run_id}-{retry_count}"  # append run_id to make task unique within job
 
-    from azure.batch.models import JobAddParameter, PoolInformation, BatchErrorException
+        retry_str = str(retry_count)
+
+        # ---- budget calculation ----
+        fixed_len = (
+            len(PREFIX)
+            + SHORT_RUN_ID_LEN
+            + len(retry_str)
+            + 3 if partition_key else 2  # separators: step-part-run-retry
+        )
+
+        remaining = MAX_ID_LEN - fixed_len
+        if remaining <= 0:
+            raise ValueError("Fixed ID components exceed max length")
+
+        # split remaining budget evenly
+        step_budget = remaining // 2
+        part_budget = remaining - step_budget
+
+        step_key = self._clamp_with_hash(step_key, step_budget)
+        if partition_key:
+            partition_key = self._clamp_with_hash(partition_key, part_budget)
+
+        # ---- final assembly ----
+        if partition_key:
+            return f"{PREFIX}{step_key}-{partition_key}-{short_run_id}-{retry_str}"
+        else:
+            return f"{PREFIX}{step_key}-{short_run_id}-{retry_str}"
 
     def _get_or_create_job(self, batch_client, job_id: str, pool_id: str):
         pool_info = PoolInformation(pool_id=pool_id)
