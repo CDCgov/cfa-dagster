@@ -286,7 +286,14 @@ class AzureBatchStepHandler(StepHandler):
                 "|", "_"
             )  # | char not valid for Batch
             task_id = f"{task_id}-{partition_key}"
-        return f"{task_id}-{run.run_id}"  # append run_id to make task unique within job
+
+        if step_handler_context.execute_step_args.known_state:
+            retry_count = step_handler_context.execute_step_args.known_state.get_retry_state().get_attempt_count(
+                step_key
+            )
+        else:
+            retry_count = 0
+        return f"{task_id}-{run.run_id}-{retry_count}"  # append run_id to make task unique within job
 
     from azure.batch.models import JobAddParameter, PoolInformation, BatchErrorException
 
