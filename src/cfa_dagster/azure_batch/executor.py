@@ -15,7 +15,6 @@ from azure.batch.models import (
     ContainerRegistry,
     ElevationLevel,
     JobAddParameter,
-    OnAllTasksComplete,
     PoolInformation,
     TaskAddParameter,
     TaskContainerSettings,
@@ -242,63 +241,40 @@ class AzureBatchStepHandler(StepHandler):
     def _get_job_id(self, step_handler_context: StepHandlerContext):
         """
         Creates a unique job id for Azure Batch
-        Automatically tries to generate based off a schedule or sensor tick id
-        falling back to a backfill id, finally falling back to a run id
 
-        The schedule/sensor tick id is seeded by user and the current date to
-        avoid collisions. The date component means that it is possible
-        for a triggered job to put tasks into two different Batch job ids
-        if the job is launched before midnight and some of the runs don't start
-        until after midnight.
-        The main priority of using a semi-stable job id is to avoid creating
-        more Batch jobs than Azure can handle, so one trigger launching two
-        Batch jobs is acceptable
+        The job id is a uuidv5 generated based on the DAGSTER_USER env
+        variable, the pool_id, the code location name, and the current hour.
+
+        This ensures tasks are logically grouped into jobs without running into
+        the max active job limit imposed by Batch. Since the job id is scoped to
+        the current hour, jobs without active tasks can safely be cleaned up by a
+        background process.
         """
         run = step_handler_context.dagster_run
 
-        tag_tick_id = run.tags.get("dagster/tick")
-        backfill_id = run.tags.get("dagster/backfill")
+        location_name = (
+            run.remote_job_origin
+            .repository_origin
+            .code_location_origin
+            .location_name
+        )
+        dagster_user = os.getenv("DAGSTER_USER")
+        current_hour = datetime.now(timezone.utc).date().strftime("%Y-%m-%dT%H")
+        log.debug(f"dagster_user: '{dagster_user}'")
+        log.debug(f"pool_id: '{self._pool_id}'")
+        log.debug(f"location_name: '{location_name}'")
+        log.debug(f"current_hour: '{current_hour}'")
+        base_id = uuid.uuid5(
+            uuid.NAMESPACE_DNS,
+            ":".join([
+                dagster_user,
+                self._pool_id,
+                location_name,
+                current_hour,
+            ])
+        )
 
-        base_id = run.run_id
-
-        if tag_tick_id:
-            tag_schedule_name = run.tags.get("dagster/schedule_name")
-            tag_sensor_name = run.tags.get("dagster/sensor_name")
-
-            match (tag_schedule_name, tag_sensor_name):
-                case (str() as schedule, None):
-                    kind = "schedule"
-                    owner = schedule
-                case (None, str() as sensor):
-                    kind = "sensor"
-                    owner = sensor
-                case (None, None):
-                    raise ValueError(
-                        "Run has dagster/ticket but neither schedule nor "
-                        "sensor tag"
-                    )
-                case _:
-                    raise ValueError(
-                        "Run has both schedule and sensor tags - "
-                        "unexpected state"
-                    )
-
-            base_id = uuid.uuid5(
-                uuid.NAMESPACE_DNS,
-                ":".join([
-                    datetime.now(timezone.utc).date().isoformat(),
-                    os.getenv("DAGSTER_USER"),
-                    kind,
-                    owner,
-                    tag_tick_id
-                ])
-            )
-        elif backfill_id:
-            base_id = backfill_id
-        else:
-            base_id = run.run_id
-
-        return f"dagster-run-{base_id}"
+        return f"dagster-{base_id}"
 
     def _get_task_id(self, step_handler_context: StepHandlerContext):
         run = step_handler_context.dagster_run
@@ -311,6 +287,39 @@ class AzureBatchStepHandler(StepHandler):
             )  # | char not valid for Batch
             task_id = f"{task_id}-{partition_key}"
         return task_id
+
+    from azure.batch.models import JobAddParameter, PoolInformation, BatchErrorException
+
+    def _get_or_create_job(self, batch_client, job_id: str, pool_id: str):
+        pool_info = PoolInformation(pool_id=pool_id)
+
+        job = JobAddParameter(
+            id=job_id,
+            pool_info=pool_info,
+        )
+
+        try:
+            batch_client.job.add(job)
+            log.info(f"Created Batch job {job_id}")
+            return batch_client.job.get(job_id)
+
+        except BatchErrorException as err:
+            if err.error.code != "JobExists":
+                raise
+
+            # Job was created by another thread/process
+            log.debug(f"Batch job {job_id} already exists")
+
+            existing_job = batch_client.job.get(job_id)
+
+            # Optional but recommended safety check
+            if existing_job.pool_info.pool_id != pool_id:
+                raise RuntimeError(
+                    f"Batch job {job_id} exists but is bound to pool "
+                    f"{existing_job.pool_info.pool_id}, expected {pool_id}"
+                )
+
+            return existing_job
 
     def launch_step(
         self, step_handler_context: StepHandlerContext
@@ -326,19 +335,7 @@ class AzureBatchStepHandler(StepHandler):
         job_id = self._get_job_id(step_handler_context)
         log.debug(f"job_id: '{job_id}'")
 
-        pool_info = PoolInformation(pool_id=self._pool_id)
-        job = JobAddParameter(
-            id=job_id,
-            pool_info=pool_info,
-            on_all_tasks_complete=OnAllTasksComplete.terminate_job
-        )
-        try:
-            self._batch_client.job.add(job)
-        except BatchErrorException as err:
-            if err.error.code != "JobExists":
-                raise
-            else:
-                log.debug(f"Job {job_id} already exists.")
+        self._get_or_create_job(self._batch_client, job_id, self._pool_id)
 
         env_vars = dict(
             [parse_env_var(env_var) for env_var in container_context.env_vars]
@@ -399,7 +396,9 @@ class AzureBatchStepHandler(StepHandler):
 
         yield DagsterEvent.step_worker_starting(
             step_handler_context.get_step_context(step_key),
-            message=f"Launching step in Azure Batch job: {job_id}.",
+            message=(
+                f"Launching step in task {task_id}, Azure Batch job: {job_id}."
+            ),
             metadata={
                 "Azure Batch Job ID": job_id,
                 "Azure Batch Pool ID": self._pool_id,
