@@ -286,7 +286,7 @@ class AzureBatchStepHandler(StepHandler):
                 "|", "_"
             )  # | char not valid for Batch
             task_id = f"{task_id}-{partition_key}"
-        return task_id
+        return task_id + uuid.uuid4()
 
     from azure.batch.models import JobAddParameter, PoolInformation, BatchErrorException
 
