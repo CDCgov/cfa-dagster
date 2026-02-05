@@ -9,9 +9,25 @@ from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.mgmt.containerinstance import ContainerInstanceManagementClient
 from azure.mgmt.loganalytics import LogAnalyticsManagementClient
 from azure.mgmt.resource.subscriptions import SubscriptionClient
+from azure.batch import BatchServiceClient
+from azure.core.credentials import TokenCredential
+from msrest.authentication import BasicTokenAuthentication
+from azure.batch.models import (
+    BatchErrorException,
+    JobState,
+    TaskState,
+    JobListOptions,
+    TaskListOptions
+)
 
-from cfa_dagster.azure_adls2.io_manager import ADLS2PickleIOManager
+from datetime import datetime, timedelta, timezone
+
+from cfa_dagster import (
+    AzureContainerAppJobRunLauncher,
+    ADLS2PickleIOManager
+)
 from cfa_dagster.utils import collect_definitions, start_dev_env
+from typing import List
 
 # Start the Dagster UI and set necessary env vars
 start_dev_env(__name__)
@@ -25,6 +41,120 @@ CODE_LOCATION_DIR = "/opt/dagster/code_location"
 TMP_VENV_DIR = "/tmp/venv"
 WORKSPACE_YAML_PATH = "/opt/dagster/dagster_home/workspace.yaml"
 GRAPHQL_URL = "http://dagster.apps.edav.ext.cdc.gov/graphql"
+
+
+def find_stale_dagster_jobs(
+    batch_client: BatchServiceClient,
+    idle_threshold: timedelta,
+) -> List[str]:
+    stale_job_ids: List[str] = []
+
+    jobs = batch_client.job.list(
+        job_list_options=JobListOptions(
+            filter="startswith(id,'dagster-') and state eq 'active'",
+            select="id",
+        ),
+    )
+
+    cutoff = (datetime.now(timezone.utc) - idle_threshold).isoformat()
+
+    for job in jobs:
+        job_id = job.id
+
+        # 1️⃣ Any active tasks? → skip
+        active_tasks = batch_client.task.list(
+            job_id,
+            task_list_options=TaskListOptions(
+                filter=(
+                    "state eq 'active' or "
+                        "state eq 'running' or "
+                        "state eq 'preparing'"
+                ),
+                max_results=1,
+                select="id",
+            )
+        )
+
+        if any(True for _ in active_tasks):
+            print(f"Job '{job_id}' has active tasks, skipping...")
+            continue
+
+        # 2️⃣ Any recently-created tasks? → skip
+        recent_tasks = batch_client.task.list(
+            job_id,
+            task_list_options=TaskListOptions(
+                filter=f"creationTime ge {cutoff}",
+                max_results=1,
+                select="id",
+            )
+        )
+
+        if any(True for _ in recent_tasks):
+            print(f"Job '{job_id}' has recent tasks, skipping...")
+            continue
+
+        # No active tasks + no recent tasks → stale
+        stale_job_ids.append(job_id)
+
+    return stale_job_ids
+
+
+@dg.op(required_resource_keys={"batch_client"})
+def cleanup_stale_batch_jobs(
+    context: dg.OpExecutionContext,
+):
+    batch_client = context.resources.batch_client
+    idle_threshold = timedelta(hours=1)
+
+    stale_jobs = find_stale_dagster_jobs(
+        batch_client=batch_client,
+        idle_threshold=idle_threshold,
+    )
+
+    if not stale_jobs:
+        context.log.info("No stale dagster Batch jobs found.")
+        return
+
+    for job_id in stale_jobs:
+        try:
+            context.log.info(f"Terminating idle Batch job: {job_id}")
+            batch_client.job.terminate(job_id)
+        except BatchErrorException as err:
+            context.log.warning(
+                f"Failed to terminate job {job_id}: "
+                f"{err.error.code if err.error else err}"
+            )
+
+class AzureIdentityCredentialAdapter(BasicTokenAuthentication):
+    def __init__(self, credential: TokenCredential, scope: str):
+        super().__init__(None)
+        self._credential = credential
+        self._scope = scope
+
+    def signed_session(self, session):
+        token = self._credential.get_token(self._scope)
+        session.headers["Authorization"] = f"Bearer {token.token}"
+        return session
+
+
+@dg.resource
+def batch_client_resource():
+    credential = DefaultAzureCredential()
+
+    adapter = AzureIdentityCredentialAdapter(
+        credential=credential,
+        scope="https://batch.core.windows.net/.default",
+    )
+
+    return BatchServiceClient(
+        credentials=adapter,
+        batch_url="https://cfaprdba.eastus.batch.azure.com",
+    )
+
+
+@dg.job(resource_defs={"batch_client": batch_client_resource})
+def cleanup_dagster_batch_jobs():
+    cleanup_stale_batch_jobs()
 
 
 @dg.op(out={"registry_image": dg.Out(str), "code_location_name": dg.Out(str)})
@@ -347,6 +477,12 @@ def restart_webserver():
 def reload_workspace():
     reload_dagster_workspace()
 
+
+cleanup_batch_schedule = dg.ScheduleDefinition(
+    job=cleanup_dagster_batch_jobs,
+    cron_schedule="0 */3 * * *",
+    execution_timezone="America/Los_Angeles",
+)
 
 # collect Dagster definitions from the current file
 collected_defs = collect_definitions(globals())
