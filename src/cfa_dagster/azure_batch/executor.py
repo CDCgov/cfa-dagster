@@ -1,6 +1,9 @@
+import hashlib
 import logging
 import os
+import uuid
 from collections.abc import Iterator
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional, cast
 
 import dagster._check as check
@@ -237,25 +240,130 @@ class AzureBatchStepHandler(StepHandler):
         return step_keys_to_execute[0]
 
     def _get_job_id(self, step_handler_context: StepHandlerContext):
-        run = step_handler_context.dagster_run
-        backfill_id = run.tags.get("dagster/backfill")
-        log.debug(f"backfill_id: '{backfill_id}'")
-        log.debug(f"run_id: '{run.run_id}'")
-        id = backfill_id or run.run_id
-        job_id = f"dagster-run-{id}"
-        return job_id
+        """
+        Creates a unique job id for Azure Batch
 
-    def _get_task_id(self, step_handler_context: StepHandlerContext):
+        The job id is a uuidv5 generated based on the DAGSTER_USER env
+        variable, the pool_id, the code location name, and the current hour.
+
+        This ensures tasks are logically grouped into jobs without running into
+        the max active job limit imposed by Batch. Since the job id is scoped to
+        the current hour, jobs without active tasks can safely be cleaned up by a
+        background process.
+        """
         run = step_handler_context.dagster_run
+
+        location_name = run.remote_job_origin.repository_origin.code_location_origin.location_name
+        dagster_user = os.getenv("DAGSTER_USER")
+        current_hour = (
+            datetime.now(timezone.utc).date().strftime("%Y-%m-%dT%H")
+        )
+        log.debug(f"dagster_user: '{dagster_user}'")
+        log.debug(f"pool_id: '{self._pool_id}'")
+        log.debug(f"location_name: '{location_name}'")
+        log.debug(f"current_hour: '{current_hour}'")
+        base_id = uuid.uuid5(
+            uuid.NAMESPACE_DNS,
+            ":".join(
+                [
+                    dagster_user,
+                    self._pool_id,
+                    location_name,
+                    current_hour,
+                ]
+            ),
+        )
+
+        return f"dagster-{base_id}"
+
+    def _clamp_with_hash(self, value: str, max_len: int) -> str:
+        if len(value) <= max_len:
+            return value
+
+        # Reserve 6 chars for hash + "-"
+        hash_len = 6
+        keep_len = max_len - hash_len - 1
+        digest = hashlib.sha1(value.encode()).hexdigest()[:hash_len]
+        return f"{value[:keep_len]}-{digest}"
+
+    def _get_task_id(self, step_handler_context: StepHandlerContext) -> str:
+        MAX_ID_LEN = 64  # max length of azure batch task id
+        PREFIX = "dg-"
+        SHORT_RUN_ID_LEN = 8
+        run = step_handler_context.dagster_run
+
+        short_run_id = run.run_id.split("-", 1)[0]  # always 8 chars
+
         step_key = self._get_step_key(step_handler_context)
-        partition_key: str = run.tags.get("dagster/partition") or ""
-        task_id = f"dagster-step-{step_key}"
+
+        partition_key = run.tags.get("dagster/partition") or ""
         if partition_key:
-            partition_key = partition_key.replace(
-                "|", "_"
-            )  # | char not valid for Batch
-            task_id = f"{task_id}-{partition_key}"
-        return task_id
+            partition_key = partition_key.replace("|", "_")
+
+        if step_handler_context.execute_step_args.known_state:
+            retry_count = step_handler_context.execute_step_args.known_state.get_retry_state().get_attempt_count(
+                step_key
+            )
+        else:
+            retry_count = 0
+
+        retry_str = str(retry_count)
+
+        # ---- budget calculation ----
+        fixed_len = (
+            len(PREFIX) + SHORT_RUN_ID_LEN + len(retry_str) + 3
+            if partition_key
+            else 2  # separators: step-part-run-retry
+        )
+
+        remaining = MAX_ID_LEN - fixed_len
+        if remaining <= 0:
+            raise ValueError("Fixed ID components exceed max length")
+
+        # split remaining budget evenly
+        step_budget = remaining // 2
+        part_budget = remaining - step_budget
+
+        step_key = self._clamp_with_hash(step_key, step_budget)
+        if partition_key:
+            partition_key = self._clamp_with_hash(partition_key, part_budget)
+
+        # ---- final assembly ----
+        if partition_key:
+            return f"{PREFIX}{step_key}-{partition_key}-{short_run_id}-{retry_str}"
+        else:
+            return f"{PREFIX}{step_key}-{short_run_id}-{retry_str}"
+
+    def _get_or_create_job(self, batch_client, job_id: str, pool_id: str):
+        pool_info = PoolInformation(pool_id=pool_id)
+
+        job = JobAddParameter(
+            id=job_id,
+            pool_info=pool_info,
+        )
+
+        try:
+            batch_client.job.add(job)
+            log.info(f"Created Batch job {job_id}")
+            return batch_client.job.get(job_id)
+
+        except BatchErrorException as err:
+            if err.error.code != "JobExists":
+                raise
+
+            # Job was created by another thread/process
+            log.debug(f"Batch job {job_id} already exists")
+
+            existing_job = batch_client.job.get(job_id)
+
+            # Should never happen since pool_id is factored into job_id hash
+            if existing_job.pool_info.pool_id != pool_id:
+                raise RuntimeError(
+                    f"Batch job {job_id} exists but is bound to pool "
+                    f"{existing_job.pool_info.pool_id}, expected {pool_id}"
+                )
+
+            return existing_job
 
     def launch_step(
         self, step_handler_context: StepHandlerContext
@@ -269,16 +377,9 @@ class AzureBatchStepHandler(StepHandler):
         execute_step_args = step_handler_context.execute_step_args
 
         job_id = self._get_job_id(step_handler_context)
+        log.debug(f"job_id: '{job_id}'")
 
-        pool_info = PoolInformation(pool_id=self._pool_id)
-        job = JobAddParameter(id=job_id, pool_info=pool_info)
-        try:
-            self._batch_client.job.add(job)
-        except BatchErrorException as err:
-            if err.error.code != "JobExists":
-                raise
-            else:
-                log.debug(f"Job {job_id} already exists.")
+        self._get_or_create_job(self._batch_client, job_id, self._pool_id)
 
         env_vars = dict(
             [parse_env_var(env_var) for env_var in container_context.env_vars]
@@ -339,7 +440,9 @@ class AzureBatchStepHandler(StepHandler):
 
         yield DagsterEvent.step_worker_starting(
             step_handler_context.get_step_context(step_key),
-            message=f"Launching step in Azure Batch job: {job_id}.",
+            message=(
+                f"Launching step in task {task_id}, Azure Batch job: {job_id}."
+            ),
             metadata={
                 "Azure Batch Job ID": job_id,
                 "Azure Batch Pool ID": self._pool_id,

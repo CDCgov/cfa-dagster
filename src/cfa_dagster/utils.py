@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import quote
 
 import dagster as dg
 import psycopg2
@@ -12,6 +13,33 @@ from dagster._core.definitions.unresolved_asset_job_definition import (
 )
 from dagster_graphql import DagsterGraphQLClient
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+
+LOCAL_HOSTNAME = "127.0.0.1"
+LOCAL_PORT = 3000
+PROD_HOSTNAME = os.getenv(
+    "DAGSTER_WEBSERVER_URL", "dagster.apps.edav.ext.cdc.gov"
+)
+
+
+def get_webserver_url() -> str:
+    if os.getenv("DAGSTER_IS_DEV_CLI"):  # set by dagster cli
+        return f"http://{LOCAL_HOSTNAME}:{LOCAL_PORT}"
+    else:
+        return f"https://{PROD_HOSTNAME}"
+
+
+def get_runs_url_for_tag(tag_key: str, tag_value: str) -> str:
+    encoded_value = quote(f"tag:{tag_key}={tag_value}")
+    return f"{get_webserver_url()}/runs?q[0]={encoded_value}"
+
+
+def get_graphql_client() -> DagsterGraphQLClient:
+    if os.getenv("DAGSTER_IS_DEV_CLI"):  # set by dagster cli
+        return DagsterGraphQLClient(
+            hostname=LOCAL_HOSTNAME, port_number=LOCAL_PORT
+        )
+    else:
+        return DagsterGraphQLClient(hostname=PROD_HOSTNAME)
 
 
 def create_dev_env():
@@ -153,9 +181,9 @@ def start_dev_env(caller_name: str):
                     "dagster",
                     "dev",
                     "-h",
-                    "127.0.0.1",
+                    LOCAL_HOSTNAME,
                     "-p",
-                    "3000",
+                    f"{LOCAL_PORT}",
                     "-f",
                     script,
                 ]
@@ -226,11 +254,7 @@ def launch_asset_backfill(
     """
     Function to launch an asset backfill via the GraphQL client
     """
-
-    if os.getenv("DAGSTER_IS_DEV_CLI"):  # set by dagster cli
-        client = DagsterGraphQLClient(hostname="127.0.0.1", port_number=3000)
-    else:
-        client = DagsterGraphQLClient(hostname="dagster.apps.edav.ext.cdc.gov")
+    client = get_graphql_client()
 
     query = """
     mutation LaunchPartitionBackfill(

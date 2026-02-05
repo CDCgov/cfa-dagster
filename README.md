@@ -6,7 +6,7 @@ This repo serves as the base for CFA's Dagster software including custom executo
 
 ## What is Dagster?
 
-[Dagster](https://docs.dagster.io/) is an orchestration platform that provides observability into your workflows as they are transparently executed in either local or cloud environments. 
+[Dagster](https://docs.dagster.io/) is an orchestration platform that provides observability into your workflows as they are transparently executed in either local or cloud environments.
 
 Dagster unifies logic that is often distributed between GitHub Actions workflows, Makefiles, Bash and Python Scripts, and configured in the Azure Portal.
 
