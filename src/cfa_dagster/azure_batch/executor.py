@@ -1,5 +1,5 @@
-import logging
 import hashlib
+import logging
 import os
 import uuid
 from collections.abc import Iterator
@@ -253,26 +253,25 @@ class AzureBatchStepHandler(StepHandler):
         """
         run = step_handler_context.dagster_run
 
-        location_name = (
-            run.remote_job_origin
-            .repository_origin
-            .code_location_origin
-            .location_name
-        )
+        location_name = run.remote_job_origin.repository_origin.code_location_origin.location_name
         dagster_user = os.getenv("DAGSTER_USER")
-        current_hour = datetime.now(timezone.utc).date().strftime("%Y-%m-%dT%H")
+        current_hour = (
+            datetime.now(timezone.utc).date().strftime("%Y-%m-%dT%H")
+        )
         log.debug(f"dagster_user: '{dagster_user}'")
         log.debug(f"pool_id: '{self._pool_id}'")
         log.debug(f"location_name: '{location_name}'")
         log.debug(f"current_hour: '{current_hour}'")
         base_id = uuid.uuid5(
             uuid.NAMESPACE_DNS,
-            ":".join([
-                dagster_user,
-                self._pool_id,
-                location_name,
-                current_hour,
-            ])
+            ":".join(
+                [
+                    dagster_user,
+                    self._pool_id,
+                    location_name,
+                    current_hour,
+                ]
+            ),
         )
 
         return f"dagster-{base_id}"
@@ -302,11 +301,8 @@ class AzureBatchStepHandler(StepHandler):
             partition_key = partition_key.replace("|", "_")
 
         if step_handler_context.execute_step_args.known_state:
-            retry_count = (
-                step_handler_context
-                .execute_step_args.known_state
-                .get_retry_state()
-                .get_attempt_count(step_key)
+            retry_count = step_handler_context.execute_step_args.known_state.get_retry_state().get_attempt_count(
+                step_key
             )
         else:
             retry_count = 0
@@ -315,10 +311,9 @@ class AzureBatchStepHandler(StepHandler):
 
         # ---- budget calculation ----
         fixed_len = (
-            len(PREFIX)
-            + SHORT_RUN_ID_LEN
-            + len(retry_str)
-            + 3 if partition_key else 2  # separators: step-part-run-retry
+            len(PREFIX) + SHORT_RUN_ID_LEN + len(retry_str) + 3
+            if partition_key
+            else 2  # separators: step-part-run-retry
         )
 
         remaining = MAX_ID_LEN - fixed_len
@@ -361,7 +356,7 @@ class AzureBatchStepHandler(StepHandler):
 
             existing_job = batch_client.job.get(job_id)
 
-            # Optional but recommended safety check
+            # Should never happen since pool_id is factored into job_id hash
             if existing_job.pool_info.pool_id != pool_id:
                 raise RuntimeError(
                     f"Batch job {job_id} exists but is bound to pool "

@@ -1,31 +1,30 @@
-import logging
 import json
-from dagster._utils.merger import merge_dicts
-from dagster._core.execution.context.system import PlanOrchestrationContext
-from dagster._core.execution.plan.plan import ExecutionPlan
+import logging
 import os
 
-from dagster import executor
 import dagster._check as check
-
+from dagster import (
+    ExecutorDefinition,
+    executor,
+    in_process_executor,
+    multiprocess_executor,
+)
+from dagster._config import Selector, Shape
+from dagster._core.execution.context.system import PlanOrchestrationContext
+from dagster._core.execution.plan.plan import ExecutionPlan
 from dagster._core.execution.step_dependency_config import (
     StepDependencyConfig,
 )
 from dagster._core.executor.base import Executor
 from dagster._core.executor.init import InitExecutorContext
 from dagster._core.executor.step_delegating import StepDelegatingExecutor
-from dagster import (
-    in_process_executor,
-    multiprocess_executor,
-    ExecutorDefinition
-)
-from cfa_dagster import (
-    azure_container_app_job_executor,
-    azure_batch_executor,
-    docker_executor
-)
-from dagster._config import Shape, Selector
+from dagster._utils.merger import merge_dicts
 
+from cfa_dagster import (
+    azure_batch_executor,
+    azure_container_app_job_executor,
+    docker_executor,
+)
 
 log = logging.getLogger(__name__)
 
@@ -95,7 +94,9 @@ class DynamicExecutor(Executor):
     def step_dependency_config(self) -> StepDependencyConfig:
         return self._executor.step_dependency_config
 
-    def _create_executor(self, executor_config: dict) -> StepDelegatingExecutor:
+    def _create_executor(
+        self, executor_config: dict
+    ) -> StepDelegatingExecutor:
         is_production = not os.getenv("DAGSTER_IS_DEV_CLI")
         executor_class_name = executor_config.get("class")
         match (is_production, executor_class_name):
@@ -129,14 +130,13 @@ class DynamicExecutor(Executor):
         log.debug(f"default_config: '{default_config}'")
 
         config = merge_dicts(
-            executor_config.get("config", default_config),
-            default_config
+            executor_config.get("config", default_config), default_config
         )
 
         # default executors throw an error for env vars
         if executor_class_name not in (
             in_process_executor.__name__,
-            multiprocess_executor.__name__
+            multiprocess_executor.__name__,
         ):
             env_vars = config.get("env_vars", [])
             # Need to check if env vars are present first or
@@ -167,9 +167,11 @@ class DynamicExecutor(Executor):
     def execute(
         self,
         plan_context: PlanOrchestrationContext,
-        execution_plan: ExecutionPlan
+        execution_plan: ExecutionPlan,
     ):
-        check.inst_param(plan_context, "plan_context", PlanOrchestrationContext)
+        check.inst_param(
+            plan_context, "plan_context", PlanOrchestrationContext
+        )
         check.inst_param(execution_plan, "execution_plan", ExecutionPlan)
         tags = plan_context.plan_data.dagster_run.tags
         executor_config = self._get_executor_config_from_tags(tags)

@@ -17,8 +17,7 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 LOCAL_HOSTNAME = "127.0.0.1"
 LOCAL_PORT = 3000
 PROD_HOSTNAME = os.getenv(
-    "DAGSTER_WEBSERVER_URL",
-    "dagster.apps.edav.ext.cdc.gov"
+    "DAGSTER_WEBSERVER_URL", "dagster.apps.edav.ext.cdc.gov"
 )
 
 
@@ -37,8 +36,7 @@ def get_runs_url_for_tag(tag_key: str, tag_value: str) -> str:
 def get_graphql_client() -> DagsterGraphQLClient:
     if os.getenv("DAGSTER_IS_DEV_CLI"):  # set by dagster cli
         return DagsterGraphQLClient(
-            hostname=LOCAL_HOSTNAME,
-            port_number=LOCAL_PORT
+            hostname=LOCAL_HOSTNAME, port_number=LOCAL_PORT
         )
     else:
         return DagsterGraphQLClient(hostname=PROD_HOSTNAME)

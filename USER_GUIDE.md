@@ -1,4 +1,4 @@
-# User Guide for cfa-dagster 
+# User Guide for cfa-dagster
 
 ## Purpose
 
@@ -29,4 +29,3 @@ Your `Dockerfile` must:
 - Sync Dagster's python dependencies and add them to the `PATH`
 
 If your repo already has a `pyproject.toml` it is recommended to add your Dagster dependencies there instead of directly in the `dagster_defs.py`. That will allow your python package manager (`uv`) to perform dependency resolution and detect any conflicts.
-
