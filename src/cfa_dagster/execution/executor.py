@@ -47,35 +47,6 @@ VALID_EXECUTORS = [
 ]
 
 
-def extract_defaults_from_user_schema(user_schema):
-    field = user_schema.as_field()
-
-    def walk(config_type):
-        if isinstance(config_type, Shape):
-            result = {}
-            for name, subfield in config_type.fields.items():
-                if subfield.default_provided:
-                    result[name] = subfield.default_value
-                else:
-                    nested = walk(subfield.config_type)
-                    if nested:
-                        result[name] = nested
-            return result
-
-        if isinstance(config_type, Selector):
-            if config_type.default_option:
-                key = config_type.default_option
-                return {key: walk(config_type.fields[key].config_type)}
-            return {}
-
-        return {}
-
-    if field.default_provided:
-        return field.default_value
-
-    return walk(field.config_type)
-
-
 def create_executor(
     init_context: InitExecutorContext,
     execution_config: ExecutionConfig,
