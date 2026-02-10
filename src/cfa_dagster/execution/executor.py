@@ -3,9 +3,9 @@ import os
 
 import dagster._check as check
 from dagster import (
+    ExecutorDefinition,
     Selector,
     Shape,
-    ExecutorDefinition,
     executor,
     in_process_executor,
     multiprocess_executor,
@@ -18,17 +18,17 @@ from dagster._core.execution.step_dependency_config import (
 from dagster._core.executor.base import Executor
 from dagster._core.executor.init import InitExecutorContext
 from dagster._core.executor.step_delegating import StepDelegatingExecutor
-from dagster._utils.merger import merge_dicts
 
 from cfa_dagster import (
     azure_batch_executor,
     azure_container_app_job_executor,
     docker_executor,
 )
+
 from .utils import (
     ExecutionConfig,
     SelectorConfig,
-    DYNAMIC_EXECUTOR_CONFIG_SCHEMA,
+    get_dynamic_executor_config_schema,
 )
 
 log = logging.getLogger(__name__)
@@ -98,22 +98,12 @@ def create_executor(
             f"{VALID_EXECUTORS}"
         )
 
-    # TODO: replace this with process_config?
-    default_config = extract_defaults_from_user_schema(
-        executor_class.config_schema
-    )
-    log.debug(f"default_config: '{default_config}'")
-
-    config = merge_dicts(
-        executor_config, default_config
-    )
-
     # default executors throw an error for env vars
     if executor_class_name not in (
         in_process_executor.__name__,
         multiprocess_executor.__name__,
     ):
-        env_vars = config.get("env_vars", [])
+        env_vars = executor_config.get("env_vars", [])
         # Need to check if env vars are present first or
         # each run will append them again
         if "DAGSTER_USER" not in env_vars:
@@ -122,9 +112,9 @@ def create_executor(
             "DAGSTER_IS_DEV_CLI"
         ):
             env_vars.append("DAGSTER_IS_DEV_CLI")
-        config["env_vars"] = env_vars
+        executor_config["env_vars"] = env_vars
 
-    updated_context = init_context._replace(executor_config=config)
+    updated_context = init_context._replace(executor_config=executor_config)
     run_executor = executor_class.executor_creation_fn(updated_context)
     log.debug(f"run_executor: '{run_executor}'")
     return run_executor
@@ -140,10 +130,9 @@ class DynamicExecutor(Executor):
             init_context,
             ExecutionConfig(
                 executor=SelectorConfig(
-                    class_name=multiprocess_executor.__name__,
-                    config={}
+                    class_name=multiprocess_executor.__name__, config={}
                 )
-            )
+            ),
         )
 
     @property
@@ -183,35 +172,24 @@ class DynamicExecutor(Executor):
             log.debug(f"metadata: '{metadata}'")
             execution_config = ExecutionConfig.from_metadata(metadata)
         if not execution_config.executor:
-            raise RuntimeError("No executor found in run config, tags, or Definitions.metadata!")
-        self._executor = create_executor(
-            self._init_context,
-            execution_config
-        )
+            raise RuntimeError(
+                "No executor found in run config, tags, or Definitions.metadata!"
+            )
+        self._executor = create_executor(self._init_context, execution_config)
         return self._executor.execute(plan_context, execution_plan)
 
 
-@executor(
-    config_schema=DYNAMIC_EXECUTOR_CONFIG_SCHEMA,
-    name="dynamic_executor"
-)
-def dynamic_executor(
-    init_context: InitExecutorContext,
-) -> Executor:
-    """Dynamic executor that chooses an executor based on the `cfa_dagster/executor` tag"""
-    config = init_context.executor_config
-    execution_config = ExecutionConfig.from_executor_config(config)
-
-    # this is the config from the Launchpad
-    log.debug(f"execution_config: '{execution_config}'")
-
-    # executor default provided by config schema if left blank
-    if execution_config.executor.class_name == "dynamic_executor":
-        return DynamicExecutor(
-            init_context=init_context,
-        )
-
-    return create_executor(
-        init_context,
-        execution_config
+def dynamic_executor():
+    @executor(
+        config_schema=get_dynamic_executor_config_schema(),
+        name="dynamic_executor",
     )
+    def dynamic_executor(
+        init_context: InitExecutorContext,
+    ) -> Executor:
+        """Dynamic executor that chooses an executor based on the `cfa_dagster/executor` tag"""
+        config = init_context.executor_config
+        execution_config = ExecutionConfig.from_executor_config(config)
+        return create_executor(init_context, execution_config)
+
+    return dynamic_executor

@@ -1,33 +1,27 @@
 #!/usr/bin/env -S uv run --script
 import os
+from datetime import datetime, timedelta, timezone
+from typing import List
 
 import dagster as dg
 import requests
 import yaml
+from azure.batch import BatchServiceClient
+from azure.batch.models import (
+    BatchErrorException,
+    JobListOptions,
+    TaskListOptions,
+)
+from azure.core.credentials import TokenCredential
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.mgmt.containerinstance import ContainerInstanceManagementClient
 from azure.mgmt.loganalytics import LogAnalyticsManagementClient
 from azure.mgmt.resource.subscriptions import SubscriptionClient
-from azure.batch import BatchServiceClient
-from azure.core.credentials import TokenCredential
 from msrest.authentication import BasicTokenAuthentication
-from azure.batch.models import (
-    BatchErrorException,
-    JobState,
-    TaskState,
-    JobListOptions,
-    TaskListOptions
-)
 
-from datetime import datetime, timedelta, timezone
-
-from cfa_dagster import (
-    AzureContainerAppJobRunLauncher,
-    ADLS2PickleIOManager
-)
+from cfa_dagster import ADLS2PickleIOManager
 from cfa_dagster.utils import collect_definitions, start_dev_env
-from typing import List
 
 # Start the Dagster UI and set necessary env vars
 start_dev_env(__name__)
@@ -67,12 +61,12 @@ def find_stale_dagster_jobs(
             task_list_options=TaskListOptions(
                 filter=(
                     "state eq 'active' or "
-                        "state eq 'running' or "
-                        "state eq 'preparing'"
+                    "state eq 'running' or "
+                    "state eq 'preparing'"
                 ),
                 max_results=1,
                 select="id",
-            )
+            ),
         )
 
         if any(True for _ in active_tasks):
@@ -86,7 +80,7 @@ def find_stale_dagster_jobs(
                 filter=f"creationTime ge {cutoff}",
                 max_results=1,
                 select="id",
-            )
+            ),
         )
 
         if any(True for _ in recent_tasks):
@@ -124,6 +118,7 @@ def cleanup_stale_batch_jobs(
                 f"Failed to terminate job {job_id}: "
                 f"{err.error.code if err.error else err}"
             )
+
 
 class AzureIdentityCredentialAdapter(BasicTokenAuthentication):
     def __init__(self, credential: TokenCredential, scope: str):

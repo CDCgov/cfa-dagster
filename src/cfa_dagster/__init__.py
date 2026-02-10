@@ -11,8 +11,9 @@ from .azure_container_app_job.launcher import AzureContainerAppJobRunLauncher
 from .docker.executor import docker_executor
 from .execution import (
     DynamicRunLauncher,
-    dynamic_executor,
     ExecutionConfig,
+    SelectorConfig,
+    dynamic_executor,
 )
 from .utils import (
     collect_definitions,

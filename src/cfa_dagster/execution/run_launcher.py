@@ -23,13 +23,11 @@ from dagster._serdes.config_class import ConfigurableClassData
 from dagster_docker import DockerRunLauncher
 from typing_extensions import Self
 
-from .utils import (
-    ExecutionConfig,
-    SelectorConfig
-)
 from cfa_dagster import (
     AzureContainerAppJobRunLauncher,
 )
+
+from .utils import ExecutionConfig, SelectorConfig
 
 log = logging.getLogger(__name__)
 
@@ -57,9 +55,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
     ) -> Self:
         return cls(inst_data=inst_data, **config_value)
 
-    def _get_location_metadata(
-        self, context: LaunchRunContext
-    ):
+    def _get_location_metadata(self, context: LaunchRunContext):
         """
         Gets metadata from the Definitions for a code location
         """
@@ -106,8 +102,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
     def _create_launcher(self, execution_config: ExecutionConfig):
         is_production = not os.getenv("DAGSTER_IS_DEV_CLI")
         launcher_config = execution_config.launcher or SelectorConfig(
-            class_name=None,
-            config=None
+            class_name=None, config=None
         )
         launcher_class_name = launcher_config.class_name
         match (is_production, launcher_class_name):
@@ -187,7 +182,9 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         if run_config:
             launcher = run_config.launcher
             executor = run_config.executor
-            log.debug(f"After run config: launcher={launcher}, executor={executor}")
+            log.debug(
+                f"After run config: launcher={launcher}, executor={executor}"
+            )
 
         # Run tags (only fill missing parts)
         if not launcher or not executor:
@@ -195,16 +192,22 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
             if tag_config:
                 launcher = launcher or tag_config.launcher
                 executor = executor or tag_config.executor
-                log.debug(f"After tag config: launcher={launcher}, executor={executor}")
+                log.debug(
+                    f"After tag config: launcher={launcher}, executor={executor}"
+                )
 
         # Metadata from context
         if context and (not launcher or not executor):
             metadata = self._get_location_metadata(context)
-            metadata_config = ExecutionConfig.from_metadata(metadata) if metadata else None
+            metadata_config = (
+                ExecutionConfig.from_metadata(metadata) if metadata else None
+            )
             if metadata_config:
                 launcher = launcher or metadata_config.launcher
                 executor = executor or metadata_config.executor
-                log.debug(f"After metadata config: launcher={launcher}, executor={executor}")
+                log.debug(
+                    f"After metadata config: launcher={launcher}, executor={executor}"
+                )
 
         # Legacy launcher tags
         if not launcher:
@@ -214,7 +217,9 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
                     class_name=legacy_tags["class"],
                     config=legacy_tags.get("config") or {},
                 )
-                log.debug(f"After legacy tags: launcher={launcher}, executor={executor}")
+                log.debug(
+                    f"After legacy tags: launcher={launcher}, executor={executor}"
+                )
 
         # Legacy metadata
         if context and not launcher:
@@ -224,75 +229,18 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
                     class_name=legacy_metadata["class"],
                     config=legacy_metadata.get("config") or {},
                 )
-                log.debug(f"After legacy metadata: launcher={launcher}, executor={executor}")
+                log.debug(
+                    f"After legacy metadata: launcher={launcher}, executor={executor}"
+                )
 
         # Fill in defaults for anything still missing
         defaults = ExecutionConfig.default()
-
-        if not launcher or launcher.class_name == 'DynamicRunLauncher':
-            launcher = defaults.launcher
-
-        if not executor or executor.class_name == 'dynamic_executor':
-            executor = defaults.executor
-
-        final_config = ExecutionConfig(launcher=launcher, executor=executor)
+        final_config = ExecutionConfig(
+            launcher=launcher or defaults.launcher,
+            executor=executor or defaults.executor,
+        )
         log.debug(f"Final resolved execution config: {final_config}")
         return final_config
-
-    def __get_launcher_config(
-        self,
-        run: DagsterRun,
-        context: Optional[Union[LaunchRunContext, ResumeRunContext]] = None
-    ) -> ExecutionConfig:
-        """
-        Function to get the launcher config from the first available option:
-            1. RunConfig(execution=config.launcher)
-            2. Definitions(metadata=cfa_dagster/execution)
-            3. Run tags cfa_dagster/execution
-            4. Definitions(metadata=cfa_dagster/launcher)
-            5. Run tags cfa_dagster/launcher
-        """
-        # launcher_config = run.run_config.get("execution", {}).get("launcher")
-        launcher_config = ExecutionConfig.from_run_config(run.run_config)
-        log.debug(f"execution run config: '{launcher_config}'")
-        if not launcher_config:
-            launcher_config = ExecutionConfig.from_run_tags(run.tags)
-            log.debug(f"execution tag config: '{launcher_config}'")
-        metadata = None
-        if context:
-            metadata = self._get_location_metadata(context)
-        if metadata and not launcher_config:
-            launcher_config = ExecutionConfig.from_metadata(metadata)
-            log.debug(f"execution metadata config: '{launcher_config}'")
-        if not launcher_config:
-            legacy_config = self._get_config_from_launcher_tags(
-                run.tags
-            )
-            class_name = legacy_config.get("class")
-            config = legacy_config.get("config")
-            if class_name and config:
-                launcher_config = ExecutionConfig(
-                    launcher=SelectorConfig(
-                        class_name=class_name,
-                        config=config
-                    )
-                )
-            log.debug(f"launcher tag config: '{launcher_config}'")
-        if metadata and not launcher_config:
-            legacy_config = self._get_config_from_launcher_metadata(
-                metadata
-            )
-            class_name = legacy_config.get("class")
-            config = legacy_config.get("config")
-            if class_name and config:
-                launcher_config = ExecutionConfig(
-                    launcher=SelectorConfig(
-                        class_name=class_name,
-                        config=config
-                    )
-                )
-            log.debug(f"launcher metadata config: '{launcher_config}'")
-        return launcher_config
 
     # check run tags for launcher config
     # if not there, check repo metadata for launcher config
@@ -309,10 +257,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
 
         launcher = self._create_launcher(execution_config)
 
-        self._instance.add_run_tags(
-            run.run_id,
-            execution_config.to_run_tags()
-        )
+        self._instance.add_run_tags(run.run_id, execution_config.to_run_tags())
         self._instance.report_engine_event(
             message=f"Launching run using {launcher.__class__.__name__}",
             dagster_run=run,
@@ -326,7 +271,9 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         return True
 
     def resume_run(self, context: ResumeRunContext) -> None:
-        launcher_config = self._get_launcher_config(context.dagster_run, context)
+        launcher_config = self._get_launcher_config(
+            context.dagster_run, context
+        )
         run_launcher = self._create_launcher(launcher_config)
         run_launcher.resume_run(context)
 
