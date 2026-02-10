@@ -13,11 +13,12 @@ from dagster import (
     multiprocess_executor,
 )
 from dagster._config import process_config
+from dagster_docker import docker_executor
+from dagster_docker.utils import DOCKER_CONFIG_SCHEMA
 
 from cfa_dagster import (
     azure_batch_executor,
     azure_container_app_job_executor,
-    docker_executor,
 )
 
 log = logging.getLogger(__name__)
@@ -37,11 +38,7 @@ def get_dynamic_executor_config_schema() -> dict:
                     **(
                         {}
                         if is_production
-                        else {
-                            "DockerRunLauncher": (
-                                docker_executor.config_schema.config_type.fields
-                            )
-                        }
+                        else {"DockerRunLauncher": DOCKER_CONFIG_SCHEMA}
                     ),
                 }
             ),

@@ -4,8 +4,6 @@ import os
 import dagster._check as check
 from dagster import (
     ExecutorDefinition,
-    Selector,
-    Shape,
     executor,
     in_process_executor,
     multiprocess_executor,
@@ -19,10 +17,12 @@ from dagster._core.executor.base import Executor
 from dagster._core.executor.init import InitExecutorContext
 from dagster._core.executor.step_delegating import StepDelegatingExecutor
 
+# ruff: noqa: F401
+from dagster_docker import docker_executor
+
 from cfa_dagster import (
     azure_batch_executor,
     azure_container_app_job_executor,
-    docker_executor,
 )
 
 from .utils import (
@@ -33,19 +33,6 @@ from .utils import (
 
 log = logging.getLogger(__name__)
 
-EXECUTION_CONFIG_KEY = "cfa_dagster/execution"
-
-VALID_EXECUTORS = [
-    c.__name__
-    for c in [
-        in_process_executor,
-        multiprocess_executor,
-        docker_executor,
-        azure_batch_executor,
-        azure_container_app_job_executor,
-    ]
-]
-
 
 def create_executor(
     init_context: InitExecutorContext,
@@ -53,20 +40,12 @@ def create_executor(
 ) -> StepDelegatingExecutor:
     executor_class_name = execution_config.executor.class_name
     executor_config = execution_config.executor.config
-    is_production = not os.getenv("DAGSTER_IS_DEV_CLI")
-    match (is_production, executor_class_name):
-        case (True, docker_executor.__name__):
-            raise RuntimeError(
-                f"You can't use {executor_class_name} in production!"
-            )
 
     try:
         executor_class: ExecutorDefinition = globals()[executor_class_name]
     except KeyError:
         raise RuntimeError(
             f"Invalid executor class specified: '{executor_class_name}'. "
-            "Must be one of: "
-            f"{VALID_EXECUTORS}"
         )
 
     # default executors throw an error for env vars
@@ -131,6 +110,12 @@ class DynamicExecutor(Executor):
         # 2. get metadata config (shouldn't if using DynamicRunLauncher since
         #                         it will create tags before launching)
         execution_config = ExecutionConfig.from_run_tags(tags)
+        log.debug(f"tag execution_config: '{execution_config}'")
+        if not execution_config.executor:
+            execution_config = ExecutionConfig.from_executor_config(
+                self._init_context.executor_config
+            )
+            log.debug(f"run config execution_config: '{execution_config}'")
         if not execution_config.executor:
             log.debug("No executor configured in tags, checking repo metadata")
             job = plan_context.plan_data.job
@@ -142,6 +127,7 @@ class DynamicExecutor(Executor):
             metadata = repo_def.metadata
             log.debug(f"metadata: '{metadata}'")
             execution_config = ExecutionConfig.from_metadata(metadata)
+            log.debug(f"metadata execution_config: '{execution_config}'")
         if not execution_config.executor:
             raise RuntimeError(
                 "No executor found in run config, tags, or Definitions.metadata!"
@@ -159,8 +145,6 @@ def dynamic_executor():
         init_context: InitExecutorContext,
     ) -> Executor:
         """Dynamic executor that chooses an executor based on the `cfa_dagster/executor` tag"""
-        config = init_context.executor_config
-        execution_config = ExecutionConfig.from_executor_config(config)
-        return create_executor(init_context, execution_config)
+        return DynamicExecutor(init_context)
 
     return dynamic_executor

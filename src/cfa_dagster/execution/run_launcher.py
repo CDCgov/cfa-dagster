@@ -178,22 +178,22 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         executor: Optional[SelectorConfig] = None
 
         # Run config
-        run_config = ExecutionConfig.from_run_config(run.run_config)
-        if run_config:
-            launcher = run_config.launcher
-            executor = run_config.executor
+        tag_config = ExecutionConfig.from_run_tags(run.tags)
+        if tag_config:
+            launcher = launcher or tag_config.launcher
+            executor = executor or tag_config.executor
             log.debug(
-                f"After run config: launcher={launcher}, executor={executor}"
+                f"After tag config: launcher={launcher}, executor={executor}"
             )
 
         # Run tags (only fill missing parts)
         if not launcher or not executor:
-            tag_config = ExecutionConfig.from_run_tags(run.tags)
-            if tag_config:
-                launcher = launcher or tag_config.launcher
-                executor = executor or tag_config.executor
+            run_config = ExecutionConfig.from_run_config(run.run_config)
+            if run_config:
+                launcher = run_config.launcher
+                executor = run_config.executor
                 log.debug(
-                    f"After tag config: launcher={launcher}, executor={executor}"
+                    f"After run config: launcher={launcher}, executor={executor}"
                 )
 
         # Metadata from context
