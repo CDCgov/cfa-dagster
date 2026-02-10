@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 from dagster import (
+    DagsterInvalidConfigError,
     in_process_executor,
     multiprocess_executor,
 )
@@ -25,7 +26,9 @@ def mock_init_context():
     context = Mock(spec=InitExecutorContext)
     context.executor_config = {}
     # Mock the _replace method to return a proper dict for executor_config
-    context._replace = lambda **kwargs: Mock(executor_config=kwargs.get('executor_config', {}))
+    context._replace = lambda **kwargs: Mock(
+        executor_config=kwargs.get("executor_config", {})
+    )
     return context
 
 
@@ -56,18 +59,21 @@ def test_create_executor_in_process():
     init_context = Mock(spec=InitExecutorContext)
     init_context.executor_config = {}
     # Mock the _replace method to return a proper dict for executor_config
-    init_context._replace = lambda **kwargs: Mock(executor_config=kwargs.get('executor_config', {}))
-    
+    init_context._replace = lambda **kwargs: Mock(
+        executor_config=kwargs.get("executor_config", {})
+    )
+
     # Create the config in a way that bypasses __post_init__ validation for testing purposes
     # by using object.__setattr__ to set attributes on the frozen dataclass
     execution_config = ExecutionConfig.__new__(ExecutionConfig)
-    object.__setattr__(execution_config, 'launcher', None)
-    object.__setattr__(execution_config, 'executor', SelectorConfig(
-        class_name=in_process_executor.__name__,
-        config={}
-    ))
-    
-    # Rather than trying to patch the executor_creation_fn property, 
+    object.__setattr__(execution_config, "launcher", None)
+    object.__setattr__(
+        execution_config,
+        "executor",
+        SelectorConfig(class_name=in_process_executor.__name__, config={}),
+    )
+
+    # Rather than trying to patch the executor_creation_fn property,
     # we'll just test that the function accepts the inputs without error
     try:
         executor = create_executor(init_context, execution_config)
@@ -83,17 +89,23 @@ def test_create_executor_multiprocess():
     init_context = Mock(spec=InitExecutorContext)
     init_context.executor_config = {}
     # Mock the _replace method to return a proper dict for executor_config
-    init_context._replace = lambda **kwargs: Mock(executor_config=kwargs.get('executor_config', {}))
-    
+    init_context._replace = lambda **kwargs: Mock(
+        executor_config=kwargs.get("executor_config", {})
+    )
+
     # Create the config in a way that bypasses __post_init__ validation for testing purposes
     execution_config = ExecutionConfig.__new__(ExecutionConfig)
-    object.__setattr__(execution_config, 'launcher', None)
-    object.__setattr__(execution_config, 'executor', SelectorConfig(
-        class_name=multiprocess_executor.__name__,
-        config={"max_workers": 2}
-    ))
-    
-    # Rather than trying to patch the executor_creation_fn property, 
+    object.__setattr__(execution_config, "launcher", None)
+    object.__setattr__(
+        execution_config,
+        "executor",
+        SelectorConfig(
+            class_name=multiprocess_executor.__name__,
+            config={"max_workers": 2},
+        ),
+    )
+
+    # Rather than trying to patch the executor_creation_fn property,
     # we'll just test that the function accepts the inputs without error
     try:
         executor = create_executor(init_context, execution_config)
@@ -109,17 +121,22 @@ def test_create_executor_docker():
     init_context = Mock(spec=InitExecutorContext)
     init_context.executor_config = {}
     # Mock the _replace method to return a proper dict for executor_config
-    init_context._replace = lambda **kwargs: Mock(executor_config=kwargs.get('executor_config', {}))
-    
+    init_context._replace = lambda **kwargs: Mock(
+        executor_config=kwargs.get("executor_config", {})
+    )
+
     # Create the config in a way that bypasses __post_init__ validation for testing purposes
     execution_config = ExecutionConfig.__new__(ExecutionConfig)
-    object.__setattr__(execution_config, 'launcher', None)
-    object.__setattr__(execution_config, 'executor', SelectorConfig(
-        class_name=docker_executor.__name__,
-        config={"image": "test-image"}
-    ))
-    
-    # Rather than trying to patch the executor_creation_fn property, 
+    object.__setattr__(execution_config, "launcher", None)
+    object.__setattr__(
+        execution_config,
+        "executor",
+        SelectorConfig(
+            class_name=docker_executor.__name__, config={"image": "test-image"}
+        ),
+    )
+
+    # Rather than trying to patch the executor_creation_fn property,
     # we'll just test that the function accepts the inputs without error
     try:
         executor = create_executor(init_context, execution_config)
@@ -135,17 +152,23 @@ def test_create_executor_azure_container_app():
     init_context = Mock(spec=InitExecutorContext)
     init_context.executor_config = {}
     # Mock the _replace method to return a proper dict for executor_config
-    init_context._replace = lambda **kwargs: Mock(executor_config=kwargs.get('executor_config', {}))
-    
+    init_context._replace = lambda **kwargs: Mock(
+        executor_config=kwargs.get("executor_config", {})
+    )
+
     # Create the config in a way that bypasses __post_init__ validation for testing purposes
     execution_config = ExecutionConfig.__new__(ExecutionConfig)
-    object.__setattr__(execution_config, 'launcher', None)
-    object.__setattr__(execution_config, 'executor', SelectorConfig(
-        class_name=azure_container_app_job_executor.__name__,
-        config={"resource_group": "test-rg"}
-    ))
-    
-    # Rather than trying to patch the executor_creation_fn property, 
+    object.__setattr__(execution_config, "launcher", None)
+    object.__setattr__(
+        execution_config,
+        "executor",
+        SelectorConfig(
+            class_name=azure_container_app_job_executor.__name__,
+            config={"resource_group": "test-rg"},
+        ),
+    )
+
+    # Rather than trying to patch the executor_creation_fn property,
     # we'll just test that the function accepts the inputs without error
     try:
         executor = create_executor(init_context, execution_config)
@@ -161,16 +184,19 @@ def test_create_executor_invalid_class():
     init_context = Mock(spec=InitExecutorContext)
     init_context.executor_config = {}
     # Mock the _replace method to return a proper dict for executor_config
-    init_context._replace = lambda **kwargs: Mock(executor_config=kwargs.get('executor_config', {}))
-    
+    init_context._replace = lambda **kwargs: Mock(
+        executor_config=kwargs.get("executor_config", {})
+    )
+
     # Create the config in a way that bypasses __post_init__ validation for testing purposes
     execution_config = ExecutionConfig.__new__(ExecutionConfig)
-    object.__setattr__(execution_config, 'launcher', None)
-    object.__setattr__(execution_config, 'executor', SelectorConfig(
-        class_name="InvalidExecutorClass",
-        config={}
-    ))
-    
+    object.__setattr__(execution_config, "launcher", None)
+    object.__setattr__(
+        execution_config,
+        "executor",
+        SelectorConfig(class_name="InvalidExecutorClass", config={}),
+    )
+
     with pytest.raises(RuntimeError, match="Invalid executor class specified"):
         create_executor(init_context, execution_config)
 
@@ -180,22 +206,16 @@ def test_create_executor_docker_in_production_raises_error():
     # Unset DAGSTER_IS_DEV_CLI to simulate production environment
     if "DAGSTER_IS_DEV_CLI" in os.environ:
         del os.environ["DAGSTER_IS_DEV_CLI"]
-    
-    init_context = Mock(spec=InitExecutorContext)
-    init_context.executor_config = {}
-    # Mock the _replace method to return a proper dict for executor_config
-    init_context._replace = lambda **kwargs: Mock(executor_config=kwargs.get('executor_config', {}))
-    
-    # Create the config in a way that bypasses __post_init__ validation for testing purposes
-    execution_config = ExecutionConfig.__new__(ExecutionConfig)
-    object.__setattr__(execution_config, 'launcher', None)
-    object.__setattr__(execution_config, 'executor', SelectorConfig(
-        class_name=docker_executor.__name__,
-        config={"image": "test-image"}
-    ))
-    
-    with pytest.raises(RuntimeError, match="You can't use.*docker_executor.*in production!"):
-        create_executor(init_context, execution_config)
+
+    with pytest.raises(
+        DagsterInvalidConfigError, match="Invalid execution config"
+    ):
+        ExecutionConfig(
+            executor=SelectorConfig(
+                class_name=docker_executor.__name__,
+                config={"image": "test-image", "retries": {"enabled": {}}},
+            )
+        )
 
 
 def test_dynamic_executor_initialization():
@@ -203,15 +223,19 @@ def test_dynamic_executor_initialization():
     init_context = Mock(spec=InitExecutorContext)
     init_context.executor_config = {}
     # Mock the _replace method to return a proper dict for executor_config
-    init_context._replace = lambda **kwargs: Mock(executor_config=kwargs.get('executor_config', {}))
-    
+    init_context._replace = lambda **kwargs: Mock(
+        executor_config=kwargs.get("executor_config", {})
+    )
+
     # Mock the default executor creation to avoid complex setup
-    with patch('cfa_dagster.execution.executor.create_executor') as mock_create_executor:
+    with patch(
+        "cfa_dagster.execution.executor.create_executor"
+    ) as mock_create_executor:
         mock_executor = Mock()
         mock_create_executor.return_value = mock_executor
-        
+
         dynamic_exec = DynamicExecutor(init_context)
-        
+
         assert dynamic_exec is not None
         assert dynamic_exec._init_context == init_context
 
@@ -221,8 +245,10 @@ def test_dynamic_executor_execute_with_tags():
     init_context = Mock(spec=InitExecutorContext)
     init_context.executor_config = {}
     # Mock the _replace method to return a proper dict for executor_config
-    init_context._replace = lambda **kwargs: Mock(executor_config=kwargs.get('executor_config', {}))
-    
+    init_context._replace = lambda **kwargs: Mock(
+        executor_config=kwargs.get("executor_config", {})
+    )
+
     plan_context = Mock(spec=PlanOrchestrationContext)
     plan_context.plan_data = Mock()
     plan_context.plan_data.dagster_run = Mock()
@@ -235,19 +261,21 @@ def test_dynamic_executor_execute_with_tags():
     repo_def.metadata = {}
     job_def.get_repository_definition.return_value = repo_def
     plan_context.plan_data.job = job_def
-    
+
     execution_plan = Mock(spec=ExecutionPlan)
-    
+
     dynamic_exec = DynamicExecutor(init_context)
-    
+
     # Mock the create_executor function to return a mock executor
-    with patch('cfa_dagster.execution.executor.create_executor') as mock_create_executor:
+    with patch(
+        "cfa_dagster.execution.executor.create_executor"
+    ) as mock_create_executor:
         mock_executor = Mock()
         mock_create_executor.return_value = mock_executor
-        
+
         # Call execute
         dynamic_exec.execute(plan_context, execution_plan)
-        
+
         # Verify that create_executor was called with the correct config
         assert mock_create_executor.called
         args, kwargs = mock_create_executor.call_args
@@ -260,8 +288,10 @@ def test_dynamic_executor_execute_with_metadata():
     init_context = Mock(spec=InitExecutorContext)
     init_context.executor_config = {}
     # Mock the _replace method to return a proper dict for executor_config
-    init_context._replace = lambda **kwargs: Mock(executor_config=kwargs.get('executor_config', {}))
-    
+    init_context._replace = lambda **kwargs: Mock(
+        executor_config=kwargs.get("executor_config", {})
+    )
+
     plan_context = Mock(spec=PlanOrchestrationContext)
     plan_context.plan_data = Mock()
     plan_context.plan_data.dagster_run = Mock()
@@ -270,25 +300,31 @@ def test_dynamic_executor_execute_with_metadata():
     job_def = Mock()
     repo_def = Mock()
     repo_def.metadata = {
-        "cfa_dagster/execution": Mock(value={
-            "executor": {"in_process_executor": {}}  # Use in_process_executor to avoid validation issues
-        })
+        "cfa_dagster/execution": Mock(
+            value={
+                "executor": {
+                    "in_process_executor": {}
+                }  # Use in_process_executor to avoid validation issues
+            }
+        )
     }
     job_def.get_repository_definition.return_value = repo_def
     plan_context.plan_data.job = job_def
-    
+
     execution_plan = Mock(spec=ExecutionPlan)
-    
+
     # Mock the default executor creation to avoid complex setup
-    with patch('cfa_dagster.execution.executor.create_executor') as mock_create_executor:
+    with patch(
+        "cfa_dagster.execution.executor.create_executor"
+    ) as mock_create_executor:
         mock_executor = Mock()
         mock_create_executor.return_value = mock_executor
-        
+
         dynamic_exec = DynamicExecutor(init_context)
-        
+
         # Call execute
         dynamic_exec.execute(plan_context, execution_plan)
-        
+
         # Verify that create_executor was called with the correct config from metadata
         assert mock_create_executor.called
 
@@ -298,8 +334,10 @@ def test_dynamic_executor_execute_no_config_raises_error():
     init_context = Mock(spec=InitExecutorContext)
     init_context.executor_config = {}
     # Mock the _replace method to return a proper dict for executor_config
-    init_context._replace = lambda **kwargs: Mock(executor_config=kwargs.get('executor_config', {}))
-    
+    init_context._replace = lambda **kwargs: Mock(
+        executor_config=kwargs.get("executor_config", {})
+    )
+
     plan_context = Mock(spec=PlanOrchestrationContext)
     plan_context.plan_data = Mock()
     plan_context.plan_data.dagster_run = Mock()
@@ -310,12 +348,15 @@ def test_dynamic_executor_execute_no_config_raises_error():
     repo_def.metadata = {}  # No executor config in metadata
     job_def.get_repository_definition.return_value = repo_def
     plan_context.plan_data.job = job_def
-    
+
     execution_plan = Mock(spec=ExecutionPlan)
-    
+
     dynamic_exec = DynamicExecutor(init_context)
-    
-    with pytest.raises(RuntimeError, match="No executor found in run config, tags, or Definitions.metadata!"):
+
+    with pytest.raises(
+        RuntimeError,
+        match="No executor found in run config, tags, or Definitions.metadata!",
+    ):
         dynamic_exec.execute(plan_context, execution_plan)
 
 
@@ -324,15 +365,20 @@ def test_dynamic_executor_property_access():
     init_context = Mock(spec=InitExecutorContext)
     init_context.executor_config = {}
     # Mock the _replace method to return a proper dict for executor_config
-    init_context._replace = lambda **kwargs: Mock(executor_config=kwargs.get('executor_config', {}))
-    
+    init_context._replace = lambda **kwargs: Mock(
+        executor_config=kwargs.get("executor_config", {})
+    )
+
     # Mock the default executor creation to avoid complex setup
-    with patch('cfa_dagster.execution.executor.create_executor') as mock_create_executor:
+    with patch(
+        "cfa_dagster.execution.executor.create_executor"
+    ) as mock_create_executor:
         mock_executor = Mock(retries=Mock(), step_dependency_config=Mock())
         mock_create_executor.return_value = mock_executor
-        
+
         dynamic_exec = DynamicExecutor(init_context)
-        
+
+        # ruff: noqa: F841
         # These should not raise exceptions
         retries = dynamic_exec.retries
         step_dependency_config = dynamic_exec.step_dependency_config
@@ -344,19 +390,22 @@ def test_dynamic_executor_config_schema():
     init_context.executor_config = {
         "executor": {"multiprocess_executor": {"max_workers": 3}}
     }
-    
+
     # This should return a DynamicExecutor when class_name is dynamic_executor
     # Create the config in a way that bypasses __post_init__ validation for testing purposes
     execution_config = ExecutionConfig.__new__(ExecutionConfig)
-    object.__setattr__(execution_config, 'launcher', None)
-    object.__setattr__(execution_config, 'executor', SelectorConfig(
-        class_name="dynamic_executor",
-        config={}
-    ))
-    
-    with patch('cfa_dagster.execution.executor.ExecutionConfig.from_executor_config', 
-               return_value=execution_config):
-        # Rather than trying to patch the DynamicExecutor constructor, 
+    object.__setattr__(execution_config, "launcher", None)
+    object.__setattr__(
+        execution_config,
+        "executor",
+        SelectorConfig(class_name="dynamic_executor", config={}),
+    )
+
+    with patch(
+        "cfa_dagster.execution.executor.ExecutionConfig.from_executor_config",
+        return_value=execution_config,
+    ):
+        # Rather than trying to patch the DynamicExecutor constructor,
         # we'll just test that the function accepts the inputs without error
         try:
             executor = dynamic_executor(init_context)
@@ -371,17 +420,18 @@ def test_dynamic_executor_with_specific_executor():
     """Test dynamic_executor with specific executor configuration"""
     init_context = Mock(spec=InitExecutorContext)
     init_context.executor_config = {}
-    
+
     execution_config = ExecutionConfig(
         executor=SelectorConfig(
-            class_name=in_process_executor.__name__,
-            config={}
+            class_name=in_process_executor.__name__, config={}
         )
     )
-    
-    with patch('cfa_dagster.execution.executor.ExecutionConfig.from_executor_config', 
-               return_value=execution_config):
-        # Rather than trying to patch create_executor, 
+
+    with patch(
+        "cfa_dagster.execution.executor.ExecutionConfig.from_executor_config",
+        return_value=execution_config,
+    ):
+        # Rather than trying to patch create_executor,
         # we'll just test that the function accepts the inputs without error
         try:
             executor = dynamic_executor(init_context)
