@@ -8,9 +8,8 @@ This directory contains comprehensive tests for the custom Dagster run launcher 
 Tests for the `DynamicRunLauncher` class that handles run launching based on configuration:
 
 - **Configuration Resolution**: Tests that the launcher properly resolves configuration from multiple sources in the correct precedence order:
-  - Run config (highest priority)
-  - Run tags
-  - Repository metadata
+  - Run tags (highest priority)
+  - Run config
   - Legacy launcher tags
   - Legacy repository metadata (lowest priority)
 
