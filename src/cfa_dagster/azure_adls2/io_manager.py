@@ -14,11 +14,8 @@ from dagster_azure.adls2 import (
     PickledObjectADLS2IOManager,
 )
 from dagster_azure.adls2.resources import ADLS2Resource
+from ..utils import is_production
 from pydantic import Field
-
-is_production = (
-    os.getenv("DAGSTER_IS_DEV_CLI", "false") == "false"
-)  # set by dagster cli
 
 
 class ADLS2PickleIOManager(dagster_azure_adls2.ADLS2PickleIOManager):

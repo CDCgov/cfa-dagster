@@ -1,6 +1,7 @@
 import logging
 import os
 
+from typing import Optional
 import dagster._check as check
 from dagster import (
     ExecutorDefinition,
@@ -56,15 +57,14 @@ def create_executor(
         env_vars = executor_config.get("env_vars", [])
         # Need to check if env vars are present first or
         # each run will append them again
-        if "DAGSTER_USER" not in env_vars:
-            env_vars.append("DAGSTER_USER")
-        if "DAGSTER_IS_DEV_CLI" not in env_vars and os.getenv(
-            "DAGSTER_IS_DEV_CLI"
-        ):
-            env_vars.append("DAGSTER_IS_DEV_CLI")
+        req_vars = ["DAGSTER_USER", "CFA_DAGSTER_ENV", "DAGSTER_IS_DEV_CLI"]
+        for env_var in req_vars:
+            if os.getenv(env_var) and env_var not in req_vars:
+                env_vars.append(env_var)
         executor_config["env_vars"] = env_vars
 
     updated_context = init_context._replace(executor_config=executor_config)
+    log.debug(f"creating '{executor_class_name}' with config: '{executor_config}'")
     run_executor = executor_class.executor_creation_fn(updated_context)
     log.debug(f"run_executor: '{run_executor}'")
     return run_executor
@@ -102,13 +102,10 @@ class DynamicExecutor(Executor):
             plan_context, "plan_context", PlanOrchestrationContext
         )
         check.inst_param(execution_plan, "execution_plan", ExecutionPlan)
-        # TODO: use ExecutionConfig instead of local functions
         tags = plan_context.plan_data.dagster_run.tags
         log.debug(f"tags: '{tags}'")
-        # 0. shouldn't see this code if RunConfig specifies execution
         # 1. get tag config
-        # 2. get metadata config (shouldn't if using DynamicRunLauncher since
-        #                         it will create tags before launching)
+        # 2. get run config
         execution_config = ExecutionConfig.from_run_tags(tags)
         log.debug(f"tag execution_config: '{execution_config}'")
         if not execution_config.executor:
@@ -117,34 +114,37 @@ class DynamicExecutor(Executor):
             )
             log.debug(f"run config execution_config: '{execution_config}'")
         if not execution_config.executor:
-            log.debug("No executor configured in tags, checking repo metadata")
-            job = plan_context.plan_data.job
-            log.debug(f"job: '{job}'")
-
-            repo_def = job.get_repository_definition()
-            log.debug(f"repo_def: '{repo_def}'")
-
-            metadata = repo_def.metadata
-            log.debug(f"metadata: '{metadata}'")
-            execution_config = ExecutionConfig.from_metadata(metadata)
-            log.debug(f"metadata execution_config: '{execution_config}'")
-        if not execution_config.executor:
             raise RuntimeError(
                 "No executor found in run config, tags, or Definitions.metadata!"
             )
-        self._executor = create_executor(self._init_context, execution_config)
+        self._executor = create_executor(
+            self._init_context,
+            execution_config.validate()
+        )
+        plan_context.log.info(
+            "[dynamic_executor] Launching run using "
+            f"'{execution_config.executor.class_name}'"
+        )
         return self._executor.execute(plan_context, execution_plan)
 
 
-def dynamic_executor():
+def dynamic_executor(
+    default_config: Optional[ExecutionConfig] = ExecutionConfig.default()
+):
+    config = default_config.validate()
+    schema = get_dynamic_executor_config_schema(
+        default_executor=config.executor,
+        default_launcher=config.launcher,
+    )
+
     @executor(
-        config_schema=get_dynamic_executor_config_schema(),
+        config_schema=schema,
         name="dynamic_executor",
     )
     def dynamic_executor(
         init_context: InitExecutorContext,
     ) -> Executor:
         """Dynamic executor that chooses an executor based on the `cfa_dagster/executor` tag"""
-        return DynamicExecutor(init_context)
+        return DynamicExecutor(init_context, default_config)
 
     return dynamic_executor

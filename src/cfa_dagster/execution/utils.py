@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping, Optional
 
@@ -16,75 +15,11 @@ from dagster._config import process_config
 from dagster_docker import docker_executor
 from dagster_docker.utils import DOCKER_CONFIG_SCHEMA
 
-from cfa_dagster import (
-    azure_batch_executor,
-    azure_container_app_job_executor,
-)
+from ..azure_batch.executor import azure_batch_executor
+from ..azure_container_app_job.executor import azure_container_app_job_executor
+from ..utils import is_production
 
 log = logging.getLogger(__name__)
-
-
-def get_dynamic_executor_config_schema() -> dict:
-    is_production = os.getenv("DAGSTER_IS_DEV_CLI") is None
-
-    return {
-        "launcher": Field(
-            Selector(
-                {
-                    "DefaultRunLauncher": {},
-                    "AzureContainerAppJobRunLauncher": (
-                        azure_container_app_job_executor.config_schema.config_type.fields
-                    ),
-                    **(
-                        {}
-                        if is_production
-                        else {"DockerRunLauncher": DOCKER_CONFIG_SCHEMA}
-                    ),
-                }
-            ),
-            description=(
-                "The run launcher determines the environment where "
-                "the Dagster run occurs."
-            ),
-            default_value=(
-                {"AzureContainerAppJobRunLauncher": {}}
-                if is_production
-                else {"DefaultRunLauncher": {}}
-            ),
-        ),
-        "executor": Field(
-            Selector(
-                {
-                    "in_process_executor": (
-                        in_process_executor.config_schema.config_type.fields
-                    ),
-                    "multiprocess_executor": (
-                        multiprocess_executor.config_schema.config_type.fields
-                    ),
-                    "azure_batch_executor": (
-                        azure_batch_executor.config_schema.config_type.fields
-                    ),
-                    "azure_container_app_job_executor": (
-                        azure_container_app_job_executor.config_schema.config_type.fields
-                    ),
-                    **(
-                        {}
-                        if is_production
-                        else {
-                            "docker_executor": (
-                                docker_executor.config_schema.config_type.fields
-                            )
-                        }
-                    ),
-                }
-            ),
-            description=(
-                "The executor determines how the steps in a run are "
-                "parallelized within the run launcher environment"
-            ),
-            default_value={"multiprocess_executor": {}},
-        ),
-    }
 
 
 @dataclass(frozen=True)
@@ -132,12 +67,25 @@ class ExecutionConfig:
     TAG_KEY = "cfa_dagster/execution"
 
     def __post_init__(self):
+        self.validate(True)
+
+    def validate(
+        self,
+        use_full_schema: Optional[bool] = False
+    ) -> "ExecutionConfig":
         """
-        Validate inputs and add defaults
+        Validates the execution config against an environment-aware schema
+        with an option to use the full schema
+
         If only the launcher is specified, defaults will be applied to the
-        supplied launcher class only. Same if only the executor is specified.
+        supplied launcher class only.
+
+        If only the executor is specified, defaults will be applied to the
+        supplied executor class only.
         """
-        config_schema = get_dynamic_executor_config_schema()
+        config_schema = get_dynamic_executor_config_schema(
+            use_full_schema=use_full_schema
+        )
         if self.launcher:
             result = process_config(
                 config_schema["launcher"].config_type,
@@ -167,6 +115,7 @@ class ExecutionConfig:
             object.__setattr__(
                 self, "executor", SelectorConfig.from_run_config(result.value)
             )
+        return self
 
     def __bool__(self) -> bool:
         """
@@ -259,3 +208,77 @@ class ExecutionConfig:
     def to_run_tags(self) -> Dict[str, str]:
         payload = self.to_run_config()
         return {self.TAG_KEY: json.dumps(payload, separators=(",", ":"))}
+
+
+def get_dynamic_executor_config_schema(
+        default_launcher: Optional[SelectorConfig] = None,
+        default_executor: Optional[SelectorConfig] = None,
+        use_full_schema: Optional[bool] = True,
+) -> dict:
+    """
+    Returns a config schema for the dynamic executor with parameters for
+    defaults and an option to return the full schema without prod restrictions
+    """
+    use_full_schema = use_full_schema or not is_production
+    return {
+        "launcher": Field(
+            Selector(
+                {
+                    "DefaultRunLauncher": {},
+                    "AzureContainerAppJobRunLauncher": (
+                        azure_container_app_job_executor.config_schema.config_type.fields
+                    ),
+                    **(
+                        {"DockerRunLauncher": DOCKER_CONFIG_SCHEMA}
+                        if use_full_schema else {}
+                    ),
+                }
+            ),
+            description=(
+                "The run launcher determines the environment where "
+                "the Dagster run occurs."
+            ),
+            default_value=(
+                default_launcher.to_run_config()
+                if default_launcher else
+                {"AzureContainerAppJobRunLauncher": {}}
+                if is_production
+                else {"DefaultRunLauncher": {}}
+            ),
+        ),
+        "executor": Field(
+            Selector(
+                {
+                    "in_process_executor": (
+                        in_process_executor.config_schema.config_type.fields
+                    ),
+                    "multiprocess_executor": (
+                        multiprocess_executor.config_schema.config_type.fields
+                    ),
+                    "azure_batch_executor": (
+                        azure_batch_executor.config_schema.config_type.fields
+                    ),
+                    "azure_container_app_job_executor": (
+                        azure_container_app_job_executor.config_schema.config_type.fields
+                    ),
+                    **(
+                        {
+                            "docker_executor": (
+                                docker_executor.config_schema.config_type.fields
+                            )
+                        }
+                        if use_full_schema else {}
+                    ),
+                }
+            ),
+            description=(
+                "The executor determines how the steps in a run are "
+                "parallelized within the run launcher environment"
+            ),
+            default_value=(
+                default_executor.to_run_config()
+                if default_executor
+                else {"multiprocess_executor": {}}
+            ),
+        ),
+    }

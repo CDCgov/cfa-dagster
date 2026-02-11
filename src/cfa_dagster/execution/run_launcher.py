@@ -100,21 +100,8 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         return launcher_config.get("launcher")
 
     def _create_launcher(self, execution_config: ExecutionConfig):
-        is_production = not os.getenv("DAGSTER_IS_DEV_CLI")
-        launcher_config = execution_config.launcher or SelectorConfig(
-            class_name=None, config=None
-        )
+        launcher_config = execution_config.launcher
         launcher_class_name = launcher_config.class_name
-        match (is_production, launcher_class_name):
-            case (False, None):
-                launcher_class_name = DefaultRunLauncher.__name__
-            case (True, None):
-                launcher_class_name = AzureContainerAppJobRunLauncher.__name__
-            case (True, DockerRunLauncher.__name__):
-                raise RuntimeError(
-                    f"You can't use {launcher_class_name} in production!"
-                )
-
         try:
             launcher_class = globals()[launcher_class_name]
         except KeyError:
@@ -140,12 +127,10 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
             env_vars = launcher_config.get("env_vars", [])
             # Need to check if env vars are present first or
             # each run will append them again
-            if "DAGSTER_USER" not in env_vars:
-                env_vars.append("DAGSTER_USER")
-            if "DAGSTER_IS_DEV_CLI" not in env_vars and os.getenv(
-                "DAGSTER_IS_DEV_CLI"
-            ):
-                env_vars.append("DAGSTER_IS_DEV_CLI")
+            req_vars = ["DAGSTER_USER", "CFA_DAGSTER_ENV", "DAGSTER_IS_DEV_CLI"]
+            for env_var in req_vars:
+                if os.getenv(env_var) and env_var not in req_vars:
+                    env_vars.append(env_var)
             launcher_config["env_vars"] = env_vars
 
         inst_data = ConfigurableClassData(
@@ -238,7 +223,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         final_config = ExecutionConfig(
             launcher=launcher or defaults.launcher,
             executor=executor or defaults.executor,
-        )
+        ).validate()
         log.debug(f"Final resolved execution config: {final_config}")
         return final_config
 
