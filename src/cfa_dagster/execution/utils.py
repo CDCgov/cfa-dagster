@@ -70,8 +70,7 @@ class ExecutionConfig:
         self.validate(True)
 
     def validate(
-        self,
-        use_full_schema: Optional[bool] = False
+        self, use_full_schema: Optional[bool] = False
     ) -> "ExecutionConfig":
         """
         Validates the execution config against an environment-aware schema
@@ -211,15 +210,15 @@ class ExecutionConfig:
 
 
 def get_dynamic_executor_config_schema(
-        default_launcher: Optional[SelectorConfig] = None,
-        default_executor: Optional[SelectorConfig] = None,
-        use_full_schema: Optional[bool] = True,
+    default_launcher: Optional[SelectorConfig] = None,
+    default_executor: Optional[SelectorConfig] = None,
+    use_full_schema: Optional[bool] = False,
 ) -> dict:
     """
     Returns a config schema for the dynamic executor with parameters for
     defaults and an option to return the full schema without prod restrictions
     """
-    use_full_schema = use_full_schema or not is_production
+    use_full_schema = use_full_schema or not is_production()
     return {
         "launcher": Field(
             Selector(
@@ -230,7 +229,8 @@ def get_dynamic_executor_config_schema(
                     ),
                     **(
                         {"DockerRunLauncher": DOCKER_CONFIG_SCHEMA}
-                        if use_full_schema else {}
+                        if use_full_schema
+                        else {}
                     ),
                 }
             ),
@@ -240,9 +240,9 @@ def get_dynamic_executor_config_schema(
             ),
             default_value=(
                 default_launcher.to_run_config()
-                if default_launcher else
-                {"AzureContainerAppJobRunLauncher": {}}
-                if is_production
+                if default_launcher
+                else {"AzureContainerAppJobRunLauncher": {}}
+                if is_production()
                 else {"DefaultRunLauncher": {}}
             ),
         ),
@@ -267,7 +267,8 @@ def get_dynamic_executor_config_schema(
                                 docker_executor.config_schema.config_type.fields
                             )
                         }
-                        if use_full_schema else {}
+                        if use_full_schema
+                        else {}
                     ),
                 }
             ),

@@ -3,7 +3,7 @@ import os
 from unittest.mock import Mock, patch
 
 import pytest
-from dagster import DagsterRun
+from dagster import DagsterInvalidConfigError, DagsterRun
 from dagster._core.launcher.base import LaunchRunContext
 from dagster._core.workspace.context import BaseWorkspaceRequestContext
 
@@ -255,26 +255,16 @@ def test_create_launcher_production_with_azure():
 
 def test_create_launcher_docker_in_production_raises_error():
     """Test that using DockerRunLauncher in production raises an error"""
-    # Unset DAGSTER_IS_DEV_CLI to simulate production environment
-    if "DAGSTER_IS_DEV_CLI" in os.environ:
-        del os.environ["DAGSTER_IS_DEV_CLI"]
-
-    launcher = DynamicRunLauncher()
-    # Create the config in a way that bypasses __post_init__ validation for testing purposes
-    execution_config = ExecutionConfig.__new__(ExecutionConfig)
-    object.__setattr__(execution_config, "executor", None)
-    object.__setattr__(
-        execution_config,
-        "launcher",
-        SelectorConfig(
-            class_name="DockerRunLauncher", config={"image": "test-image"}
-        ),
-    )
-
-    with pytest.raises(
-        RuntimeError, match="You can't use DockerRunLauncher in production!"
-    ):
-        launcher._create_launcher(execution_config)
+    with patch.dict(os.environ, {"CFA_DAGSTER_ENV": "prod"}, clear=True):
+        with pytest.raises(
+            DagsterInvalidConfigError, match="Invalid execution config"
+        ):
+            ExecutionConfig(
+                SelectorConfig(
+                    class_name="DockerRunLauncher",
+                    config={"image": "test-image"},
+                ),
+            ).validate()
 
 
 def test_create_launcher_invalid_class_raises_error():

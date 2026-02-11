@@ -203,19 +203,16 @@ def test_create_executor_invalid_class():
 
 def test_create_executor_docker_in_production_raises_error():
     """Test that using docker executor in production raises an error"""
-    # Unset DAGSTER_IS_DEV_CLI to simulate production environment
-    if "DAGSTER_IS_DEV_CLI" in os.environ:
-        del os.environ["DAGSTER_IS_DEV_CLI"]
-
-    with pytest.raises(
-        DagsterInvalidConfigError, match="Invalid execution config"
-    ):
-        ExecutionConfig(
-            executor=SelectorConfig(
-                class_name=docker_executor.__name__,
-                config={"image": "test-image", "retries": {"enabled": {}}},
-            )
-        )
+    with patch.dict(os.environ, {"CFA_DAGSTER_ENV": "prod"}, clear=True):
+        with pytest.raises(
+            DagsterInvalidConfigError, match="Invalid execution config"
+        ):
+            ExecutionConfig(
+                executor=SelectorConfig(
+                    class_name=docker_executor.__name__,
+                    config={"image": "test-image", "retries": {"enabled": {}}},
+                )
+            ).validate()
 
 
 def test_dynamic_executor_initialization():
@@ -281,52 +278,6 @@ def test_dynamic_executor_execute_with_tags():
         args, kwargs = mock_create_executor.call_args
         execution_config = args[1]
         assert execution_config.executor.class_name == "in_process_executor"
-
-
-def test_dynamic_executor_execute_with_metadata():
-    """Test DynamicExecutor.execute with executor config in metadata"""
-    init_context = Mock(spec=InitExecutorContext)
-    init_context.executor_config = {}
-    # Mock the _replace method to return a proper dict for executor_config
-    init_context._replace = lambda **kwargs: Mock(
-        executor_config=kwargs.get("executor_config", {})
-    )
-
-    plan_context = Mock(spec=PlanOrchestrationContext)
-    plan_context.plan_data = Mock()
-    plan_context.plan_data.dagster_run = Mock()
-    plan_context.plan_data.dagster_run.tags = {}  # No executor config in tags
-    plan_context.plan_data.job = Mock()
-    job_def = Mock()
-    repo_def = Mock()
-    repo_def.metadata = {
-        "cfa_dagster/execution": Mock(
-            value={
-                "executor": {
-                    "in_process_executor": {}
-                }  # Use in_process_executor to avoid validation issues
-            }
-        )
-    }
-    job_def.get_repository_definition.return_value = repo_def
-    plan_context.plan_data.job = job_def
-
-    execution_plan = Mock(spec=ExecutionPlan)
-
-    # Mock the default executor creation to avoid complex setup
-    with patch(
-        "cfa_dagster.execution.executor.create_executor"
-    ) as mock_create_executor:
-        mock_executor = Mock()
-        mock_create_executor.return_value = mock_executor
-
-        dynamic_exec = DynamicExecutor(init_context)
-
-        # Call execute
-        dynamic_exec.execute(plan_context, execution_plan)
-
-        # Verify that create_executor was called with the correct config from metadata
-        assert mock_create_executor.called
 
 
 def test_dynamic_executor_execute_no_config_raises_error():

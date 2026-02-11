@@ -21,11 +21,16 @@ PROD_HOSTNAME = os.getenv(
 )
 
 
-is_production = os.getenv("CFA_DAGSTER_ENV") == "prod"
+def is_production() -> bool:
+    # If DAGSTER_IS_DEV_CLI is set, we're in dev mode regardless of CFA_DAGSTER_ENV
+    if os.getenv("DAGSTER_IS_DEV_CLI"):
+        return False
+    # Otherwise, check if we're in production based on CFA_DAGSTER_ENV
+    return os.getenv("CFA_DAGSTER_ENV") == "prod"
 
 
 def get_webserver_url() -> str:
-    if is_production:
+    if is_production():
         return f"http://{LOCAL_HOSTNAME}:{LOCAL_PORT}"
     else:
         return f"https://{PROD_HOSTNAME}"
@@ -37,7 +42,7 @@ def get_runs_url_for_tag(tag_key: str, tag_value: str) -> str:
 
 
 def get_graphql_client() -> DagsterGraphQLClient:
-    if is_production:
+    if is_production():
         return DagsterGraphQLClient(
             hostname=LOCAL_HOSTNAME, port_number=LOCAL_PORT
         )
@@ -193,7 +198,7 @@ def start_dev_env(caller_name: str):
         except KeyboardInterrupt:
             print("\nShutting down cleanly...")
 
-    if not is_production:
+    if not is_production():
         print("Running in local dev environment")
 
     # get the user from the environment, throw an error if variable is not set

@@ -1,7 +1,7 @@
 import logging
 import os
-
 from typing import Optional
+
 import dagster._check as check
 from dagster import (
     ExecutorDefinition,
@@ -64,7 +64,9 @@ def create_executor(
         executor_config["env_vars"] = env_vars
 
     updated_context = init_context._replace(executor_config=executor_config)
-    log.debug(f"creating '{executor_class_name}' with config: '{executor_config}'")
+    log.debug(
+        f"creating '{executor_class_name}' with config: '{executor_config}'"
+    )
     run_executor = executor_class.executor_creation_fn(updated_context)
     log.debug(f"run_executor: '{run_executor}'")
     return run_executor
@@ -118,8 +120,7 @@ class DynamicExecutor(Executor):
                 "No executor found in run config, tags, or Definitions.metadata!"
             )
         self._executor = create_executor(
-            self._init_context,
-            execution_config.validate()
+            self._init_context, execution_config.validate()
         )
         plan_context.log.info(
             "[dynamic_executor] Launching run using "
@@ -129,7 +130,7 @@ class DynamicExecutor(Executor):
 
 
 def dynamic_executor(
-    default_config: Optional[ExecutionConfig] = ExecutionConfig.default()
+    default_config: Optional[ExecutionConfig] = ExecutionConfig.default(),
 ):
     config = default_config.validate()
     schema = get_dynamic_executor_config_schema(

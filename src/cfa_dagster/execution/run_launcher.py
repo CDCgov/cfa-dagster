@@ -127,7 +127,11 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
             env_vars = launcher_config.get("env_vars", [])
             # Need to check if env vars are present first or
             # each run will append them again
-            req_vars = ["DAGSTER_USER", "CFA_DAGSTER_ENV", "DAGSTER_IS_DEV_CLI"]
+            req_vars = [
+                "DAGSTER_USER",
+                "CFA_DAGSTER_ENV",
+                "DAGSTER_IS_DEV_CLI",
+            ]
             for env_var in req_vars:
                 if os.getenv(env_var) and env_var not in req_vars:
                     env_vars.append(env_var)

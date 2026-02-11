@@ -25,7 +25,7 @@ def test_dynamic_schema_in_dev_mode():
 def test_dynamic_schema_in_production_mode():
     """Test that the dynamic schema excludes dev-only options when in production mode"""
     # Simulate production mode by not setting DAGSTER_IS_DEV_CLI
-    with patch.dict(os.environ, {}, clear=True):
+    with patch.dict(os.environ, {"CFA_DAGSTER_ENV": "prod"}, clear=True):
         schema = get_dynamic_executor_config_schema()
 
         # In production mode, DockerRunLauncher should NOT be available in launcher options
@@ -45,14 +45,17 @@ def test_dynamic_schema_in_production_mode():
 def test_dynamic_schema_executor_options_dev_vs_prod():
     """Test that executor options differ between dev and prod modes"""
     # Test dev mode
-    with patch.dict(os.environ, {"DAGSTER_IS_DEV_CLI": "1"}):
+    with patch.dict(os.environ, {"DAGSTER_IS_DEV_CLI": "1"}, clear=True):
         dev_schema = get_dynamic_executor_config_schema()
         dev_executor_fields = dev_schema["executor"].config_type.fields
 
     # Test production mode
-    with patch.dict(os.environ, {}, clear=True):
+    with patch.dict(os.environ, {"CFA_DAGSTER_ENV": "prod"}, clear=True):
         prod_schema = get_dynamic_executor_config_schema()
         prod_executor_fields = prod_schema["executor"].config_type.fields
+
+    print(f"dev: '{dev_executor_fields}'")
+    print(f"prod: '{prod_executor_fields}'")
 
     # Dev should have docker_executor, prod should not
     assert "docker_executor" in dev_executor_fields
@@ -73,7 +76,7 @@ def test_dynamic_schema_launcher_options_dev_vs_prod():
         dev_launcher_fields = dev_schema["launcher"].config_type.fields
 
     # Test production mode
-    with patch.dict(os.environ, {}, clear=True):
+    with patch.dict(os.environ, {"CFA_DAGSTER_ENV": "prod"}, clear=True):
         prod_schema = get_dynamic_executor_config_schema()
         prod_launcher_fields = prod_schema["launcher"].config_type.fields
 
