@@ -186,7 +186,7 @@ class ExecutionConfig:
             executor=SelectorConfig.from_json(value.get("executor")),
         )
 
-    def to_run_config(self) -> Dict[str, str]:
+    def to_dict(self) -> Dict[str, str]:
         payload = {
             # "v": self.TAG_VERSION,
             "launcher": self.launcher.to_run_config()
@@ -205,8 +205,11 @@ class ExecutionConfig:
     # To run tags
     # -------------------------
     def to_run_tags(self) -> Dict[str, str]:
-        payload = self.to_run_config()
+        payload = self.to_dict()
         return {self.TAG_KEY: json.dumps(payload, separators=(",", ":"))}
+
+    def to_run_config(self) -> Dict[str, str]:
+        return {"config": self.to_dict()}
 
 
 def get_dynamic_executor_config_schema(

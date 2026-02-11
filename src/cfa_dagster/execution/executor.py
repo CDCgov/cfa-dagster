@@ -146,6 +146,6 @@ def dynamic_executor(
         init_context: InitExecutorContext,
     ) -> Executor:
         """Dynamic executor that chooses an executor based on the `cfa_dagster/executor` tag"""
-        return DynamicExecutor(init_context, default_config)
+        return DynamicExecutor(init_context)
 
     return dynamic_executor
