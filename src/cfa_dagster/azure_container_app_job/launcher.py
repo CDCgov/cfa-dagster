@@ -1,4 +1,5 @@
 import logging
+import os
 from collections.abc import Mapping
 from typing import Any, Optional
 
@@ -129,6 +130,11 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
             [parse_env_var(env_var) for env_var in container_context.env_vars]
         )
         env_vars["DAGSTER_RUN_JOB_NAME"] = run.job_name
+
+        req_vars = ["DAGSTER_USER", "CFA_DAGSTER_ENV", "DAGSTER_IS_DEV_CLI"]
+        for env_var in req_vars:
+            if os.getenv(env_var) and env_var not in env_vars:
+                env_vars.append(env_var)
 
         job_execution_id = start_caj(
             self._azure_caj_client,
