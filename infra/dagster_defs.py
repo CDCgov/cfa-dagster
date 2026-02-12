@@ -17,7 +17,7 @@ from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.mgmt.containerinstance import ContainerInstanceManagementClient
 from azure.mgmt.loganalytics import LogAnalyticsManagementClient
-from azure.mgmt.resource.subscriptions import SubscriptionClient
+from azure.mgmt.subscription import SubscriptionClient
 from msrest.authentication import BasicTokenAuthentication
 
 from cfa_dagster import ADLS2PickleIOManager

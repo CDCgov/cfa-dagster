@@ -6,7 +6,7 @@ from typing import Optional, cast
 import dagster._check as check
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
-from azure.mgmt.resource.subscriptions import SubscriptionClient
+from azure.mgmt.subscription import SubscriptionClient
 from dagster import executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,

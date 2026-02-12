@@ -5,7 +5,7 @@ from typing import Any, Optional
 import dagster._check as check
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
-from azure.mgmt.resource.subscriptions import SubscriptionClient
+from azure.mgmt.subscription import SubscriptionClient
 from dagster._core.launcher.base import (
     CheckRunHealthResult,
     LaunchRunContext,

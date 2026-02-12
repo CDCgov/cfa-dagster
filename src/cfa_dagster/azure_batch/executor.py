@@ -22,7 +22,7 @@ from azure.batch.models import (
     UserIdentity,
 )
 from azure.identity import DefaultAzureCredential
-from azure.mgmt.resource.subscriptions import SubscriptionClient
+from azure.mgmt.subscription import SubscriptionClient
 from dagster import Field, StringSource, executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
