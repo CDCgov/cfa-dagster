@@ -18,7 +18,7 @@ dependencies = [
     "azure-mgmt-appcontainers==3.2.0",
     "azure-mgmt-containerinstance",
     "azure-mgmt-loganalytics",
-    "azure-mgmt-resource>=24.0.0",
+    "azure-mgmt-subscription>=3.1.1",
     "requests>=2.32.5",
     "cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git",
 ]
