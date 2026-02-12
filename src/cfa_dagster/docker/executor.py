@@ -1,3 +1,5 @@
+import os
+
 import dagster._check as check
 from dagster import executor
 from dagster._annotations import beta
@@ -40,8 +42,10 @@ def docker_executor(init_context: InitExecutorContext) -> Executor:
     """
     config = dict(init_context.executor_config or {})
     env_vars = check.opt_list_elem(config, "env_vars", of_type=str)
-    env_vars.append("DAGSTER_USER")
-    env_vars.append("DAGSTER_IS_DEV_CLI")
+    req_vars = ["DAGSTER_USER", "CFA_DAGSTER_ENV", "DAGSTER_IS_DEV_CLI"]
+    for env_var in req_vars:
+        if os.getenv(env_var) and env_var not in env_vars:
+            env_vars.append(env_var)
     config["env_vars"] = env_vars
     modified_context = init_context._replace(executor_config=config)
     return base_docker_executor.executor_creation_fn(modified_context)

@@ -117,9 +117,10 @@ def azure_batch_executor(
     )
 
     # propagate user & dev env vars
-    env_vars.append("DAGSTER_USER")
-    if os.getenv("DAGSTER_IS_DEV_CLI"):
-        env_vars.append("DAGSTER_IS_DEV_CLI")
+    req_vars = ["DAGSTER_USER", "CFA_DAGSTER_ENV", "DAGSTER_IS_DEV_CLI"]
+    for env_var in req_vars:
+        if os.getenv(env_var) and env_var not in env_vars:
+            env_vars.append(env_var)
 
     validate_docker_config(network, networks, container_kwargs)
 

@@ -8,10 +8,12 @@
 #    "dagster-postgres>=0.27.4",
 #    "dagster-webserver==1.12.2",
 #    "dagster==1.12.2",
-#    "cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git",
+#    "cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git@gio-dynamic-execution",
 #    "pyyaml>=6.0.2",
 # ]
 # ///
+
+#    "cfa-dagster @ file:///home/gio/Documents/CDC/cfa-dagster",
 import json
 import os
 import subprocess
@@ -22,24 +24,33 @@ from dagster_azure.blob import (
     AzureBlobStorageResource,
 )
 
-# from dagster_docker import DockerRunLauncher
 # ruff: noqa: F401
 from cfa_dagster import (
     ADLS2PickleIOManager,
     AzureContainerAppJobRunLauncher,
+    ExecutionConfig,
+    SelectorConfig,
     azure_batch_executor,
     collect_definitions,
     docker_executor,
+    dynamic_executor,
+    is_production,
     start_dev_env,
 )
 from cfa_dagster import (
     azure_container_app_job_executor as azure_caj_executor,
 )
 
+# from dagster_docker import DockerRunLauncher
+
 # function to start the dev server
 start_dev_env(__name__)
 
 user = os.getenv("DAGSTER_USER")
+
+IMAGE_REGISTRY = "cfaprdbatchcr"
+image_tag = "latest" if is_production() else user
+image = f"{IMAGE_REGISTRY}.azurecr.io/cfa-dagster:{image_tag}"
 
 
 @dg.asset(
@@ -80,6 +91,7 @@ def basic_r_asset(basic_blob_asset):
     )
 
 
+# partitions are parameters to your asset function that trigger parallel compute
 disease_partitions = dg.StaticPartitionsDefinition(["COVID", "FLU", "RSV"])
 
 
@@ -95,108 +107,158 @@ def partitioned_r_asset(context: dg.OpExecutionContext):
 # this should match your Dockerfile WORKDIR
 workdir = "/app"
 
-# configuring an executor to run workflow steps on Docker
-# add this to a job or the Definitions class to use it
-docker_executor_configured = docker_executor.configured(
-    {
-        # specify a default image
-        "image": "basic-r-asset",
-        # set env vars here
-        # "env_vars": [f"DAGSTER_USER"],
-        "container_kwargs": {
-            "volumes": [
-                # bind the ~/.azure folder for optional cli login
-                f"/home/{user}/.azure:/root/.azure",
-                # bind current file so we don't have to rebuild
-                # the container image for workflow changes
-                f"{__file__}:{workdir}/{os.path.basename(__file__)}",
-            ]
-        },
-    }
+# image = f"cfaprdbatchcr.azurecr.io/cfa-dagster:{user}"
+
+# this is the default run config that launches the job in your local shell
+# and executes each step in a separate system process
+default_config = ExecutionConfig(
+    launcher=SelectorConfig(class_name=dg.DefaultRunLauncher.__name__),
+    executor=SelectorConfig(class_name=dg.multiprocess_executor.__name__),
 )
 
-image = f"cfaprdbatchcr.azurecr.io/cfa-dagster:{user}"
-
-# configuring an executor to run workflow steps on Azure Container App Jobs
+# configuring an executor to run each workflow step in a new Docker container
 # add this to a job or the Definitions class to use it
-azure_caj_executor_configured = azure_caj_executor.configured(
-    {
-        "container_app_job_name": "cfa-dagster",
-        # specify a default image
-        "image": image,
-        # set env vars here
-        # "env_vars": [f"DAGSTER_USER"],
-    }
+docker_config = ExecutionConfig(
+    executor=SelectorConfig(
+        class_name=docker_executor.__name__,
+        config={
+            # specify a default image
+            "image": image,
+            # set env vars here
+            # "env_vars": [f"DAGSTER_USER"],
+            "container_kwargs": {
+                "volumes": [
+                    # bind the ~/.azure folder for optional cli login
+                    f"/home/{user}/.azure:/root/.azure",
+                    # bind current file so we don't have to rebuild
+                    # the container image for workflow changes
+                    f"{__file__}:{workdir}/{os.path.basename(__file__)}",
+                ]
+            },
+        },
+    )
 )
 
-# configuring an executor to run workflow steps on Azure Batch 4CPU 16GB RAM pool
+
+# configuring an executor to run each workflow step in a new Azure Container
+# App Job execution
 # add this to a job or the Definitions class to use it
-azure_batch_executor_configured = azure_batch_executor.configured(
-    {
-        # change the pool_name to your existing pool name
-        "pool_name": "cfa-dagster",
-        # specify a default image
-        "image": image,
-        # set env vars here
-        # "env_vars": [f"DAGSTER_USER"],
-        "container_kwargs": {
-            # set the working directory to match your Dockerfile
-            # required for Azure Batch
-            "working_dir": workdir,
-            # mount config if your existing Batch pool already has Blob mounts
-            # "volumes": [
-            #     "nssp-etl:nssp-etl",
-            # ]
+azure_caj_config = ExecutionConfig(
+    executor=SelectorConfig(
+        class_name=azure_caj_executor.__name__,
+        config={
+            "container_app_job_name": "cfa-dagster",
+            # specify a default image
+            "image": image,
+            # set env vars here
+            # "env_vars": [f"DAGSTER_USER"],
         },
-    }
+    )
+)
+
+# configuring a run launcher to launch each run in an Azure Container App Job
+# and configuring an executor to run each workflow steps in a new Azure Batch
+# task for maximum scale
+# add this to a job or the Definitions class to use it
+azure_batch_config = ExecutionConfig(
+    launcher=SelectorConfig(
+        class_name=AzureContainerAppJobRunLauncher.__name__
+    ),
+    executor=SelectorConfig(
+        class_name=azure_batch_executor.__name__,
+        config={
+            # change the pool_name to your existing pool name
+            "pool_name": "cfa-dagster",
+            # specify a default image
+            "image": image,
+            # set env vars here
+            "env_vars": ["CFA_DAGSTER_LOG_LEVEL=debug"],
+            "container_kwargs": {
+                # set the working directory to match your Dockerfile
+                # required for Azure Batch
+                "working_dir": workdir,
+                # mount config if your existing Batch pool already has Blob mounts
+                # "volumes": [
+                #     "nssp-etl:nssp-etl",
+                # ]
+            },
+        },
+    ),
 )
 
 # jobs are used to materialize assets with a given configuration
 basic_r_asset_job = dg.define_asset_job(
     name="basic_r_asset_job",
-    # specify an executor including docker, Azure Container App Job, or
-    # the future Azure Batch executor
-    executor_def=docker_executor_configured,
-    # uncomment the below to switch to run on Azure Container App Jobs.
-    # remember to rebuild and push your image if you made any workflow changes
-    # executor_def=azure_caj_executor_configured,
     selection=dg.AssetSelection.assets(basic_r_asset),
     # tag the run with your user to allow for easy filtering in the Dagster UI
     tags={"user": user},
+    config=dg.RunConfig(
+        # try switching to Azure compute after pushing your image
+        execution=docker_config.to_run_config()
+        # execution=azure_batch_config.to_run_config()
+        # execution=azure_caj_config.to_run_config()
+    ),
+    executor_def=dynamic_executor(),
 )
 
 partitioned_r_asset_job = dg.define_asset_job(
     name="partitioned_r_asset_job",
-    executor_def=docker_executor_configured,
-    # uncomment the below to switch to run on Azure Container App Jobs.
-    # remember to rebuild and push your image if you made any workflow changes
-    # executor_def=azure_caj_executor_configured,
     selection=dg.AssetSelection.assets(partitioned_r_asset),
     # tag the run with your user to allow for easy filtering in the Dagster UI
     tags={"user": user},
+    config=dg.RunConfig(
+        # try switching to Azure compute after pushing your image
+        execution=docker_config.to_run_config()
+        # execution=azure_batch_config.to_run_config()
+        # execution=azure_caj_config.to_run_config()
+    ),
+    executor_def=dynamic_executor(),
 )
 
-# schedule the job to run weekly
+
+@dg.op
+def build_image(context: dg.OpExecutionContext, should_push: bool):
+    cmd = f"docker build -t {image} ."
+
+    if should_push:
+        subprocess.run(
+            f"az login --identity && az acr login -n {IMAGE_REGISTRY}",
+            check=True,
+            shell=True,
+        )
+        cmd += " --push"
+
+    context.log.debug(f"Running {cmd}")
+    subprocess.run(cmd, check=True, shell=True)
+
+
+@dg.job(
+    config=dg.RunConfig(
+        ops={"build_image": {"inputs": {"should_push": False}}},
+        # configure this job to run on your computer
+        execution=default_config.to_run_config(),
+    ),
+    executor_def=dynamic_executor(),
+)
+def build_image_job():
+    build_image()
+
+
+# schedule a job to run weekly
 schedule_every_wednesday = dg.ScheduleDefinition(
     name="weekly_cron", cron_schedule="0 9 * * 3", job=basic_r_asset_job
 )
 
-# env variable set by Dagster CLI
-is_production = not os.getenv("DAGSTER_IS_DEV_CLI")
 
 # change storage accounts between dev and prod
-storage_account = "cfadagster" if is_production else "cfadagsterdev"
+storage_account = "cfadagster" if is_production() else "cfadagsterdev"
 
-# collect Dagster definitions from the current file
 collected_defs = collect_definitions(globals())
+
 
 # Create Definitions object
 defs = dg.Definitions(
-    assets=collected_defs["assets"],
-    asset_checks=collected_defs["asset_checks"],
-    jobs=collected_defs["jobs"],
-    sensors=collected_defs["sensors"],
-    schedules=collected_defs["schedules"],
+    **collected_defs,
     resources={
         # This IOManager lets Dagster serialize asset outputs and store them
         # in Azure to pass between assets
@@ -207,19 +269,11 @@ defs = dg.Definitions(
             credential=AzureBlobStorageDefaultCredential(),
         ),
     },
-    # setting Docker as the default executor. comment this out to use
-    # the default executor that runs directly on your computer
-    executor=docker_executor_configured,
-    # executor=dg.in_process_executor,
-    # executor=azure_caj_executor_configured,
-    # executor=azure_batch_executor_configured,
-    # uncomment the below to launch runs on Azure CAJ
-    # metadata={
-    #     "cfa_dagster/launcher": {
-    #         "class": AzureContainerAppJobRunLauncher.__name__,
-    #         "config": {
-    #             "image": image,
-    #         },
-    #     }
-    # },
+    executor=dynamic_executor(
+        # try switching to Azure compute after pushing your image
+        # default_config=default_config
+        default_config=docker_config
+        # default_config=azure_caj_config
+        # default_config=azure_batch_config
+    ),
 )

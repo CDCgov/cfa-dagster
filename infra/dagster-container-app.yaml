@@ -29,6 +29,8 @@ properties:
             value: bdca4f03-d071-4928-914e-def0dcdbe460
           - name: CFA_DAGSTER_LOG_LEVEL
             value: INFO
+          - name: CFA_DAGSTER_ENV
+            value: prod
           - name: DEPLOY_DATE
             value: __DEPLOY_DATE__
         volumeMounts:
@@ -52,6 +54,8 @@ properties:
             value: bdca4f03-d071-4928-914e-def0dcdbe460
           - name: CFA_DAGSTER_LOG_LEVEL
             value: INFO
+          - name: CFA_DAGSTER_ENV
+            value: prod
         volumeMounts:
           - volumeName: cfadagster
             mountPath: /opt/dagster

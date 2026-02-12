@@ -21,8 +21,16 @@ PROD_HOSTNAME = os.getenv(
 )
 
 
+def is_production() -> bool:
+    # If DAGSTER_IS_DEV_CLI is set, we're in dev mode regardless of CFA_DAGSTER_ENV
+    if os.getenv("DAGSTER_IS_DEV_CLI"):
+        return False
+    # Otherwise, check if we're in production based on CFA_DAGSTER_ENV
+    return os.getenv("CFA_DAGSTER_ENV") == "prod"
+
+
 def get_webserver_url() -> str:
-    if os.getenv("DAGSTER_IS_DEV_CLI"):  # set by dagster cli
+    if is_production():
         return f"http://{LOCAL_HOSTNAME}:{LOCAL_PORT}"
     else:
         return f"https://{PROD_HOSTNAME}"
@@ -34,7 +42,7 @@ def get_runs_url_for_tag(tag_key: str, tag_value: str) -> str:
 
 
 def get_graphql_client() -> DagsterGraphQLClient:
-    if os.getenv("DAGSTER_IS_DEV_CLI"):  # set by dagster cli
+    if is_production():
         return DagsterGraphQLClient(
             hostname=LOCAL_HOSTNAME, port_number=LOCAL_PORT
         )
@@ -158,7 +166,6 @@ def start_dev_env(caller_name: str):
     5. running `dagster dev -f <script_name>.py` in a subprocess
     6. Validating the DAGSTER_USER environment variable for non-dev scenarios
     """
-    is_production = not os.getenv("DAGSTER_IS_DEV_CLI")  # set by dagster cli
     home_dir = Path.home()
     dagster_user = home_dir.name
     dagster_home = home_dir / ".dagster_home"
@@ -191,7 +198,7 @@ def start_dev_env(caller_name: str):
         except KeyboardInterrupt:
             print("\nShutting down cleanly...")
 
-    if not is_production:
+    if not is_production():
         print("Running in local dev environment")
 
     # get the user from the environment, throw an error if variable is not set

@@ -9,12 +9,18 @@ from .azure_batch.executor import azure_batch_executor
 from .azure_container_app_job.executor import azure_container_app_job_executor
 from .azure_container_app_job.launcher import AzureContainerAppJobRunLauncher
 from .docker.executor import docker_executor
-from .run_launcher import DynamicRunLauncher
+from .execution import (
+    DynamicRunLauncher,
+    ExecutionConfig,
+    SelectorConfig,
+    dynamic_executor,
+)
 from .utils import (
     collect_definitions,
     get_latest_metadata_for_partition,
     get_runs_url_for_tag,
     get_webserver_url,
+    is_production,
     launch_asset_backfill,
     start_dev_env,
 )

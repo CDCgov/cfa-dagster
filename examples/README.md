@@ -6,8 +6,8 @@ It is highly recommended that you complete the Dagster quickstart [tutorial](htt
 
 ## Getting Started
 
-1. Build the initial image for your test asset: `docker build -t basic-r-asset .`
-2. Start the Dagster UI by running `uv run dagster_defs.py` and clicking the link in your terminal (usually [http://127.0.0.1:3000/])
+1. Start the Dagster UI by running `uv run dagster_defs.py` and clicking the link in your terminal (usually [http://127.0.0.1:3000/])
+2. Build your image by navigating to the [build_image_job](http://127.0.0.1:3000/locations/dagster_defs.py/jobs/build_image_job/playground) and clicking `Launch Run` in the bottom right
 3. Materialize an asset!
     - In the Dagster UI, navigate to the Lineage page and click `basic_blob_asset`. ([Here](http://127.0.0.1:3000/asset-groups/basic_blob_asset?open-nodes%5B0%5D=dagster_defs.py&open-nodes%5B1%5D=dagster_defs.py%3Adefault) if you are on the default port 3000)
     - Click `Materialize selected` and watch for your run to start on the Asset sidebar
@@ -18,7 +18,7 @@ It is highly recommended that you complete the Dagster quickstart [tutorial](htt
 - Try materializing partitioned_r_asset
 - Try materializing multiple assets at once
 - Try materializing your Asset on Azure Container App Jobs
-    1. Push your updated image to ACR: `az login --identity && az acr login -n cfaprdbatchcr && docker build -t cfaprdbatchcr.azurecr.io/cfa-dagster:$(basename $HOME) . --push`
-    2. Modify the Definitions in the dagster_defs.py file to use the `azure_caj_executor` instead of the `docker_executor`
+    1. Push your updated image to ACR by running the `build_image_job` from above with `should_push: true` in the Launchpad
+    2. Modify the `dynamic_executor` in the `Definitions` of the dagster_defs.py file to use the `azure_caj_config` instead of the `docker_config`
     3. Reload your Definitions from the Lineage or Deployment page
     4. Materialize your Asset again! (See `Getting Started`)

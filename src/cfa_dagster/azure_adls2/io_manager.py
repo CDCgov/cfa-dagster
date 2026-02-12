@@ -16,15 +16,13 @@ from dagster_azure.adls2 import (
 from dagster_azure.adls2.resources import ADLS2Resource
 from pydantic import Field
 
-is_production = (
-    os.getenv("DAGSTER_IS_DEV_CLI", "false") == "false"
-)  # set by dagster cli
+from ..utils import is_production
 
 
 class ADLS2PickleIOManager(dagster_azure_adls2.ADLS2PickleIOManager):
     __doc__ = dagster_azure_adls2.ADLS2PickleIOManager.__doc__
 
-    _storage_account = "cfadagster" if is_production else "cfadagsterdev"
+    _storage_account = "cfadagster" if is_production() else "cfadagsterdev"
     _user = os.getenv("DAGSTER_USER")
 
     adls2: ResourceDependency[ADLS2Resource]
