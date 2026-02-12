@@ -104,29 +104,6 @@ def partitioned_r_asset(context: dg.OpExecutionContext):
     subprocess.run(f"Rscript hello.R {disease}", shell=True, check=True)
 
 
-@dg.asset(
-    automation_condition=dg.AutomationCondition.eager(),
-)
-def raw_numbers() -> list[int]:
-    return [1, 2, 3, 4]
-
-
-@dg.asset(
-    automation_condition=dg.AutomationCondition.eager(),
-)
-def processed_numbers(raw_numbers: list[int]) -> int:
-    # Simple transformation to make lineage obvious
-    return sum(raw_numbers)
-
-
-job_processed_numbers = dg.define_asset_job(
-    name="job_processed_numbers",
-    selection=dg.AssetSelection.assets(raw_numbers, processed_numbers),
-    # tag the run with your user to allow for easy filtering in the Dagster UI
-    tags={"user": user},
-)
-
-
 # this should match your Dockerfile WORKDIR
 workdir = "/app"
 
@@ -292,5 +269,11 @@ defs = dg.Definitions(
             credential=AzureBlobStorageDefaultCredential(),
         ),
     },
-    executor=dynamic_executor(default_config=docker_config),
+    executor=dynamic_executor(
+        # try switching to Azure compute after pushing your image
+        # default_config=default_config
+        default_config=docker_config
+        # default_config=azure_caj_config
+        # default_config=azure_batch_config
+    ),
 )
