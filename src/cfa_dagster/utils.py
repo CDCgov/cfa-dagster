@@ -43,11 +43,11 @@ def get_runs_url_for_tag(tag_key: str, tag_value: str) -> str:
 
 def get_graphql_client() -> DagsterGraphQLClient:
     if is_production():
+        return DagsterGraphQLClient(hostname=PROD_HOSTNAME)
+    else:
         return DagsterGraphQLClient(
             hostname=LOCAL_HOSTNAME, port_number=LOCAL_PORT
         )
-    else:
-        return DagsterGraphQLClient(hostname=PROD_HOSTNAME)
 
 
 def create_dev_env():
