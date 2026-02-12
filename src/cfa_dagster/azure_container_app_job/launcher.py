@@ -132,9 +132,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
             if os.getenv(env_var) and env_var not in env_vars:
                 env_vars.append(env_var)
 
-        env_var_dict = dict(
-            [parse_env_var(env_var) for env_var in env_vars]
-        )
+        env_var_dict = dict([parse_env_var(env_var) for env_var in env_vars])
         env_var_dict["DAGSTER_RUN_JOB_NAME"] = run.job_name
 
         job_execution_id = start_caj(
