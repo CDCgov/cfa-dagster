@@ -126,22 +126,23 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
 
     def _launch_container_with_command(self, run, docker_image, command):
         container_context = self.get_container_context(run)
-        env_vars = dict(
-            [parse_env_var(env_var) for env_var in container_context.env_vars]
-        )
-        env_vars["DAGSTER_RUN_JOB_NAME"] = run.job_name
-
+        env_vars = container_context.env_vars or []
         req_vars = ["DAGSTER_USER", "CFA_DAGSTER_ENV", "DAGSTER_IS_DEV_CLI"]
         for env_var in req_vars:
             if os.getenv(env_var) and env_var not in env_vars:
                 env_vars.append(env_var)
+
+        env_var_dict = dict(
+            [parse_env_var(env_var) for env_var in env_vars]
+        )
+        env_var_dict["DAGSTER_RUN_JOB_NAME"] = run.job_name
 
         job_execution_id = start_caj(
             self._azure_caj_client,
             resource_group=self._resource_group,
             container_app_job_name=self.container_app_job_name,
             image=docker_image,
-            env_vars=env_vars,
+            env_vars=env_var_dict,
             command=command,
             cpu=self.cpu,
             memory=self.memory,
