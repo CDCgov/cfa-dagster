@@ -8,12 +8,11 @@
 #    "dagster-postgres>=0.27.4",
 #    "dagster-webserver==1.12.2",
 #    "dagster==1.12.2",
-#    "cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git@gio-dynamic-execution",
+#    "cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git",
 #    "pyyaml>=6.0.2",
 # ]
 # ///
 
-#    "cfa-dagster @ file:///home/gio/Documents/CDC/cfa-dagster",
 import json
 import os
 import subprocess
@@ -40,8 +39,6 @@ from cfa_dagster import (
 from cfa_dagster import (
     azure_container_app_job_executor as azure_caj_executor,
 )
-
-# from dagster_docker import DockerRunLauncher
 
 # function to start the dev server
 start_dev_env(__name__)
