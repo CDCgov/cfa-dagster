@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import os
+import re
 import uuid
 from collections.abc import Iterator
 from datetime import datetime, timezone
@@ -299,7 +300,7 @@ class AzureBatchStepHandler(StepHandler):
 
         partition_key = run.tags.get("dagster/partition") or ""
         if partition_key:
-            partition_key = partition_key.replace("|", "_")
+            partition_key = re.sub(r"[^0-9A-Za-z]+", "_", partition_key)
 
         if step_handler_context.execute_step_args.known_state:
             retry_count = step_handler_context.execute_step_args.known_state.get_retry_state().get_attempt_count(
