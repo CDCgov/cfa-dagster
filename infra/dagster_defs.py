@@ -259,6 +259,7 @@ def create_or_update_code_location_aci(
                 "ports": [{"port": grpc_port, "protocol": "TCP"}],
                 "environment_variables": [
                     {"name": "DAGSTER_USER", "value": "prod"},
+                    {"name": "CFA_DAGSTER_ENV", "value": "prod"},
                 ],
             }
         ],
