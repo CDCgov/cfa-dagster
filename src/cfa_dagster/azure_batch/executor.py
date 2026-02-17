@@ -267,7 +267,6 @@ class AzureBatchStepHandler(StepHandler):
 
         run_creation_hour = (
             run_record.create_timestamp
-            .date()
             .strftime("%Y-%m-%dT%H")
         )
         log.debug(f"dagster_user: '{dagster_user}'")
