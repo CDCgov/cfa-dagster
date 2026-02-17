@@ -452,7 +452,7 @@ def update_definitions():
     reload_dagster_workspace(did_update)
 
 
-@dg.job()
+@dg.job(tags={"concurrency": "single"})
 def update_code_location():
     registry_image, code_location_name = get_code_location_name()
     code_location_name, grpc_host, grpc_port = (

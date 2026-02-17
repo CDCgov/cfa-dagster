@@ -250,18 +250,17 @@ wheels = [
 ]
 
 [[package]]
-name = "azure-mgmt-resource"
-version = "24.0.0"
+name = "azure-mgmt-subscription"
+version = "3.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "azure-common" },
     { name = "azure-mgmt-core" },
-    { name = "isodate" },
-    { name = "typing-extensions" },
+    { name = "msrest" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/50/4c/b27a3dfbedebbcc8e346a956a803528bd94a19fdf14b1de4bd781b03a6cc/azure_mgmt_resource-24.0.0.tar.gz", hash = "sha256:cf6b8995fcdd407ac9ff1dd474087129429a1d90dbb1ac77f97c19b96237b265", size = 3030022, upload-time = "2025-06-17T08:04:01.731Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/84/67/14b19a006e13d86f05ee59faf78c39dc443d4fd6967344e9c94f688949c1/azure-mgmt-subscription-3.1.1.zip", hash = "sha256:4e255b4ce9b924357bb8c5009b3c88a2014d3203b2495e2256fa027bf84e800e", size = 96018, upload-time = "2022-09-06T07:30:49.467Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/14/18/f047cb553dad6fdb65c625c4fe48552e043c4e9a859416a70c5047d07475/azure_mgmt_resource-24.0.0-py3-none-any.whl", hash = "sha256:27b32cd223e2784269f5a0db3c282042886ee4072d79cedc638438ece7cd0df4", size = 3613790, upload-time = "2025-06-17T08:04:04.046Z" },
+    { url = "https://files.pythonhosted.org/packages/70/12/e6de2021c4689f857386670ba0b6d3c4025d4209e45df7dd7cdabe9a4ac1/azure_mgmt_subscription-3.1.1-py3-none-any.whl", hash = "sha256:38d4574a8d47fa17e3587d756e296cb63b82ad8fb21cd8543bcee443a502bf48", size = 79409, upload-time = "2022-09-06T07:30:47.247Z" },
 ]
 
 [[package]]
@@ -370,14 +369,14 @@ wheels = [
 [[package]]
 name = "cfa-dagster"
 version = "0.1.0"
-source = { git = "https://github.com/cdcgov/cfa-dagster.git#34c613471e4cb39191813f101b4cb9527559f1c7" }
+source = { git = "https://github.com/cdcgov/cfa-dagster.git#68fa9c378b19d3eb52c3bf1c0410feca98ef53d2" }
 dependencies = [
     { name = "aiofiles" },
     { name = "azure-batch" },
     { name = "azure-identity" },
     { name = "azure-keyvault-secrets" },
     { name = "azure-mgmt-appcontainers" },
-    { name = "azure-mgmt-resource" },
+    { name = "azure-mgmt-subscription" },
     { name = "dagster" },
     { name = "dagster-azure" },
     { name = "dagster-docker" },
@@ -397,7 +396,7 @@ dependencies = [
     { name = "azure-mgmt-appcontainers" },
     { name = "azure-mgmt-containerinstance" },
     { name = "azure-mgmt-loganalytics" },
-    { name = "azure-mgmt-resource" },
+    { name = "azure-mgmt-subscription" },
     { name = "cfa-dagster" },
     { name = "dagster" },
     { name = "dagster-azure" },
@@ -417,7 +416,7 @@ requires-dist = [
     { name = "azure-mgmt-appcontainers", specifier = "==3.2.0" },
     { name = "azure-mgmt-containerinstance" },
     { name = "azure-mgmt-loganalytics" },
-    { name = "azure-mgmt-resource", specifier = ">=24.0.0" },
+    { name = "azure-mgmt-subscription", specifier = ">=3.1.1" },
     { name = "cfa-dagster", git = "https://github.com/cdcgov/cfa-dagster.git" },
     { name = "dagster", specifier = "==1.12.2" },
     { name = "dagster-azure", specifier = ">=0.27.4" },
