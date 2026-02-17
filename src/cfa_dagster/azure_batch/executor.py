@@ -246,24 +246,34 @@ class AzureBatchStepHandler(StepHandler):
         Creates a unique job id for Azure Batch
 
         The job id is a uuidv5 generated based on the DAGSTER_USER env
-        variable, the pool_id, the code location name, and the current hour.
+        variable, the pool_id, the code location name, and the hour the run was created.
 
         This ensures tasks are logically grouped into jobs without running into
         the max active job limit imposed by Batch. Since the job id is scoped to
-        the current hour, jobs without active tasks can safely be cleaned up by a
+        the run creation hour, jobs without active tasks can safely be cleaned up by a
         background process.
         """
         run = step_handler_context.dagster_run
 
         location_name = run.remote_job_origin.repository_origin.code_location_origin.location_name
         dagster_user = os.getenv("DAGSTER_USER")
-        current_hour = (
-            datetime.now(timezone.utc).date().strftime("%Y-%m-%dT%H")
+        run_record = (
+            step_handler_context
+            .instance
+            .get_run_record_by_id(run.run_id)
+        )
+        if not run_record:
+            raise RuntimeError(f"No run record for run id: {run.run_id}")
+
+        run_creation_hour = (
+            run_record.create_timestamp
+            .date()
+            .strftime("%Y-%m-%dT%H")
         )
         log.debug(f"dagster_user: '{dagster_user}'")
         log.debug(f"pool_id: '{self._pool_id}'")
         log.debug(f"location_name: '{location_name}'")
-        log.debug(f"current_hour: '{current_hour}'")
+        log.debug(f"run_creation_hour: '{run_creation_hour}'")
         base_id = uuid.uuid5(
             uuid.NAMESPACE_DNS,
             ":".join(
@@ -271,7 +281,7 @@ class AzureBatchStepHandler(StepHandler):
                     dagster_user,
                     self._pool_id,
                     location_name,
-                    current_hour,
+                    run_creation_hour,
                 ]
             ),
         )
