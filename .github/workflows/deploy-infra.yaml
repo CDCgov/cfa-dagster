@@ -7,6 +7,8 @@ on:
       - main
     paths:
       - 'src/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
       - 'infra/Dockerfile'
       - 'infra/pyproject.toml'
       - 'infra/uv.lock'
@@ -30,7 +32,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
-        run: docker build -t ghcr.io/cdcgov/cfa-dagster:latest -f infra/Dockerfile infra/ --push
+        run: docker build -t ghcr.io/cdcgov/cfa-dagster:latest -f infra/Dockerfile . --push
 
   deploy-container-app:
     runs-on: ubuntu-latest

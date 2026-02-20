@@ -166,7 +166,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         launcher: Optional[SelectorConfig] = None
         executor: Optional[SelectorConfig] = None
 
-        # Run config
+        # Run tags
         tag_config = ExecutionConfig.from_run_tags(run.tags)
         if tag_config:
             launcher = launcher or tag_config.launcher
@@ -175,7 +175,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
                 f"After tag config: launcher={launcher}, executor={executor}"
             )
 
-        # Run tags (only fill missing parts)
+        # Run config (only fill missing parts)
         if not launcher or not executor:
             run_config = ExecutionConfig.from_run_config(run.run_config)
             if run_config:

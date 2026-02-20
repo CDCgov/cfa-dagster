@@ -29,8 +29,7 @@ class SelectorConfig:
 
     def __bool__(self) -> bool:
         """
-        True if either launcher or executor is set.
-        False if both are None.
+        True if class_name is truthy and config is not None
         """
         return bool(self.class_name and self.config is not None)
 

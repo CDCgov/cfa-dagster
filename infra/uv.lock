@@ -369,7 +369,7 @@ wheels = [
 [[package]]
 name = "cfa-dagster"
 version = "0.1.0"
-source = { git = "https://github.com/cdcgov/cfa-dagster.git#68fa9c378b19d3eb52c3bf1c0410feca98ef53d2" }
+source = { directory = "../" }
 dependencies = [
     { name = "aiofiles" },
     { name = "azure-batch" },
@@ -385,6 +385,25 @@ dependencies = [
     { name = "msrest" },
     { name = "psycopg2-binary" },
 ]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiofiles", specifier = ">=24.1.0" },
+    { name = "azure-batch", specifier = "==14.2.0" },
+    { name = "azure-identity", specifier = ">=1.23.1" },
+    { name = "azure-keyvault-secrets" },
+    { name = "azure-mgmt-appcontainers", specifier = ">=3.2.0" },
+    { name = "azure-mgmt-subscription", specifier = ">=3.1.1" },
+    { name = "dagster", specifier = "==1.12.2" },
+    { name = "dagster-azure", specifier = ">=0.27.4" },
+    { name = "dagster-docker", specifier = ">=0.27.4" },
+    { name = "dagster-graphql", specifier = "==1.12.2" },
+    { name = "dagster-postgres", specifier = ">=0.27.4" },
+    { name = "msrest", specifier = "==0.7.1" },
+    { name = "psycopg2-binary" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=7.0.0" },
+]
+provides-extras = ["test"]
 
 [[package]]
 name = "cfa-dagster-infra"
@@ -417,7 +436,7 @@ requires-dist = [
     { name = "azure-mgmt-containerinstance" },
     { name = "azure-mgmt-loganalytics" },
     { name = "azure-mgmt-subscription", specifier = ">=3.1.1" },
-    { name = "cfa-dagster", git = "https://github.com/cdcgov/cfa-dagster.git" },
+    { name = "cfa-dagster", directory = "../" },
     { name = "dagster", specifier = "==1.12.2" },
     { name = "dagster-azure", specifier = ">=0.27.4" },
     { name = "dagster-docker", specifier = ">=0.27.4" },
