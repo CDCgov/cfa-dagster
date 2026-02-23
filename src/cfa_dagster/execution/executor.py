@@ -55,12 +55,21 @@ def create_executor(
         multiprocess_executor.__name__,
     ):
         env_vars = executor_config.get("env_vars", [])
+        log.debug(f"env_vars before req: '{env_vars}'")
         # Need to check if env vars are present first or
         # each run will append them again
-        req_vars = ["DAGSTER_USER", "CFA_DAGSTER_ENV", "DAGSTER_IS_DEV_CLI"]
+        req_vars = [
+            "DAGSTER_USER",
+            "CFA_DAGSTER_ENV",
+            "DAGSTER_IS_DEV_CLI",
+            "CFA_DG_PG_HOSTNAME",
+            "CFA_DG_PG_USERNAME",
+            "CFA_DG_PG_PASSWORD",
+        ]
         for env_var in req_vars:
-            if os.getenv(env_var) and env_var not in req_vars:
+            if os.getenv(env_var) and env_var not in env_vars:
                 env_vars.append(env_var)
+        log.debug(f"env_vars after req: '{env_vars}'")
         executor_config["env_vars"] = env_vars
 
     updated_context = init_context._replace(executor_config=executor_config)

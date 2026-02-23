@@ -1,3 +1,4 @@
+import importlib.resources
 import os
 import subprocess
 import sys
@@ -50,18 +51,33 @@ def get_graphql_client() -> DagsterGraphQLClient:
         )
 
 
-def create_dev_env():
-    # Authenticate using DefaultAzureCredential
-    credential = DefaultAzureCredential()
+def configure_dev_db():
+    if (
+        not os.getenv("CFA_DG_PG_HOSTNAME")
+        or not os.getenv("CFA_DG_PG_USERNAME")
+        or not os.getenv("CFA_DG_PG_PASSWORD")
+    ):
+        # Fetch secrets
+        credential = DefaultAzureCredential()
+        key_vault_url = "https://CFA-Predict.vault.azure.net/"
+        client = SecretClient(vault_url=key_vault_url, credential=credential)
+    else:
+        return
 
-    # Connect to the CFA-Tools Key Vault
-    key_vault_url = "https://CFA-Predict.vault.azure.net/"
-    client = SecretClient(vault_url=key_vault_url, credential=credential)
+    if not os.getenv("CFA_DG_PG_HOSTNAME"):
+        db_host = client.get_secret("cfa-pg-dagster-dev-host").value
+        os.environ["CFA_DG_PG_HOSTNAME"] = db_host
+    if not os.getenv("CFA_DG_PG_USERNAME"):
+        db_username = client.get_secret(
+            "cfa-pg-dagster-dev-admin-username"
+        ).value
+        os.environ["CFA_DG_PG_USERNAME"] = db_username
+    if not os.getenv("CFA_DG_PG_PASSWORD"):
+        db_password = client.get_secret(
+            "cfa-pg-dagster-dev-admin-password"
+        ).value
+        os.environ["CFA_DG_PG_PASSWORD"] = db_password
 
-    # Fetch secrets
-    db_host = client.get_secret("cfa-pg-dagster-dev-host").value
-    db_username = client.get_secret("cfa-pg-dagster-dev-admin-username").value
-    db_password = client.get_secret("cfa-pg-dagster-dev-admin-password").value
     existing_db_name = "postgres"
 
     # Create a new database for the user based on home directory
@@ -95,61 +111,6 @@ def create_dev_env():
         if conn:
             conn.close()
 
-    # create a dagster.yaml file with the new database
-    dagster_yaml_raw = f"""
-    storage:
-      postgres:
-        postgres_db:
-          hostname: {db_host}
-          username: {db_username}
-          password: {db_password}
-          db_name: {user_db_name}
-          port: 5432
-
-    compute_logs:
-      module: dagster_azure.blob.compute_log_manager
-      class: AzureBlobComputeLogManager
-      config:
-        storage_account: cfadagsterdev
-        container: cfadagsterdev
-        default_azure_credential:
-        prefix: "log-files"
-        local_dir: "/tmp/dagster-logs"
-        upload_interval: 30
-        show_url_only: false
-
-    run_coordinator:
-      module: dagster.core.run_coordinator
-      class: QueuedRunCoordinator
-      config:
-        dequeue_use_threads: true
-        dequeue_num_workers: 4
-
-    run_launcher:
-      module: cfa_dagster
-      class: DynamicRunLauncher
-
-    run_monitoring:
-      enabled: true
-
-    concurrency:
-      default_op_concurrency_limit: 1000
-      runs:
-        max_concurrent_runs: 1000
-
-    backfills:
-      use_threads: true
-      num_workers: 4
-      num_submit_workers: 4
-
-    """
-    # write to ~/.dagster_home/dagster.yaml
-    dagster_home = Path.home() / ".dagster_home"
-    dagster_home.mkdir(parents=True, exist_ok=True)
-    config_path = dagster_home / "dagster.yaml"
-    config_path.write_text(dagster_yaml_raw)
-    print("Created ~/.dagster_home/dagster.yaml")
-
 
 def start_dev_env(caller_name: str):
     """
@@ -169,16 +130,18 @@ def start_dev_env(caller_name: str):
     home_dir = Path.home()
     dagster_user = home_dir.name
     dagster_home = home_dir / ".dagster_home"
-    dagster_yaml = dagster_home / "dagster.yaml"
 
+    dagster_home = str(importlib.resources.files("cfa_dagster"))
     # Start the Dagster UI and set necessary env vars if
     # called directly via `uv run`
     if caller_name == "__main__":
-        if "--configure" in sys.argv or not os.path.exists(dagster_yaml):
-            create_dev_env()
+        configure_dev_db()
         # Set environment variables
         os.environ["DAGSTER_USER"] = dagster_user
-        os.environ["DAGSTER_HOME"] = str(dagster_home)
+        # allow users to specify their own DAGSTER_HOME
+        if not os.getenv("DAGSTER_HOME"):
+            os.environ["DAGSTER_HOME"] = str(dagster_home)
+
         script = sys.argv[0]
 
         # Run the Dagster webserver

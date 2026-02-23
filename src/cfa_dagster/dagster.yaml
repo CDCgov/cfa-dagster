@@ -1,0 +1,52 @@
+storage:
+  postgres:
+    postgres_db:
+      hostname:
+        env: CFA_DG_PG_HOSTNAME
+      username:
+        env: CFA_DG_PG_USERNAME
+      password:
+        env: CFA_DG_PG_PASSWORD
+      db_name:
+        env: DAGSTER_USER
+      port: 5432
+
+compute_logs:
+  module: dagster_azure.blob.compute_log_manager
+  class: AzureBlobComputeLogManager
+  config:
+    storage_account: cfadagsterdev
+    container: cfadagsterdev
+    default_azure_credential:
+    prefix: "log-files"
+    local_dir: "/tmp/dagster-logs"
+    upload_interval: 30
+    show_url_only: false
+
+run_coordinator:
+  module: dagster.core.run_coordinator
+  class: QueuedRunCoordinator
+  config:
+    dequeue_use_threads: true
+    dequeue_num_workers: 4
+
+run_launcher:
+  module: cfa_dagster
+  class: DynamicRunLauncher
+
+run_monitoring:
+  enabled: true
+
+concurrency:
+  default_op_concurrency_limit: 1000
+  runs:
+    max_concurrent_runs: 1000
+    tag_concurrency_limits:
+    - key: concurrency
+      value: single
+      limit: 1
+
+backfills:
+  use_threads: true
+  num_workers: 4
+  num_submit_workers: 4

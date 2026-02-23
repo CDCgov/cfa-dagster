@@ -18,7 +18,6 @@ from dagster._core.launcher.base import (
     WorkerStatus,
 )
 from dagster._core.remote_representation.external import RemoteRepository
-from dagster._core.workspace.context import BaseWorkspaceRequestContext
 from dagster._serdes import ConfigurableClass
 from dagster._serdes.config_class import ConfigurableClassData
 from dagster_docker import DockerRunLauncher
@@ -149,6 +148,9 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
                 "DAGSTER_USER",
                 "CFA_DAGSTER_ENV",
                 "DAGSTER_IS_DEV_CLI",
+                "CFA_DG_PG_HOSTNAME",
+                "CFA_DG_PG_USERNAME",
+                "CFA_DG_PG_PASSWORD",
             ]
             for env_var in req_vars:
                 if os.getenv(env_var) and env_var not in req_vars:

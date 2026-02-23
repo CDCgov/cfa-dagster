@@ -117,7 +117,14 @@ def azure_batch_executor(
     )
 
     # propagate user & dev env vars
-    req_vars = ["DAGSTER_USER", "CFA_DAGSTER_ENV", "DAGSTER_IS_DEV_CLI"]
+    req_vars = [
+        "DAGSTER_USER",
+        "CFA_DAGSTER_ENV",
+        "DAGSTER_IS_DEV_CLI",
+        "CFA_DG_PG_HOSTNAME",
+        "CFA_DG_PG_USERNAME",
+        "CFA_DG_PG_PASSWORD",
+    ]
     for env_var in req_vars:
         if os.getenv(env_var) and env_var not in env_vars:
             env_vars.append(env_var)
