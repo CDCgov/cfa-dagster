@@ -65,25 +65,17 @@ def configure_dev_db():
         return
 
     if not os.getenv("CFA_DG_PG_HOSTNAME"):
-        db_host = (
-            client
-            .get_secret("cfa-pg-dagster-dev-host")
-            .value
-        )
+        db_host = client.get_secret("cfa-pg-dagster-dev-host").value
         os.environ["CFA_DG_PG_HOSTNAME"] = db_host
     if not os.getenv("CFA_DG_PG_USERNAME"):
-        db_username = (
-            client
-            .get_secret("cfa-pg-dagster-dev-admin-username")
-            .value
-        )
+        db_username = client.get_secret(
+            "cfa-pg-dagster-dev-admin-username"
+        ).value
         os.environ["CFA_DG_PG_USERNAME"] = db_username
     if not os.getenv("CFA_DG_PG_PASSWORD"):
-        db_password = (
-            client
-            .get_secret("cfa-pg-dagster-dev-admin-password")
-            .value
-        )
+        db_password = client.get_secret(
+            "cfa-pg-dagster-dev-admin-password"
+        ).value
         os.environ["CFA_DG_PG_PASSWORD"] = db_password
 
     existing_db_name = "postgres"

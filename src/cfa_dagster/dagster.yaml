@@ -3,11 +3,11 @@ storage:
     postgres_db:
       hostname:
         env: CFA_DG_PG_HOSTNAME
-      username: 
+      username:
         env: CFA_DG_PG_USERNAME
-      password: 
+      password:
         env: CFA_DG_PG_PASSWORD
-      db_name: 
+      db_name:
         env: DAGSTER_USER
       port: 5432
 
@@ -50,4 +50,3 @@ backfills:
   use_threads: true
   num_workers: 4
   num_submit_workers: 4
-

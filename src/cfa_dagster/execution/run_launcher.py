@@ -18,7 +18,6 @@ from dagster._core.launcher.base import (
     WorkerStatus,
 )
 from dagster._core.remote_representation.external import RemoteRepository
-from dagster._core.workspace.context import BaseWorkspaceRequestContext
 from dagster._serdes import ConfigurableClass
 from dagster._serdes.config_class import ConfigurableClassData
 from dagster_docker import DockerRunLauncher
