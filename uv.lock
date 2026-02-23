@@ -379,17 +379,17 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "aiofiles", specifier = ">=24.1.0" },
-    { name = "azure-batch", specifier = "==14.2.0" },
+    { name = "azure-batch", specifier = ">=14.2.0" },
     { name = "azure-identity", specifier = ">=1.23.1" },
     { name = "azure-keyvault-secrets" },
     { name = "azure-mgmt-appcontainers", specifier = ">=3.2.0" },
     { name = "azure-mgmt-subscription", specifier = ">=3.1.1" },
-    { name = "dagster", specifier = "==1.12.2" },
+    { name = "dagster", specifier = ">=1.12.2" },
     { name = "dagster-azure", specifier = ">=0.27.4" },
     { name = "dagster-docker", specifier = ">=0.27.4" },
-    { name = "dagster-graphql", specifier = "==1.12.2" },
+    { name = "dagster-graphql", specifier = ">=1.12.2" },
     { name = "dagster-postgres", specifier = ">=0.27.4" },
-    { name = "msrest", specifier = "==0.7.1" },
+    { name = "msrest", specifier = ">=0.7.1" },
     { name = "psycopg2-binary" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=7.0.0" },
 ]
