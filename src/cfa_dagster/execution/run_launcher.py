@@ -6,6 +6,7 @@ from typing import Any, Optional, Union
 
 import yaml
 from dagster import (
+    DagsterRun,
     DefaultRunLauncher,
     JsonMetadataValue,
 )
@@ -16,7 +17,7 @@ from dagster._core.launcher.base import (
     RunLauncher,
     WorkerStatus,
 )
-from dagster._core.storage.dagster_run import DagsterRun
+from dagster._core.remote_representation.external import RemoteRepository
 from dagster._core.workspace.context import BaseWorkspaceRequestContext
 from dagster._serdes import ConfigurableClass
 from dagster._serdes.config_class import ConfigurableClassData
@@ -55,23 +56,40 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
     ) -> Self:
         return cls(inst_data=inst_data, **config_value)
 
+    def _get_remote_repo(self, context: LaunchRunContext) -> RemoteRepository:
+        workspace = context.workspace
+        location_name = context.dagster_run.remote_job_origin.location_name
+        code_location = workspace.get_code_location(location_name)
+        repo_name = code_location.get_repository_names()[0]
+        repo = code_location.get_repository(repo_name)
+        return repo
+
+    def _get_execution_config(self, context: LaunchRunContext):
+        repo = self._get_remote_repo(context)
+
+        job_name = context.dagster_run.job_name
+        external_job = repo.get_full_job(job_name)
+        job_snap = external_job.job_snapshot
+
+        # Get the root config shape
+        config_schema = job_snap.config_schema_snapshot.all_config_snaps_by_key
+
+        # The root config key is available via the mode def snap
+        mode_snap = job_snap.mode_def_snaps[0]
+        root_config_snap = config_schema[mode_snap.root_config_key]
+
+        # Find the 'execution' field and get its default value
+        for field in root_config_snap.fields:
+            if field.name == "execution":
+                execution_default = json.loads(field.default_value_as_json_str)
+                return execution_default["config"]
+
     def _get_location_metadata(self, context: LaunchRunContext):
         """
         Gets metadata from the Definitions for a code location
         """
-        workspace: BaseWorkspaceRequestContext = context.workspace
-        location_name = context.dagster_run.remote_job_origin.location_name
-        log.debug(f"location_name: '{location_name}'")
-        code_location = workspace.get_code_location(location_name)
-        log.debug(f"code_location: '{code_location}'")
+        repo = self._get_remote_repo(context)
 
-        # Now you can get the repository
-        repo_names = code_location.get_repository_names()
-        log.debug(f"repo_names: '{repo_names}'")
-        repo_name = repo_names[0]
-        log.debug(f"repo_name: '{repo_name}'")
-        repo = code_location.get_repository(repo_name)
-        log.debug(f"repo: '{repo}'")
         # display_metadata: '{'host': 'localhost', 'socket': '/tmp/tmpy8unnusp', 'python_file': 'dagster_defs.py', 'working_directory': '/app'}'
         metadata = repo.repository_snap.metadata
         log.debug(f"metadata: '{metadata}'")
@@ -166,7 +184,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         launcher: Optional[SelectorConfig] = None
         executor: Optional[SelectorConfig] = None
 
-        # Run tags
+        # from Run tags cfa_dagster/execution
         tag_config = ExecutionConfig.from_run_tags(run.tags)
         if tag_config:
             launcher = launcher or tag_config.launcher
@@ -185,8 +203,16 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
                     f"After run config: launcher={launcher}, executor={executor}"
                 )
 
-        # Metadata from context
         if context and (not launcher or not executor):
+            # from Definitions(executor=)
+            exec_config = self._get_execution_config(context)
+            exec_config = ExecutionConfig.from_executor_config(exec_config)
+            if exec_config:
+                launcher = launcher or exec_config.launcher
+                executor = executor or exec_config.executor
+            log.debug(f"exec_config: '{exec_config}'")
+
+            # from Definitions(metadata=cfa_dagster/execution)
             metadata = self._get_location_metadata(context)
             metadata_config = (
                 ExecutionConfig.from_metadata(metadata) if metadata else None
@@ -198,7 +224,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
                     f"After metadata config: launcher={launcher}, executor={executor}"
                 )
 
-        # Legacy launcher tags
+        # from Legacy launcher tags cfa_dagster/launcher
         if not launcher:
             legacy_tags = self._get_config_from_launcher_tags(run.tags)
             if legacy_tags.get("class"):
@@ -224,6 +250,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
 
         # Fill in defaults for anything still missing
         defaults = ExecutionConfig.default()
+        log.debug(f"ExecutionConfig.default(): '{defaults}'")
         final_config = ExecutionConfig(
             launcher=launcher or defaults.launcher,
             executor=executor or defaults.executor,
