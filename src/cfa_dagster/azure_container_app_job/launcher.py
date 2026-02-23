@@ -127,7 +127,14 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
     def _launch_container_with_command(self, run, docker_image, command):
         container_context = self.get_container_context(run)
         env_vars = container_context.env_vars or []
-        req_vars = ["DAGSTER_USER", "CFA_DAGSTER_ENV", "DAGSTER_IS_DEV_CLI"]
+        req_vars = [
+            "DAGSTER_USER",
+            "CFA_DAGSTER_ENV",
+            "DAGSTER_IS_DEV_CLI",
+            "CFA_DG_PG_HOSTNAME",
+            "CFA_DG_PG_USERNAME",
+            "CFA_DG_PG_PASSWORD",
+        ]
         for env_var in req_vars:
             if os.getenv(env_var) and env_var not in env_vars:
                 env_vars.append(env_var)

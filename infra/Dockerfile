@@ -29,3 +29,4 @@ ENV PATH="${VIRTUAL_ENV}/bin:$PATH"
 RUN uv sync
 
 WORKDIR ${DAGSTER_HOME}
+COPY ./infra/dagster_defs.py .

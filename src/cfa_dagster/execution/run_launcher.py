@@ -149,6 +149,9 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
                 "DAGSTER_USER",
                 "CFA_DAGSTER_ENV",
                 "DAGSTER_IS_DEV_CLI",
+                "CFA_DG_PG_HOSTNAME",
+                "CFA_DG_PG_USERNAME",
+                "CFA_DG_PG_PASSWORD",
             ]
             for env_var in req_vars:
                 if os.getenv(env_var) and env_var not in req_vars:
