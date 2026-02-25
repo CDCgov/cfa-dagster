@@ -83,7 +83,7 @@ def configure_dev_db():
     # Create a new database for the user based on home directory
     # using the $USER env var includes the domain extension which is not
     # valid for a postgres db name
-    user_db_name = Path.home().name
+    user_db_name = Path.home().name.lower()
 
     conn = None
     try:
@@ -127,20 +127,16 @@ def start_dev_env(caller_name: str):
     5. running `dagster dev -f <script_name>.py` in a subprocess
     6. Validating the DAGSTER_USER environment variable for non-dev scenarios
     """
-    home_dir = Path.home()
-    dagster_user = home_dir.name
-    dagster_home = home_dir / ".dagster_home"
-
     dagster_home = str(importlib.resources.files("cfa_dagster"))
     # Start the Dagster UI and set necessary env vars if
     # called directly via `uv run`
     if caller_name == "__main__":
         configure_dev_db()
         # Set environment variables
-        os.environ["DAGSTER_USER"] = dagster_user
+        os.environ["DAGSTER_USER"] = Path.home().name.lower()
         # allow users to specify their own DAGSTER_HOME
         if not os.getenv("DAGSTER_HOME"):
-            os.environ["DAGSTER_HOME"] = str(dagster_home)
+            os.environ["DAGSTER_HOME"] = dagster_home
 
         script = sys.argv[0]
 
