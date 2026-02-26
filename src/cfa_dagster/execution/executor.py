@@ -139,13 +139,16 @@ class DynamicExecutor(Executor):
 
 
 def dynamic_executor(
-    default_config: Optional[ExecutionConfig] = ExecutionConfig.default(),
+    default_config: Optional[ExecutionConfig] = None,
+    alternate_configs: Optional[list[ExecutionConfig]] = None,
 ):
-    config = default_config.validate()
+    default_config = default_config or ExecutionConfig.default()
+    default_config = default_config.validate()
     schema = get_dynamic_executor_config_schema(
-        default_executor=config.executor,
-        default_launcher=config.launcher,
+        default_config=default_config,
+        alternate_configs=alternate_configs,
     )
+    log.debug(f"schema: '{schema}'")
 
     @executor(
         config_schema=schema,
@@ -154,7 +157,6 @@ def dynamic_executor(
     def dynamic_executor(
         init_context: InitExecutorContext,
     ) -> Executor:
-        """Dynamic executor that chooses an executor based on the `cfa_dagster/executor` tag"""
         return DynamicExecutor(init_context)
 
     return dynamic_executor

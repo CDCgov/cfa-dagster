@@ -4,14 +4,20 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping, Optional
 
 from dagster import (
+    Array,
     DagsterInvalidConfigError,
     Field,
+    IntSource,
     MetadataValue,
+    Noneable,
+    Permissive,
     Selector,
+    Shape,
     in_process_executor,
     multiprocess_executor,
 )
-from dagster._config import process_config
+from dagster._config import ConfigTypeKind, process_config
+from dagster._utils.merger import merge_dicts
 from dagster_docker import docker_executor
 from dagster_docker.utils import DOCKER_CONFIG_SCHEMA
 
@@ -81,6 +87,9 @@ class ExecutionConfig:
         If only the executor is specified, defaults will be applied to the
         supplied executor class only.
         """
+        if not self.launcher and not self.executor:
+            return
+
         config_schema = get_dynamic_executor_config_schema(
             use_full_schema=use_full_schema
         )
@@ -211,31 +220,236 @@ class ExecutionConfig:
         return {"config": self.to_dict()}
 
 
+def _patch_config_type(config_type, default_value):
+    """
+    Recursively patches a config type with concrete types where possible,
+    using the default value to infer types for scalar/scalar_union fields.
+    Since values are pre-validated, we can trust their structure.
+    """
+    kind = config_type.kind
+
+    # Primitive scalars
+    if kind == ConfigTypeKind.SCALAR:
+        given_name = getattr(config_type, "given_name", None)
+        return {
+            "String": str,
+            "Int": int,
+            "Float": float,
+            "Bool": bool,
+        }.get(given_name, config_type)
+
+    # StringSource, IntSource etc - infer from default value
+    if kind == ConfigTypeKind.SCALAR_UNION:
+        for t in (str, bool, int, float):
+            if isinstance(default_value, t):
+                return t
+        return config_type
+
+    # Noneable - recurse into the inner type if value is not None
+    if kind == ConfigTypeKind.NONEABLE:
+        if default_value is None:
+            return config_type
+        # Access the inner type directly
+        inner = config_type.inner_type
+        patched_inner = _patch_config_type(inner, default_value)
+        return Noneable(patched_inner)
+
+    # Strict or permissive shape - recurse into fields
+    if kind in (ConfigTypeKind.STRICT_SHAPE, ConfigTypeKind.PERMISSIVE_SHAPE):
+        if not isinstance(default_value, dict):
+            return config_type
+        patched_fields = {}
+        existing_fields = getattr(config_type, "fields", {})
+        for fname, ffield in existing_fields.items():
+            if fname in default_value:
+                raw_type = (
+                    ffield.config_type if isinstance(ffield, Field) else ffield
+                )
+                patched_fields[fname] = Field(
+                    _patch_config_type(raw_type, default_value[fname]),
+                    default_value=default_value[fname],
+                    is_required=False,
+                    description=ffield.description
+                    if isinstance(ffield, Field)
+                    else None,
+                )
+            else:
+                patched_fields[fname] = ffield
+        if kind == ConfigTypeKind.PERMISSIVE_SHAPE:
+            return Permissive(patched_fields)
+        return Shape(patched_fields)
+
+    # Array - recurse into the inner type using the first element as a hint
+    if kind == ConfigTypeKind.ARRAY:
+        if not isinstance(default_value, list) or not default_value:
+            return config_type
+        inner = config_type.inner_type
+        # Use first element to infer inner type
+        patched_inner = _patch_config_type(inner, default_value[0])
+        return Array(patched_inner)
+
+    # ANY, SELECTOR, etc - return as-is
+    return config_type
+
+
+def with_alternate_default(fields: dict, alternates: dict[str, dict]) -> dict:
+    """
+    Return a copy of a Dagster config field mapping with selected defaults overridden.
+
+    This function walks a mapping of config ``fields`` (typically a config schema
+    definition) and applies alternate default values specified in ``alternates``.
+    For each top-level field name present in ``alternates``:
+
+    - If the field's config type is a ``Shape`` (i.e., a dict of nested fields),
+      only the matching inner fields are patched with:
+          * a new config type adjusted via ``_patch_config_type``
+          * ``default_value`` set to the provided alternate
+          * ``is_required=False``
+
+      The outer field itself is rebuilt as a non-required ``Field(Shape(...))``.
+      No outer default is set, since the nested field defaults are sufficient.
+
+    - If the field is a scalar (or non-dict config type), the field is rebuilt
+      with:
+          * its config type patched via ``_patch_config_type``
+          * ``default_value`` set to the provided alternate
+          * ``is_required=False``
+
+    Fields not present in ``alternates`` are returned unchanged.
+
+    The original ``fields`` mapping is not mutated; a new mapping is returned.
+
+    Args:
+        fields: A mapping of field names to Dagster ``Field`` objects or raw
+            config types.
+        alternates: A mapping of field names to alternate default values. For
+            nested shapes, the value should itself be a dict mapping inner
+            field names to their alternate defaults.
+
+    Returns:
+        A new dictionary of field definitions with alternate defaults applied
+        where specified.
+    """
+    result = {}
+    for name, field_def in fields.items():
+        if name in alternates and alternates[name]:
+            alternate_default = alternates[name]
+            if isinstance(field_def, Field):
+                config_type = field_def.config_type
+            else:
+                config_type = field_def
+
+            if isinstance(config_type, dict):
+                patched_fields = {}
+                for fname, ffield in config_type.items():
+                    if fname in alternate_default:
+                        raw_type = (
+                            ffield.config_type
+                            if isinstance(ffield, Field)
+                            else ffield
+                        )
+                        patched_fields[fname] = Field(
+                            _patch_config_type(
+                                raw_type, alternate_default[fname]
+                            ),
+                            default_value=alternate_default[fname],
+                            is_required=False,
+                            description=ffield.description
+                            if isinstance(ffield, Field)
+                            else None,
+                        )
+                    else:
+                        patched_fields[fname] = ffield
+                result[name] = Field(
+                    Shape(patched_fields),
+                    # No default_value here - inner field defaults are sufficient
+                    is_required=False,
+                )
+            else:
+                result[name] = Field(
+                    _patch_config_type(config_type, alternate_default),
+                    default_value=alternate_default,
+                    is_required=False,
+                )
+        else:
+            result[name] = field_def
+    return result
+
+
 def get_dynamic_executor_config_schema(
-    default_launcher: Optional[SelectorConfig] = None,
-    default_executor: Optional[SelectorConfig] = None,
+    default_config: Optional[ExecutionConfig] = None,
+    alternate_configs: Optional[list[ExecutionConfig]] = None,
     use_full_schema: Optional[bool] = False,
 ) -> dict:
     """
     Returns a config schema for the dynamic executor with parameters for
-    defaults and an option to return the full schema without prod restrictions
+    defaults and an option to return the full schema without prod restrictions.
+
+    alternate_configs: A list of ExecutionConfig objects whose launcher/executor
+    configs will be used as default values for those selectors in the Launchpad.
     """
     use_full_schema = use_full_schema or not is_production()
+    default_config = default_config or ExecutionConfig()
+    default_launcher = default_config.launcher
+    default_executor = default_config.executor
+
+    # Build lookup of alternate defaults by class name
+    alternate_launchers: dict[str, dict] = {}
+    alternate_executors: dict[str, dict] = {}
+    for alt in alternate_configs or []:
+        if alt.launcher:
+            alternate_launchers[alt.launcher.class_name] = alt.launcher.config
+        if alt.executor:
+            alternate_executors[alt.executor.class_name] = alt.executor.config
+
+    launcher_fields = with_alternate_default(
+        {
+            "DefaultRunLauncher": {},
+            "AzureContainerAppJobRunLauncher": (
+                azure_container_app_job_executor.config_schema.config_type.fields
+            ),
+            **(
+                {"DockerRunLauncher": DOCKER_CONFIG_SCHEMA}
+                if use_full_schema
+                else {}
+            ),
+        },
+        alternate_launchers,
+    )
+
+    docker_executor_schema = merge_dicts(
+        docker_executor.config_schema.config_type.fields,
+        {
+            "max_concurrent": Field(
+                IntSource,
+                is_required=False,
+                description=(
+                    "Limit on the number of containers that will run concurrently within the scope "
+                    "of a Dagster run. Note that this limit is per run, not global."
+                ),
+                default_value=5,
+            ),
+        },
+    )
+
+    executor_fields = with_alternate_default(
+        {
+            "in_process_executor": in_process_executor.config_schema.config_type.fields,
+            "multiprocess_executor": multiprocess_executor.config_schema.config_type.fields,
+            "azure_batch_executor": azure_batch_executor.config_schema.config_type.fields,
+            "azure_container_app_job_executor": azure_container_app_job_executor.config_schema.config_type.fields,
+            **(
+                {"docker_executor": docker_executor_schema}
+                if use_full_schema
+                else {}
+            ),
+        },
+        alternate_executors,
+    )
+
     return {
         "launcher": Field(
-            Selector(
-                {
-                    "DefaultRunLauncher": {},
-                    "AzureContainerAppJobRunLauncher": (
-                        azure_container_app_job_executor.config_schema.config_type.fields
-                    ),
-                    **(
-                        {"DockerRunLauncher": DOCKER_CONFIG_SCHEMA}
-                        if use_full_schema
-                        else {}
-                    ),
-                }
-            ),
+            Selector(launcher_fields),
             description=(
                 "The run launcher determines the environment where "
                 "the Dagster run occurs."
@@ -249,31 +463,7 @@ def get_dynamic_executor_config_schema(
             ),
         ),
         "executor": Field(
-            Selector(
-                {
-                    "in_process_executor": (
-                        in_process_executor.config_schema.config_type.fields
-                    ),
-                    "multiprocess_executor": (
-                        multiprocess_executor.config_schema.config_type.fields
-                    ),
-                    "azure_batch_executor": (
-                        azure_batch_executor.config_schema.config_type.fields
-                    ),
-                    "azure_container_app_job_executor": (
-                        azure_container_app_job_executor.config_schema.config_type.fields
-                    ),
-                    **(
-                        {
-                            "docker_executor": (
-                                docker_executor.config_schema.config_type.fields
-                            )
-                        }
-                        if use_full_schema
-                        else {}
-                    ),
-                }
-            ),
+            Selector(executor_fields),
             description=(
                 "The executor determines how the steps in a run are "
                 "parallelized within the run launcher environment"

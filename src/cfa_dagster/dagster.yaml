@@ -24,8 +24,8 @@ compute_logs:
     show_url_only: false
 
 run_coordinator:
-  module: dagster.core.run_coordinator
-  class: QueuedRunCoordinator
+  module: cfa_dagster
+  class: CFAQueuedRunCoordinator
   config:
     dequeue_use_threads: true
     dequeue_num_workers: 4
@@ -45,6 +45,12 @@ concurrency:
     - key: concurrency
       value: single
       limit: 1
+    - key: cfa_dagster/target
+      value:
+        applyLimitPerUniqueValue: true
+      limit: 1
+    - key: docker/container_id
+      limit: 5
 
 backfills:
   use_threads: true
