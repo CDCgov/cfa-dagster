@@ -1,11 +1,12 @@
-from typing import Optional
-import logging
 import hashlib
+import logging
+from typing import Optional
+
 from dagster import (
+    DagsterInstance,
     DagsterRun,
     QueuedRunCoordinator,
     SubmitRunContext,
-    DagsterInstance,
 )
 
 log = logging.getLogger(__name__)
@@ -15,7 +16,6 @@ MAX_TAG_LENGTH = 255
 
 
 class CFAQueuedRunCoordinator(QueuedRunCoordinator):
-
     def _get_target_tag(
         self,
         run: DagsterRun,
@@ -34,7 +34,9 @@ class CFAQueuedRunCoordinator(QueuedRunCoordinator):
         # Use step_keys_to_execute for all jobs
         if run.asset_selection:
             # Backfills and asset runs
-            target_steps = sorted("/".join(a.path) for a in run.asset_selection)
+            target_steps = sorted(
+                "/".join(a.path) for a in run.asset_selection
+            )
         elif run.step_keys_to_execute:
             # Regular ops/subset runs
             target_steps = sorted(run.step_keys_to_execute)
