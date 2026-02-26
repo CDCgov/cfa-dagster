@@ -16,7 +16,7 @@ from dagster_graphql import DagsterGraphQLClient
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 LOCAL_HOSTNAME = "127.0.0.1"
-LOCAL_PORT = 3000
+LOCAL_PORT = 4000
 PROD_HOSTNAME = os.getenv(
     "DAGSTER_WEBSERVER_URL", "dagster.apps.edav.ext.cdc.gov"
 )
@@ -32,9 +32,9 @@ def is_production() -> bool:
 
 def get_webserver_url() -> str:
     if is_production():
-        return f"http://{LOCAL_HOSTNAME}:{LOCAL_PORT}"
-    else:
         return f"https://{PROD_HOSTNAME}"
+    else:
+        return f"http://{LOCAL_HOSTNAME}:{LOCAL_PORT}"
 
 
 def get_runs_url_for_tag(tag_key: str, tag_value: str) -> str:
