@@ -362,7 +362,7 @@ def with_alternate_default(fields: dict, alternates: dict[str, dict]) -> dict:
                         patched_fields[fname] = ffield
                 result[name] = Field(
                     Shape(patched_fields),
-                    # No default_value here - inner field defaults are sufficient
+                    default_value=alternate_default,
                     is_required=False,
                 )
             else:
