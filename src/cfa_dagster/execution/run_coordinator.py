@@ -22,7 +22,7 @@ class CFAQueuedRunCoordinator(QueuedRunCoordinator):
         instance: DagsterInstance,
     ) -> Optional[dict]:
         """
-        Returns a 'cfa_dagster/target' tag identifying the steps (ops/assets)
+        Returns a 'cfa_dagster/target' tag identifying the assets
         and partitions for the run. Used with tag_concurrency_limits to prevent
         IO manager collisions during parallel runs.
         """
@@ -38,9 +38,6 @@ class CFAQueuedRunCoordinator(QueuedRunCoordinator):
             target_steps = sorted(
                 "/".join(a.path) for a in run.asset_selection
             )
-        elif run.step_keys_to_execute:
-            # Regular ops/subset runs
-            target_steps = sorted(run.step_keys_to_execute)
 
         # -----------------------------
         # Collect partitions (single + multi)
