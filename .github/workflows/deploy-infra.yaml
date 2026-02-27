@@ -9,13 +9,19 @@ on:
       - 'src/**'
       - 'pyproject.toml'
       - 'uv.lock'
-      - 'infra/Dockerfile'
+      - 'infra/flake.nix'
+      - 'infra/flake.lock'
       - 'infra/pyproject.toml'
       - 'infra/uv.lock'
 
+env:
+  IMAGE_NAME: cfa-dagster
+  IMAGE_TAG: ${{ (github.head_ref || github.ref_name) == 'master' && 'latest' || github.head_ref || github.ref_name }}
+  # getting tag from branch name https://stackoverflow.com/a/71158878
+
 jobs:
   build-and-push-image:
-    runs-on: ubuntu-latest
+    runs-on: cfa-aca-gh-runner
     permissions:
       contents: read
       packages: write
@@ -24,15 +30,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Log in to the GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build image
+        run: nix build
 
-      - name: Build and push Docker image
-        run: docker build -t ghcr.io/cdcgov/cfa-dagster:latest -f infra/Dockerfile . --push
+      - name: Push image ghcr.io
+        id: push-ghcr
+        run: |
+            #bash toLowercase e.g. CDCgov -> cdcgov
+            OWNER=${GITHUB_REPOSITORY_OWNER,,}
+            REGISTRY_IMAGE="ghcr.io/$OWNER/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+
+            skopeo copy \
+            --dest-creds ${{ github.actor }}:${{ secrets.GITHUB_TOKEN }} \
+            "docker-archive:result" \
+            "docker://$REGISTRY_IMAGE"
 
   deploy-container-app:
     runs-on: ubuntu-latest
