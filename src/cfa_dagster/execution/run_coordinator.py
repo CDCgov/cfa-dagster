@@ -32,6 +32,7 @@ class CFAQueuedRunCoordinator(QueuedRunCoordinator):
         # Determine target steps (ops/assets)
         # -----------------------------
         # Use step_keys_to_execute for all jobs
+        target_steps = []
         if run.asset_selection:
             # Backfills and asset runs
             target_steps = sorted(
