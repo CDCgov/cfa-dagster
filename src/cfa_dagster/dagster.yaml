@@ -36,7 +36,7 @@ run_launcher:
 
 run_monitoring:
   enabled: true
-  max_resume_attempts: 1
+  max_resume_run_attempts: 1
 
 concurrency:
   default_op_concurrency_limit: 1000
