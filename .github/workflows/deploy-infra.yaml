@@ -21,7 +21,7 @@ env:
 
 jobs:
   build-and-push-image:
-    runs-on: cfa-aca-gh-runner
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -30,16 +30,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build image
-        run: nix build
+      - name: Run update script with cfa runner-action
+        uses: CDCgov/cfa-actions/runner-action@v1.5.0
 
-      - name: Push image ghcr.io
-        id: push-ghcr
-        run: |
-            #bash toLowercase e.g. CDCgov -> cdcgov
-            OWNER=${GITHUB_REPOSITORY_OWNER,,}
+        with:
+          github_app_id: ${{ secrets.CDCENT_ACTOR_APP_ID }}
+          github_app_pem: ${{ secrets.CDCENT_ACTOR_APP_PEM }}
+          script: |
+            echo 'Building image'
+            nix build
+
+            OWNER='${{ github.repository_owner }}'
+            # to lowercase
+            OWNER=${OWNER,,}
             REGISTRY_IMAGE="ghcr.io/$OWNER/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
 
+            echo 'Pushing to ghcr'
             skopeo copy \
             --dest-creds ${{ github.actor }}:${{ secrets.GITHUB_TOKEN }} \
             "docker-archive:result" \
