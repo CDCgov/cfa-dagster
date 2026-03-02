@@ -11,6 +11,7 @@ on:
       - 'uv.lock'
       - 'infra/flake.nix'
       - 'infra/flake.lock'
+      - 'infra/dagster_defs.py'
       - 'infra/pyproject.toml'
       - 'infra/uv.lock'
 
