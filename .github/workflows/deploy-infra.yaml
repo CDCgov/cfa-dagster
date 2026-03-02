@@ -16,7 +16,7 @@ on:
 
 env:
   IMAGE_NAME: cfa-dagster
-  IMAGE_TAG: ${{ (github.head_ref || github.ref_name) == 'master' && 'latest' || github.head_ref || github.ref_name }}
+  IMAGE_TAG: ${{ (github.head_ref || github.ref_name) == 'main' && 'latest' || github.head_ref || github.ref_name }}
   # getting tag from branch name https://stackoverflow.com/a/71158878
 
 jobs:
@@ -50,6 +50,7 @@ jobs:
             "docker://$REGISTRY_IMAGE"
 
   deploy-container-app:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     needs: build-and-push-image
     environment: production
