@@ -76,7 +76,7 @@
           dagsterHomeLayer = pkgs.runCommand "dagster-home-dir" { } ''
             mkdir -p $out${dagsterHome}
             # uncomment to include dagster_defs.py in the final image
-            # cp ${./dagster_defs.py} $out${dagsterHome}/dagster_defs.py
+            cp ${./dagster_defs.py} $out${dagsterHome}/dagster_defs.py
           '';
 
           # Create a runtime environment with all necessary files
