@@ -123,6 +123,7 @@
                 "PATH=/bin:/usr/bin:${virtualenv}/bin"
                 "DAGSTER_HOME=${dagsterHome}"
                 "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+                "DAGSTER_GRPC_SOCKET=/tmp/cfa_dagster.sock"
               ];
 
               WorkingDir = dagsterHome;
