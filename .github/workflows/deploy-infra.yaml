@@ -34,7 +34,7 @@ jobs:
           use-flakehub: false
 
       - name: Build Image
-        run: nix build
+        run: nix build infra/#
 
       - name: Push image
         run: |
