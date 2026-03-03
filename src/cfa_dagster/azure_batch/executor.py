@@ -306,11 +306,15 @@ class AzureBatchStepHandler(StepHandler):
 
         short_run_id = run.run_id.split("-", 1)[0]  # always 8 chars
 
+        # batch tasks only allow alphanumeric, hyphen, underscore
+        regex_batch_task = r"[^0-9A-Za-z]+"
+
         step_key = self._get_step_key(step_handler_context)
+        step_key = re.sub(regex_batch_task, "_", step_key)
 
         partition_key = run.tags.get("dagster/partition") or ""
         if partition_key:
-            partition_key = re.sub(r"[^0-9A-Za-z]+", "_", partition_key)
+            partition_key = re.sub(regex_batch_task, "_", partition_key)
 
         if step_handler_context.execute_step_args.known_state:
             retry_count = step_handler_context.execute_step_args.known_state.get_retry_state().get_attempt_count(
