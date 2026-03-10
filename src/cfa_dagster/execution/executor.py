@@ -11,6 +11,7 @@ from dagster import (
 )
 from dagster._core.execution.context.system import PlanOrchestrationContext
 from dagster._core.execution.plan.plan import ExecutionPlan
+from dagster._core.execution.retries import RetryMode
 from dagster._core.execution.step_dependency_config import (
     StepDependencyConfig,
 )
@@ -18,6 +19,7 @@ from dagster._core.executor.base import Executor
 from dagster._core.executor.init import InitExecutorContext
 from dagster._core.executor.step_delegating import StepDelegatingExecutor
 
+# used via globals()[executor_class_name]
 # ruff: noqa: F401
 from dagster_docker import docker_executor
 
@@ -26,6 +28,8 @@ from cfa_dagster import (
     azure_container_app_job_executor,
 )
 
+# using relative import to avoid circular dependency
+from .step_handler import RoutingStepHandler
 from .utils import (
     ExecutionConfig,
     SelectorConfig,
@@ -157,6 +161,22 @@ def dynamic_executor(
     def dynamic_executor(
         init_context: InitExecutorContext,
     ) -> Executor:
-        return DynamicExecutor(init_context)
+        execution_config = ExecutionConfig.from_executor_config(
+            init_context.executor_config
+        )
+        # executor config is always populated by Dagster
+        executor_config = execution_config.executor.config
+        retries = executor_config.get("retries")
+        max_concurrent = executor_config.get("max_concurrent")
+        tag_concurrency_limits = executor_config.get("tag_concurrency_limits")
+        step_dependency_config = executor_config.get("step_dependency_config")
+        return StepDelegatingExecutor(
+            RoutingStepHandler(init_context),
+            retries=check.not_none(RetryMode.from_config(retries)),
+            max_concurrent=max_concurrent,
+            tag_concurrency_limits=tag_concurrency_limits,
+            step_dependency_config=step_dependency_config
+            or StepDependencyConfig.default(),
+        )
 
     return dynamic_executor

@@ -50,7 +50,7 @@ from msrest.authentication import BasicTokenAuthentication
 log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    pass
+    from dagster._core.origin import JobPythonOrigin
 
 
 @executor(
@@ -201,8 +201,13 @@ class AzureBatchStepHandler(StepHandler):
             image = self._image
 
         if not image:
+            image = cast(
+                "JobPythonOrigin", step_handler_context.dagster_run.job_code_origin
+            ).repository_origin.container_image
+
+        if not image:
             raise Exception(
-                "No docker image specified by the executor or run config"
+                "No docker image specified by the executor, run config, or code location"
             )
 
         return image

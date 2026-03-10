@@ -1,7 +1,7 @@
 import logging
 import os
 from collections.abc import Iterator
-from typing import Optional, cast
+from typing import Optional, cast, TYPE_CHECKING
 
 import dagster._check as check
 from azure.identity import DefaultAzureCredential
@@ -31,6 +31,9 @@ from dagster_docker.utils import (
 from .utils import CAJ_CONFIG_SCHEMA, get_status_caj, start_caj, stop_caj
 
 log = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from dagster._core.origin import JobPythonOrigin
 
 
 @executor(
@@ -177,8 +180,13 @@ class AzureContainerAppJobStepHandler(StepHandler):
             image = self._image
 
         if not image:
+            image = cast(
+                "JobPythonOrigin", step_handler_context.dagster_run.job_code_origin
+            ).repository_origin.container_image
+
+        if not image:
             raise Exception(
-                "No docker image specified by the executor or run config"
+                "No docker image specified by the executor, run config, or code location"
             )
 
         return image
