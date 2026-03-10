@@ -101,7 +101,7 @@ class DynamicGraphAssetExecutionContext(dg.OpExecutionContext):
     Use as a type hint on the context parameter of a @dynamic_graph_asset
     decorated function to:
 
-        @dynamic_graph_asset(mapping_keys=["state", "disease"], ...)
+        @dynamic_graph_asset(graph_dimensions=["state", "disease"], ...)
         def my_asset(context: DynamicGraphAssetExecutionContext, config: MyConfig):
             context.mapping_key["states"]    # "AK"
             context.mapping_key["diseases"]  # "COVID-19"
@@ -112,7 +112,7 @@ class DynamicGraphAssetExecutionContext(dg.OpExecutionContext):
     _should_run_output_fn = False
 
     @property
-    def mapping_key(self) -> dict[str, str]:
+    def graph_dimension(self) -> dict[str, str]:
         if self._mapping_key is None:
             values = _decode_mapping_key(self.get_mapping_key())
             self._mapping_key = dict(zip(self._mapping_key_names, values))
@@ -154,7 +154,7 @@ class DynamicGraphAssetExecutionContext(dg.OpExecutionContext):
 
 # -- Decorator --
 def dynamic_graph_asset(
-    mapping_keys: List[str],
+    graph_dimensions: List[str],
     **graph_asset_kwargs,
 ):
     """
@@ -163,18 +163,18 @@ def dynamic_graph_asset(
     and https://docs.dagster.io/guides/build/assets/graph-backed-assets
 
     The decorated function becomes the compute op, called once per combination
-    of mapping_keys field values. Config fields listed in `mapping_keys` are unpacked to
+    of graph_dimensions field values. Config fields listed in `graph_dimensions` are unpacked to
     single scalar values inside the function body.
 
-    mapping_keys values are encoded into the mapping key using _XX_ hex escaping so
-    original values (including spaces, hyphens, etc.) are recovered exactly in
+    graph_dimensions values are encoded into the internap op mapping key using _XX_ hex escaping
+    so original values (including spaces, hyphens, etc.) are recovered exactly in
     the compute op, while safe characters remain human-readable in the Dagster UI.
 
     Output can be returned by calling context.register_output(Callable[Any, dg.Output]) in
     the first line of the decorated function.
 
     Args:
-        mapping_keys: List of config field names to fan out over. Must be iterable
+        graph_dimensions: List of config field names to fan out over. Must be iterable
                 fields on the Config class (e.g. List[str]). The cartesian
                 product of all fields becomes the set of dynamic mapping keys.
         **graph_asset_kwargs: Passed through to @dg.graph_asset, e.g.
@@ -187,7 +187,7 @@ def dynamic_graph_asset(
             container: str
 
         @dynamic_graph_asset(
-            mapping_keys=["disease", "state"],
+            graph_dimensions=["disease", "state"],
             partitions_def=daily_partitions,
             ins={"upstream": dg.AssetIn("some_upstream_asset")},
         )
@@ -222,11 +222,11 @@ def dynamic_graph_asset(
                 f"parameter annotated with a dg.Config subclass"
             )
 
-        # -- Validate mapping_keys fields --
-        for field in mapping_keys:
+        # -- Validate graph_dimensions fields --
+        for field in graph_dimensions:
             if field not in config_cls.model_fields:
                 raise ValueError(
-                    f"@dynamic_graph_asset '{asset_name}': mapping_keys field '{field}' "
+                    f"@dynamic_graph_asset '{asset_name}': graph_dimensions field '{field}' "
                     f"does not exist on {config_cls.__name__}. "
                     f"Available fields: {list(config_cls.model_fields.keys())}"
                 )
@@ -234,7 +234,7 @@ def dynamic_graph_asset(
             origin = get_origin(field_annotation)
             if origin is None or origin not in (list, tuple, set, frozenset):
                 raise ValueError(
-                    f"@dynamic_graph_asset '{asset_name}': mapping_keys field '{field}' "
+                    f"@dynamic_graph_asset '{asset_name}': graph_dimensions field '{field}' "
                     f"on {config_cls.__name__} must be an iterable type (e.g. list[str]), "
                     f"got '{field_annotation}'"
                 )
@@ -258,7 +258,7 @@ def dynamic_graph_asset(
         )
         def gen_config(context):
             config = config_cls(**context.op_config)
-            axes = [getattr(config, field) for field in mapping_keys]
+            axes = [getattr(config, field) for field in graph_dimensions]
             for combo in itertools.product(*axes):
                 mapping_key = _encode_mapping_key(combo)
                 yield dg.DynamicOutput(value=None, mapping_key=mapping_key)
@@ -272,13 +272,13 @@ def dynamic_graph_asset(
         )
         def compute(context, **kwargs):
             original_values = _decode_mapping_key(context.get_mapping_key())
-            overrides = {k: [v] for k, v in zip(mapping_keys, original_values)}
-            # override mapping_keys with dimension values for this iteration
+            overrides = {k: [v] for k, v in zip(graph_dimensions, original_values)}
+            # override graph_dimensions with dimension values for this iteration
             config = config_cls(**{**context.op_config, **overrides})
             upstream_kwargs = {k: v for k, v in kwargs.items() if k != "_"}
             dynamic_context = DynamicGraphAssetExecutionContext.inject(
                 context,
-                mapping_keys,
+                graph_dimensions,
                 False,
             )
             fn(dynamic_context, config, **upstream_kwargs)
@@ -295,7 +295,7 @@ def dynamic_graph_asset(
             upstream_kwargs = {k: v for k, v in kwargs.items() if k != "_"}
             dynamic_context = DynamicGraphAssetExecutionContext.inject(
                 context,
-                mapping_keys,
+                graph_dimensions,
                 True,
             )
             try:
