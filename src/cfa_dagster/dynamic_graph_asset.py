@@ -272,7 +272,9 @@ def dynamic_graph_asset(
         )
         def compute(context, **kwargs):
             original_values = _decode_mapping_key(context.get_mapping_key())
-            overrides = {k: [v] for k, v in zip(graph_dimensions, original_values)}
+            overrides = {
+                k: [v] for k, v in zip(graph_dimensions, original_values)
+            }
             # override graph_dimensions with dimension values for this iteration
             config = config_cls(**{**context.op_config, **overrides})
             upstream_kwargs = {k: v for k, v in kwargs.items() if k != "_"}

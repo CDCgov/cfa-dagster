@@ -23,7 +23,7 @@ from azure.batch.models import (
 )
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.subscription import SubscriptionClient
-from dagster import Field, StringSource, executor, Permissive
+from dagster import Field, Permissive, StringSource, executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
@@ -64,18 +64,20 @@ if TYPE_CHECKING:
                 description="The name of the Azure Batch Pool.",
             ),
             "container_kwargs": Field(
-                Permissive({
-                    "working_dir": Field(
-                        StringSource,
-                        is_required=True,
-                        description="Path to the working directory. Must match the WORKDIR in your Dockerfile"
-                    )
-                }),
+                Permissive(
+                    {
+                        "working_dir": Field(
+                            StringSource,
+                            is_required=True,
+                            description="Path to the working directory. Must match the WORKDIR in your Dockerfile",
+                        )
+                    }
+                ),
                 is_required=True,
                 description=(
                     "key-value pairs that can be passed into containers.create. See "
-                        "https://docker-py.readthedocs.io/en/stable/containers.html for the full list "
-                        "of available options."
+                    "https://docker-py.readthedocs.io/en/stable/containers.html for the full list "
+                    "of available options."
                 ),
             ),
         },
@@ -217,7 +219,8 @@ class AzureBatchStepHandler(StepHandler):
 
         if not image:
             image = cast(
-                "JobPythonOrigin", step_handler_context.dagster_run.job_code_origin
+                "JobPythonOrigin",
+                step_handler_context.dagster_run.job_code_origin,
             ).repository_origin.container_image
 
         if not image:

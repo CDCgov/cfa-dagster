@@ -1,35 +1,36 @@
+import logging
 import os
 import subprocess
 from typing import Iterator, Optional, cast
-import dagster._check as check
 
+import dagster._check as check
+from dagster import (
+    DagsterEvent,
+    ExecutorDefinition,
+    InitExecutorContext,
+    in_process_executor,
+    multiprocess_executor,
+)
 from dagster._core.executor.step_delegating import (
     CheckStepHealthResult,
     StepDelegatingExecutor,
     StepHandler,
     StepHandlerContext,
 )
-from dagster import (
-    InitExecutorContext,
-    DagsterEvent,
-    ExecutorDefinition,
-    in_process_executor,
-    multiprocess_executor,
-)
-# using relative import to avoid circular dependency
-from .utils import (
-    ExecutionConfig,
-)
 
 # used via globals()[executor_class_name]
 # ruff: noqa: F401
 from dagster_docker import docker_executor
+
 from cfa_dagster import (
     azure_batch_executor,
     azure_container_app_job_executor,
 )
 
-import logging
+# using relative import to avoid circular dependency
+from .utils import (
+    ExecutionConfig,
+)
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +51,9 @@ class SynchronousStepHandler(StepHandler):
     def launch_step(
         self, step_handler_context: StepHandlerContext
     ) -> Iterator[DagsterEvent]:
-        step_key = step_handler_context.execute_step_args.step_keys_to_execute[0]
+        step_key = step_handler_context.execute_step_args.step_keys_to_execute[
+            0
+        ]
         step_context = step_handler_context.get_step_context(step_key)
 
         yield DagsterEvent.step_worker_starting(
@@ -100,7 +103,9 @@ class SubprocessStepHandler(StepHandler):
     def launch_step(
         self, step_handler_context: StepHandlerContext
     ) -> Iterator[DagsterEvent]:
-        step_key = step_handler_context.execute_step_args.step_keys_to_execute[0]
+        step_key = step_handler_context.execute_step_args.step_keys_to_execute[
+            0
+        ]
         step_context = step_handler_context.get_step_context(step_key)
 
         yield DagsterEvent.step_worker_starting(
@@ -117,7 +122,9 @@ class SubprocessStepHandler(StepHandler):
     def check_step_health(
         self, step_handler_context: StepHandlerContext
     ) -> CheckStepHealthResult:
-        step_key = step_handler_context.execute_step_args.step_keys_to_execute[0]
+        step_key = step_handler_context.execute_step_args.step_keys_to_execute[
+            0
+        ]
         process = self._processes.get(step_key)
         if process is None or process.poll() is None:
             return CheckStepHealthResult.healthy()
@@ -130,7 +137,9 @@ class SubprocessStepHandler(StepHandler):
     def terminate_step(
         self, step_handler_context: StepHandlerContext
     ) -> Iterator[DagsterEvent]:
-        step_key = step_handler_context.execute_step_args.step_keys_to_execute[0]
+        step_key = step_handler_context.execute_step_args.step_keys_to_execute[
+            0
+        ]
         process = self._processes.pop(step_key, None)
         if process and process.poll() is None:
             process.terminate()
@@ -213,7 +222,9 @@ class RoutingStepHandler(StepHandler):
         )
         return step_keys_to_execute[0]
 
-    def _get_handler(self, step_handler_context: StepHandlerContext) -> StepHandler:
+    def _get_handler(
+        self, step_handler_context: StepHandlerContext
+    ) -> StepHandler:
         # 1. Op-level executor tag
         step_tags = self._get_step_tags(step_handler_context)
         log.debug(f"step_tags: '{step_tags}'")
@@ -238,7 +249,9 @@ class RoutingStepHandler(StepHandler):
             )
             if executor_config and executor_config.executor:
                 execution_config = execution_config or executor_config
-                log.debug(f"from executor config: '{executor_config.executor}'")
+                log.debug(
+                    f"from executor config: '{executor_config.executor}'"
+                )
 
         handler_key = execution_config.executor.class_name
         if handler_key not in self._handler_cache:
@@ -249,10 +262,16 @@ class RoutingStepHandler(StepHandler):
         return self._handler_cache[handler_key]
 
     def launch_step(self, step_handler_context):
-        return self._get_handler(step_handler_context).launch_step(step_handler_context)
+        return self._get_handler(step_handler_context).launch_step(
+            step_handler_context
+        )
 
     def check_step_health(self, step_handler_context):
-        return self._get_handler(step_handler_context).check_step_health(step_handler_context)
+        return self._get_handler(step_handler_context).check_step_health(
+            step_handler_context
+        )
 
     def terminate_step(self, step_handler_context):
-        return self._get_handler(step_handler_context).terminate_step(step_handler_context)
+        return self._get_handler(step_handler_context).terminate_step(
+            step_handler_context
+        )

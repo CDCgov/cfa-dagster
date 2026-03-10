@@ -1,7 +1,7 @@
 import logging
 import os
 from collections.abc import Iterator
-from typing import Optional, cast, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, cast
 
 import dagster._check as check
 from azure.identity import DefaultAzureCredential
@@ -181,7 +181,8 @@ class AzureContainerAppJobStepHandler(StepHandler):
 
         if not image:
             image = cast(
-                "JobPythonOrigin", step_handler_context.dagster_run.job_code_origin
+                "JobPythonOrigin",
+                step_handler_context.dagster_run.job_code_origin,
             ).repository_origin.container_image
 
         if not image:
