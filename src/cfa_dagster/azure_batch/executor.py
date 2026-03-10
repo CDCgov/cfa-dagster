@@ -23,7 +23,7 @@ from azure.batch.models import (
 )
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.subscription import SubscriptionClient
-from dagster import Field, StringSource, executor
+from dagster import Field, StringSource, executor, Permissive
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
@@ -62,6 +62,21 @@ if TYPE_CHECKING:
                 StringSource,
                 is_required=True,
                 description="The name of the Azure Batch Pool.",
+            ),
+            "container_kwargs": Field(
+                Permissive({
+                    "working_dir": Field(
+                        StringSource,
+                        is_required=True,
+                        description="Path to the working directory. Must match the WORKDIR in your Dockerfile"
+                    )
+                }),
+                is_required=True,
+                description=(
+                    "key-value pairs that can be passed into containers.create. See "
+                        "https://docker-py.readthedocs.io/en/stable/containers.html for the full list "
+                        "of available options."
+                ),
             ),
         },
     ),
