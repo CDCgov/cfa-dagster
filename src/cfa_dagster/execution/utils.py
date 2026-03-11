@@ -144,6 +144,8 @@ class ExecutionConfig:
     def from_executor_config(
         cls, config: Mapping[str, Any]
     ) -> "ExecutionConfig":
+        if not config:
+            return cls()
         return cls(
             launcher=SelectorConfig.from_json(config.get("launcher")),
             executor=SelectorConfig.from_json(config.get("executor")),
@@ -154,6 +156,8 @@ class ExecutionConfig:
     # -------------------------
     @classmethod
     def from_run_config(cls, config: Mapping[str, Any]) -> "ExecutionConfig":
+        if not config:
+            return cls()
         executor_config = config.get("execution", {}).get("config", {})
         return cls.from_executor_config(executor_config)
 
@@ -162,6 +166,8 @@ class ExecutionConfig:
     # -------------------------
     @classmethod
     def from_run_tags(cls, tags: Mapping[str, str]) -> "ExecutionConfig":
+        if not tags:
+            return cls()
         raw_json = tags.get(cls.TAG_KEY)
         if not raw_json:
             return cls()
