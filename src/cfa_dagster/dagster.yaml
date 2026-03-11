@@ -41,7 +41,7 @@ run_monitoring:
 concurrency:
   default_op_concurrency_limit: 1000
   runs:
-    max_concurrent_runs: 1000
+    max_concurrent_runs: 100
     tag_concurrency_limits:
     - key: concurrency
       value: single
