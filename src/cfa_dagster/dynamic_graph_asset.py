@@ -95,16 +95,15 @@ class _CaptureOutput(Exception):
 
 class DynamicGraphAssetExecutionContext(dg.OpExecutionContext):
     """
-    OpExecutionContext subclass that exposes the current fanout mapping key
-    as a typed object with named attributes for each fanout axis.
-
-    Use as a type hint on the context parameter of a @dynamic_graph_asset
-    decorated function to:
+    OpExecutionContext subclass that exposes the current graph dimension as a dictionary.
 
         @dynamic_graph_asset(graph_dimensions=["state", "disease"], ...)
         def my_asset(context: DynamicGraphAssetExecutionContext, config: MyConfig):
-            context.mapping_key["states"]    # "AK"
-            context.mapping_key["diseases"]  # "COVID-19"
+            context.graph_dimension["state"]    # "AK"
+            context.graph_dimension["disease"]  # "COVID-19"
+
+    This subclass also exposes a register_output() function to provide an Output for the asset
+    in the absence of the traditional `yield dg.Output or dg.AssetMaterialization`
     """
 
     _mapping_key: dict | None = None
@@ -196,7 +195,7 @@ def dynamic_graph_asset(
                 value=f"staging/{context.partition_key}",
                 metadata={"container": config.base_output_prefix},
             ))
-            my_code_pipeline(context.mapping_key["disease"], context.mapping_key["state"], upstream_asset)
+            my_code_pipeline(context.graph_dimension["disease"], context.graph_dimension["state"], upstream_asset)
     """
 
     def decorator(fn):
