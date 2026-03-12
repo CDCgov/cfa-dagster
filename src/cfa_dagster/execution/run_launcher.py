@@ -325,7 +325,8 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
     def terminate(self, run_id):
         log.debug("Terminating run_id: " + run_id)
         run = self._instance.get_run_by_id(run_id)
-        launcher_config = self._get_config_from_launcher_tags(run.tags)
+        launcher_config = self._get_launcher_config(run)
+        log.debug(f"terminating with launcher_config: '{launcher_config}'")
         run_launcher = self._create_launcher(launcher_config)
         log.debug(
             f"Terminating run_id '{run_id}' with launcher '{run_launcher.__class__.__name__}'"
