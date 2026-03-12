@@ -20,8 +20,14 @@ from azure.mgmt.loganalytics import LogAnalyticsManagementClient
 from azure.mgmt.subscription import SubscriptionClient
 from msrest.authentication import BasicTokenAuthentication
 
-from cfa_dagster import ADLS2PickleIOManager
-from cfa_dagster.utils import collect_definitions, start_dev_env
+from cfa_dagster import (
+    ADLS2PickleIOManager,
+    ExecutionConfig,
+    SelectorConfig,
+    collect_definitions,
+    dynamic_executor,
+    start_dev_env,
+)
 
 # Start the Dagster UI and set necessary env vars
 start_dev_env(__name__)
@@ -427,31 +433,6 @@ def reload_dagster_workspace(context: dg.OpExecutionContext):
     context.log.info("Reloaded workspace")
 
 
-@dg.op
-def update_defs(context: dg.OpExecutionContext):
-    # location of this file in github
-    url = "https://raw.githubusercontent.com/CDCgov/cfa-dagster/main/infra/dagster_defs.py"
-
-    # Download the file
-    response = requests.get(url)
-    response.raise_for_status()  # Raise error if request fails
-
-    context.log.debug(f"File location: '{__file__}'")
-    content = response.text
-    context.log.debug(f"File content: \n{content}")
-
-    with open(__file__, "wb") as f:
-        f.write(response.content)
-    context.log.info("Updated definitions!")
-    return True
-
-
-@dg.job()
-def update_definitions():
-    did_update = update_defs()
-    reload_dagster_workspace(did_update)
-
-
 @dg.job(tags={"concurrency": "single"})
 def update_code_location():
     registry_image, code_location_name = get_code_location_name()
@@ -485,18 +466,16 @@ collected_defs = collect_definitions(globals())
 
 # Create Definitions object
 defs = dg.Definitions(
-    assets=collected_defs["assets"],
-    asset_checks=collected_defs["asset_checks"],
-    jobs=collected_defs["jobs"],
-    sensors=collected_defs["sensors"],
-    schedules=collected_defs["schedules"],
+    **collected_defs,
     resources={
         # This IOManager lets Dagster serialize asset outputs and store them
         # in Azure to pass between assets
         "io_manager": ADLS2PickleIOManager(),
     },
-    executor=dg.in_process_executor,
-    metadata={
-        "cfa_dagster/launcher": {"class": dg.DefaultRunLauncher.__name__}
-    },
+    executor=dynamic_executor(
+        ExecutionConfig(
+            launcher=SelectorConfig(class_name="DefaultRunLauncher"),
+            executor=SelectorConfig(class_name="multiprocess_executor"),
+        )
+    ),
 )
