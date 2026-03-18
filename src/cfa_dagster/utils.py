@@ -120,12 +120,13 @@ def start_dev_env(caller_name: str):
         Pass in the module's __name__ (e.g. `start_dev_env(__name__)`).
 
     Function to set up the local dev server by:
-    1. creating a database on the dev server (one time only, or with --configure)
-    2. creating a ~/.dagster_home/dagster.yaml file (one time only, or with --configure)
-    3. setting `DAGSTER_HOME` environment variable
-    4. setting `DAGSTER_USER` environment variable
-    5. running `dagster dev -f <script_name>.py` in a subprocess
-    6. Validating the DAGSTER_USER environment variable for non-dev scenarios
+    1. creating a database on the dev server
+    2. setting `DAGSTER_HOME` environment variable
+    3. setting `DAGSTER_USER` environment variable
+    4. running `dagster dev *sys.argv[1]` if flags are included e.g. uv run dagster_defs.py -p 4001
+        or
+    4. running `dagster *sys.argv[1]` if commands are provided e.g. uv run dagster_defs.py job launch ...
+    5. Validating the DAGSTER_USER environment variable for non-dev scenarios
     """
     dagster_home = str(importlib.resources.files("cfa_dagster"))
     # Start the Dagster UI and set necessary env vars if
@@ -134,31 +135,46 @@ def start_dev_env(caller_name: str):
         configure_dev_db()
         # Set environment variables
         os.environ["DAGSTER_USER"] = Path.home().name.lower()
-        # allow users to specify their own DAGSTER_HOME
         if not os.getenv("DAGSTER_HOME"):
             os.environ["DAGSTER_HOME"] = dagster_home
 
         script = sys.argv[0]
+        args = sys.argv[1:]
 
-        # Run the Dagster webserver
+        # --- CASE 1: explicit dagster subcommand ---
+        if args and not args[0].startswith("-"):
+            result = subprocess.run(["dagster", *args])
+            sys.exit(result.returncode)
+
         try:
-            subprocess.run(
-                [
-                    "dagster",
-                    "dev",
-                    "-h",
-                    LOCAL_HOSTNAME,
-                    "-p",
-                    f"{LOCAL_PORT}",
-                    "-f",
-                    script,
-                ]
-            )
+            # --- CASE 2: default to `dagster dev` ---
+            base_cmd = [
+                "dagster",
+                "dev",
+                "-h",
+                LOCAL_HOSTNAME,
+                "-p",
+                f"{LOCAL_PORT}",
+                *args,
+            ]
+
+            # run without -f to try workspace.yaml or [tool.dagster] config
+            result = subprocess.run(base_cmd)
+
+            if result.returncode != 0:
+                # explicity pass -f
+                fallback_cmd = base_cmd + ["-f", script]
+                fallback_result = subprocess.run(fallback_cmd)
+
+                if fallback_result.returncode != 0:
+                    print("Fallback with -f also failed.")
+                    sys.exit(fallback_result.returncode)
+
         except KeyboardInterrupt:
             print("\nShutting down cleanly...")
-
-    if not is_production():
-        print("Running in local dev environment")
+            sys.exit(0)
+            if not is_production():
+                print("Running in local dev environment")
 
     # get the user from the environment, throw an error if variable is not set
     if not os.getenv("DAGSTER_USER"):
