@@ -29,7 +29,11 @@ def _is_register_output_call(node) -> bool:
     )
 
 
-def _validate_register_output_first(fn):
+def _has_register_output_fn(fn):
+    """
+    Checks if context.register_output was called
+    If it is called, but not as the first line of the function, throws a ValueError
+    """
     source = textwrap.dedent(inspect.getsource(fn))
     tree = ast.parse(source)
 
@@ -203,7 +207,7 @@ def dynamic_graph_asset(
         sig = inspect.signature(fn)
 
         # -- Validate register_output is first --
-        _validate_register_output_first(fn)
+        did_register_output = _has_register_output_fn(fn)
 
         # -- Locate the Config parameter --
         hints = get_type_hints(fn, globalns=vars(sys.modules[fn.__module__]))
@@ -289,6 +293,7 @@ def dynamic_graph_asset(
             name=f"{asset_name}__output",
             ins={"_": dg.In(dg.Nothing), **{k: dg.In() for k in asset_ins}},
             config_schema=config_cls.to_config_schema(),
+            **({} if did_register_output else {"out": dg.Out(dg.Nothing)}),
             tags=multiprocess_config.to_run_tags(),
         )
         def output_op(context, **kwargs):
@@ -299,6 +304,8 @@ def dynamic_graph_asset(
                 graph_dimensions,
                 True,
             )
+            if not did_register_output:
+                return
             try:
                 fn(dynamic_context, config, **upstream_kwargs)
             except _CaptureOutput as e:

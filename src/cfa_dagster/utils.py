@@ -1,3 +1,4 @@
+import logging
 import importlib.resources
 import os
 import subprocess
@@ -14,6 +15,8 @@ from dagster._core.definitions.unresolved_asset_job_definition import (
 )
 from dagster_graphql import DagsterGraphQLClient
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+
+log = logging.getLogger(__name__)
 
 LOCAL_HOSTNAME = "127.0.0.1"
 LOCAL_PORT = 4000
@@ -159,11 +162,13 @@ def start_dev_env(caller_name: str):
             ]
 
             # run without -f to try workspace.yaml or [tool.dagster] config
+            log.debug(f"Running command: '{base_cmd}'")
             result = subprocess.run(base_cmd)
 
             if result.returncode != 0:
                 # explicity pass -f
                 fallback_cmd = base_cmd + ["-f", script]
+                log.debug(f"Running fallback command: '{base_cmd}'")
                 fallback_result = subprocess.run(fallback_cmd)
 
                 if fallback_result.returncode != 0:
