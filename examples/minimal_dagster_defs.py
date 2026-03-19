@@ -17,6 +17,7 @@ import os
 from typing import List
 
 import dagster as dg
+
 # ruff: noqa: F401
 from cfa_dagster import (
     ADLS2PickleIOManager,
@@ -39,7 +40,9 @@ class MyAssetConfig(dg.Config):
 @dynamic_graph_asset(
     graph_dimensions=["disease"],
 )
-def my_asset(context: DynamicGraphAssetExecutionContext, config: MyAssetConfig):
+def my_asset(
+    context: DynamicGraphAssetExecutionContext, config: MyAssetConfig
+):
     disease = context.graph_dimension["disease"]
     context.log.info(f"Watch out for: '{disease}'")
 

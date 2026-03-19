@@ -31,6 +31,10 @@ Dagster has built-in schedulers and event-based triggers to run your workload wh
 
 ```
 
+## Projects using Dagster
+- [cfa-stf-routine-forecasting](https://github.com/CDCgov/cfa-stf-routine-forecasting)
+- [cfa-county-rt](https://github.com/cdcent/cfa-county-rt/)
+
 ## Moving local workflow to production
 If you would like to schedule your workflow to run on a schedule or triggered based on other workflows, you can move your workflows to the production server (http://dagster.apps.edav.ext.cdc.gov) with the following:
 
