@@ -390,7 +390,7 @@ class ADLS2FilesystemIOManager(ConfigurableIOManager):
 
     @property
     @cached_method
-    def _internal_io_manager(self) -> DirectoryADLS2IOManager:
+    def _internal_io_manager(self) -> FilesystemADLS2IOManager:
         adls2 = self.adls2 or ADLS2Resource(
             storage_account="cfadagster"
             if self.use_production
@@ -399,7 +399,7 @@ class ADLS2FilesystemIOManager(ConfigurableIOManager):
         )
         user = "prod" if self.use_production else os.getenv("DAGSTER_USER")
 
-        return DirectoryADLS2IOManager(
+        return FilesystemADLS2IOManager(
             file_system=adls2.storage_account,
             adls2_client=adls2.adls2_client,
             prefix=f"dagster-files/{user}",
