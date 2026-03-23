@@ -209,7 +209,9 @@ def collect_definitions(namespace):
     sensors = []
 
     for obj in list(namespace.values()):
-        if isinstance(obj, dg.AssetsDefinition):
+        if isinstance(obj, dg.AssetsDefinition) or isinstance(
+            obj, dg.AssetSpec
+        ):
             assets.append(obj)
         if isinstance(obj, dg.AssetChecksDefinition):
             asset_checks.append(obj)
