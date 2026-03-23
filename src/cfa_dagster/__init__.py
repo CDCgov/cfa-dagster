@@ -4,7 +4,7 @@
 import logging
 import os
 
-from .azure_adls2.directory_io_manager import ADLS2DirectoryIOManager
+from .azure_adls2.filesystem_io_manager import ADLS2FilesystemIOManager
 from .azure_adls2.pickle_io_manager import ADLS2PickleIOManager
 from .azure_batch.executor import azure_batch_executor
 from .azure_container_app_job.executor import azure_container_app_job_executor
