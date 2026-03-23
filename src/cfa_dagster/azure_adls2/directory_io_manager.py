@@ -295,6 +295,57 @@ class DirectoryADLS2IOManager(UPathIOManager):
 
 
 class ADLS2DirectoryIOManager(ConfigurableIOManager):
+    """An IOManager that stores directories and files on ADLS2.
+
+    Assets should return a local ``pathlib.Path`` pointing to either a file or a directory.
+    The IOManager will upload the file or directory to ADLS2 and make it available to
+    downstream assets.
+
+    Downstream assets receive a local ``pathlib.Path`` pointing to the downloaded file or
+    directory. If the downstream asset's type annotation is ``str``, the ADLS2 path is
+    returned directly without downloading (e.g. ``abfss://container@account.dfs.core.windows.net/...``).
+
+    Partitioned assets are fully supported. When loading multiple partitions, the downstream
+    asset receives a ``Dict[str, Path]`` mapping partition keys to local paths, consistent
+    with Dagster's built-in IOManager behavior.
+
+    Args:
+        use_production (bool): whether to access production storage or user-specific development storage
+        max_concurrency (int): Number of parallel chunks per file transfer. Higher values
+            improve throughput for large files at the cost of memory. Defaults to ``4``,
+            which gives a good balance for files in the hundreds of MB to GB range.
+
+    Example:
+
+        .. code-block:: python
+
+            from dagster import Definitions, asset
+            from pathlib import Path
+
+            @asset(io_manager_key="adls2_dir")
+            def my_asset() -> Path:
+                out = Path("/tmp/my_output")
+                out.mkdir(exist_ok=True)
+                (out / "results.csv").write_text("a,b,c")
+                return out
+
+            @asset(io_manager_key="adls2_dir")
+            def downstream_asset(my_asset: Path) -> None:
+                df = pd.read_csv(my_asset / "results.csv")
+
+            @asset(io_manager_key="adls2_dir")
+            def path_only_asset(my_asset: str) -> None:
+                # receives the raw ADLS2 path without downloading
+                print(my_asset)  # abfss://container@account.dfs.core.windows.net/dagster/my_asset
+
+
+            defs = Definitions(
+                assets=[my_asset, downstream_asset, path_only_asset],
+                resources={
+                    "adls2_dir": ADLS2DirectoryIOManager()
+                },
+            )
+    """
 
     use_production: bool = Field(
         description="Whether to use the production storage account for IO",
