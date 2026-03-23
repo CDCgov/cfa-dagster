@@ -377,10 +377,6 @@ class ADLS2DirectoryIOManager(ConfigurableIOManager):
             max_concurrency=self.max_concurrency,
         )
 
-        # file_system: str,
-        # adls2_client: DataLakeServiceClient,
-        # prefix: str = "dagster",
-        # local_base_dir: str = "/tmp/dagster-adls2",
     def load_input(self, context: "InputContext") -> Any:
         return self._internal_io_manager.load_input(context)
 
