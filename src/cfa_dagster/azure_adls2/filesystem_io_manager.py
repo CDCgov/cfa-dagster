@@ -21,7 +21,7 @@ from upath import UPath
 from ..utils import is_production
 
 
-class DirectoryADLS2IOManager(UPathIOManager):
+class FilesystemADLS2IOManager(UPathIOManager):
     """An IOManager that stores directories and files on ADLS2.
 
     Assets should return a local ``pathlib.Path`` pointing to either a file or a directory.
@@ -76,7 +76,7 @@ class DirectoryADLS2IOManager(UPathIOManager):
             defs = Definitions(
                 assets=[my_asset, downstream_asset, path_only_asset],
                 resources={
-                    "adls2_dir": ADLS2DirectoryIOManager(
+                    "adls2_dir": ADLS2FilesystemIOManager(
                         file_system="my-container",
                         adls2_client=adls2_client,
                     )
@@ -321,7 +321,7 @@ class DirectoryADLS2IOManager(UPathIOManager):
         file_client.delete_file()
 
 
-class ADLS2DirectoryIOManager(ConfigurableIOManager):
+class ADLS2FilesystemIOManager(ConfigurableIOManager):
     """An IOManager that stores directories and files on ADLS2.
 
     Assets should return a local ``pathlib.Path`` pointing to either a file or a directory.
@@ -369,7 +369,7 @@ class ADLS2DirectoryIOManager(ConfigurableIOManager):
             defs = Definitions(
                 assets=[my_asset, downstream_asset, path_only_asset],
                 resources={
-                    "adls2_dir": ADLS2DirectoryIOManager()
+                    "adls2_dir": ADLS2FilesystemIOManager()
                 },
             )
     """
