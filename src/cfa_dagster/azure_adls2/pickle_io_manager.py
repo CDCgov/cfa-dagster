@@ -104,7 +104,7 @@ class ADLS2PickleIOManager(ConfigurableIOManager):
         )
 
     def load_input(self, context: "InputContext") -> Any:
-        return super().load_input(context)
+        return self._internal_io_manager.load_input(context)
 
     def handle_output(self, context: "OutputContext", obj: Any) -> None:
-        super().handle_output(context, obj)
+        self._internal_io_manager.handle_output(context, obj)
