@@ -76,6 +76,7 @@ class ADLS2PickleIOManager(ConfigurableIOManager):
         def my_job():
             ...
     """
+
     use_production: bool = Field(
         description="Whether to use the production storage account for IO",
         default=is_production(),

@@ -1,8 +1,6 @@
 import os
-from dagster._utils.cached_method import cached_method
 from pathlib import Path
 from typing import Any, Union
-from dagster_azure.adls2 import ADLS2DefaultAzureCredential, ADLS2Resource
 
 from azure.core.exceptions import ResourceNotFoundError
 from azure.storage.filedatalake import (
@@ -15,8 +13,11 @@ from dagster import (
     ResourceDependency,
 )
 from dagster._core.storage.upath_io_manager import UPathIOManager
+from dagster._utils.cached_method import cached_method
+from dagster_azure.adls2 import ADLS2DefaultAzureCredential, ADLS2Resource
 from pydantic import Field
 from upath import UPath
+
 from ..utils import is_production
 
 
@@ -92,7 +93,9 @@ class DirectoryADLS2IOManager(UPathIOManager):
     ):
         self._file_system = file_system
         self._adls2_client = adls2_client
-        self._file_system_client = adls2_client.get_file_system_client(file_system)
+        self._file_system_client = adls2_client.get_file_system_client(
+            file_system
+        )
         self._prefix = prefix
         self._max_concurrency = max_concurrency
 
@@ -116,7 +119,9 @@ class DirectoryADLS2IOManager(UPathIOManager):
     # Core IOManager methods
     # -------------------------------------------------------------------------
 
-    def dump_to_path(self, context: OutputContext, obj: Any, path: UPath) -> None:
+    def dump_to_path(
+        self, context: OutputContext, obj: Any, path: UPath
+    ) -> None:
         """Upload a local file or directory to ADLS2.
 
         ``obj`` should be a ``pathlib.Path`` pointing to a local file or directory.
@@ -128,7 +133,9 @@ class DirectoryADLS2IOManager(UPathIOManager):
                 f"got {type(obj)}"
             )
         if not obj.exists():
-            raise FileNotFoundError(f"Asset returned path does not exist: {obj}")
+            raise FileNotFoundError(
+                f"Asset returned path does not exist: {obj}"
+            )
 
         # path from UPathIOManager is e.g. UPath("dagster/my_asset") or UPath("dagster/my_asset/2024-01-01")
         # We use it as the ADLS2 directory prefix
@@ -138,7 +145,9 @@ class DirectoryADLS2IOManager(UPathIOManager):
         self._delete_directory(adls2_prefix)
 
         if obj.is_file():
-            self._upload_file(local_path=obj, adls2_path=f"{adls2_prefix}/{obj.name}")
+            self._upload_file(
+                local_path=obj, adls2_path=f"{adls2_prefix}/{obj.name}"
+            )
             file_count = 1
             byte_count = obj.stat().st_size
         else:
@@ -152,7 +161,9 @@ class DirectoryADLS2IOManager(UPathIOManager):
             f"{self._uri_for_prefix(adls2_prefix)}"
         )
 
-    def load_from_path(self, context: InputContext, path: UPath) -> Union[Path, str]:
+    def load_from_path(
+        self, context: InputContext, path: UPath
+    ) -> Union[Path, str]:
         """Download a directory from ADLS2 to the local filesystem.
 
         If the downstream asset's type annotation is ``str``, returns the ADLS2
@@ -163,7 +174,7 @@ class DirectoryADLS2IOManager(UPathIOManager):
 
         # If the downstream asset wants a string, return the ADLS2 URI directly
         # so the asset can use the SDK to selectively download files itself
-        if context.dagster_type.typing_type == str:
+        if context.dagster_type.typing_type is str:
             return self._uri_for_prefix(adls2_prefix)
 
         # Use the input name (as declared in `ins`) as the local folder name so that
@@ -171,9 +182,13 @@ class DirectoryADLS2IOManager(UPathIOManager):
         #   unpartitioned: ./raw_data/
         #   partitioned:   ./my_raw_data/2024-01-01/
         # Falls back to the asset key path if no input name is available.
-        input_name = context.name if context.name else "__".join(context.asset_key.path)
+        input_name = (
+            context.name if context.name else "__".join(context.asset_key.path)
+        )
         prefix_parts = len(Path(self._prefix).parts)
-        asset_relative_parts = path.parts[prefix_parts:]  # e.g. ('my_asset',) or ('my_asset', '2024-01-01')
+        asset_relative_parts = path.parts[
+            prefix_parts:
+        ]  # e.g. ('my_asset',) or ('my_asset', '2024-01-01')
         # For unpartitioned assets the relative path is just the asset name, which we
         # replace with the input name. For partitioned assets we keep the partition key.
         if len(asset_relative_parts) > 1:
@@ -202,10 +217,14 @@ class DirectoryADLS2IOManager(UPathIOManager):
         """Upload a single file to ADLS2. Returns the number of bytes uploaded."""
         file_client = self._file_system_client.get_file_client(adls2_path)
         with local_path.open("rb") as f:
-            file_client.upload_data(f, overwrite=True, max_concurrency=self._max_concurrency)
+            file_client.upload_data(
+                f, overwrite=True, max_concurrency=self._max_concurrency
+            )
         return local_path.stat().st_size
 
-    def _upload_directory(self, local_dir: Path, adls2_prefix: str) -> tuple[int, int]:
+    def _upload_directory(
+        self, local_dir: Path, adls2_prefix: str
+    ) -> tuple[int, int]:
         """Recursively upload a local directory to ADLS2.
 
         Returns:
@@ -221,7 +240,9 @@ class DirectoryADLS2IOManager(UPathIOManager):
             relative_path = local_file.relative_to(local_dir)
             adls2_path = f"{adls2_prefix}/{relative_path.as_posix()}"
 
-            byte_count += self._upload_file(local_path=local_file, adls2_path=adls2_path)
+            byte_count += self._upload_file(
+                local_path=local_file, adls2_path=adls2_path
+            )
             file_count += 1
 
         return file_count, byte_count
@@ -236,7 +257,9 @@ class DirectoryADLS2IOManager(UPathIOManager):
         Returns:
             Number of files downloaded.
         """
-        paths = self._file_system_client.get_paths(path=adls2_prefix, recursive=True)
+        paths = self._file_system_client.get_paths(
+            path=adls2_prefix, recursive=True
+        )
 
         file_count = 0
         for path_item in paths:
@@ -245,14 +268,16 @@ class DirectoryADLS2IOManager(UPathIOManager):
 
             # Reconstruct the relative path by stripping the prefix
             adls2_path: str = path_item.name
-            relative_path = adls2_path[len(adls2_prefix):].lstrip("/")
+            relative_path = adls2_path[len(adls2_prefix) :].lstrip("/")
 
             local_file = local_dir / relative_path
             local_file.parent.mkdir(parents=True, exist_ok=True)
 
             file_client = self._file_system_client.get_file_client(adls2_path)
             with local_file.open("wb") as f:
-                download = file_client.download_file(max_concurrency=self._max_concurrency)
+                download = file_client.download_file(
+                    max_concurrency=self._max_concurrency
+                )
                 download.readinto(f)
 
             file_count += 1
@@ -267,7 +292,9 @@ class DirectoryADLS2IOManager(UPathIOManager):
         """Delete all blobs under an ADLS2 prefix. Silently succeeds if the prefix
         does not exist."""
         try:
-            directory_client = self._file_system_client.get_directory_client(adls2_prefix)
+            directory_client = self._file_system_client.get_directory_client(
+                adls2_prefix
+            )
             directory_client.delete_directory()
         except ResourceNotFoundError:
             pass
@@ -278,13 +305,13 @@ class DirectoryADLS2IOManager(UPathIOManager):
 
     def _uri_for_prefix(self, prefix: str) -> str:
         account_name = self._adls2_client.account_name
-        return (
-            f"abfss://{self._file_system}@{account_name}.dfs.core.windows.net/{prefix}"
-        )
+        return f"abfss://{self._file_system}@{account_name}.dfs.core.windows.net/{prefix}"
 
     def path_exists(self, path: UPath) -> bool:
         try:
-            self._file_system_client.get_file_client(str(path)).get_file_properties()
+            self._file_system_client.get_file_client(
+                str(path)
+            ).get_file_properties()
             return True
         except ResourceNotFoundError:
             return False
@@ -358,14 +385,16 @@ class ADLS2DirectoryIOManager(ConfigurableIOManager):
             "Number of parallel chunks per file transfer. Higher values"
             "improve throughput for large files at the cost of memory. Defaults to `4`,"
             "which gives a good balance for files in the hundreds of MB to GB range."
-        )
+        ),
     )
 
     @property
     @cached_method
     def _internal_io_manager(self) -> DirectoryADLS2IOManager:
         adls2 = self.adls2 or ADLS2Resource(
-            storage_account="cfadagster" if self.use_production else "cfadagsterdev",
+            storage_account="cfadagster"
+            if self.use_production
+            else "cfadagsterdev",
             credential=ADLS2DefaultAzureCredential(kwargs={}),
         )
         user = "prod" if self.use_production else os.getenv("DAGSTER_USER")
