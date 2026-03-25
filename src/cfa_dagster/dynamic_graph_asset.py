@@ -64,8 +64,12 @@ def _has_register_output_fn(fn):
         )
 
 
+# using this causes the code location to crash when running multiple assets at once
 multiprocess_config = ExecutionConfig(
     executor=SelectorConfig(class_name="multiprocess_executor")
+)
+in_process_config = ExecutionConfig(
+    executor=SelectorConfig(class_name="in_process_executor")
 )
 
 
@@ -257,7 +261,7 @@ def dynamic_graph_asset(
         @dg.op(
             name=f"{asset_name}__gen_config",
             out=dg.DynamicOut(dg.Nothing),
-            tags=multiprocess_config.to_run_tags(),
+            tags=in_process_config.to_run_tags(),
         )
         def gen_config(context):
             config = config_cls(**context.op_config)
@@ -294,7 +298,7 @@ def dynamic_graph_asset(
             ins={"_": dg.In(dg.Nothing), **{k: dg.In() for k in asset_ins}},
             config_schema=config_cls.to_config_schema(),
             **({} if did_register_output else {"out": dg.Out(dg.Nothing)}),
-            tags=multiprocess_config.to_run_tags(),
+            tags=in_process_config.to_run_tags(),
         )
         def output_op(context, **kwargs):
             config = config_cls(**context.op_config)
