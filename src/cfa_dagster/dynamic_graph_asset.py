@@ -51,7 +51,7 @@ def _has_register_output_fn(fn):
     ]
 
     if not register_output_lines:
-        return  # optional, not present — fine
+        return False  # optional, not present — fine
 
     first = fn_def.body[0]
     if not (
@@ -62,6 +62,7 @@ def _has_register_output_fn(fn):
             f"found at line(s) {register_output_lines} but must be the first statement "
             f"of the function if used."
         )
+    return True
 
 
 # using this causes the code location to crash when running multiple assets at once
@@ -212,6 +213,7 @@ def dynamic_graph_asset(
 
         # -- Validate register_output is first --
         did_register_output = _has_register_output_fn(fn)
+        log.debug(f"did_register_output: '{did_register_output}'")
 
         # -- Locate the Config parameter --
         hints = get_type_hints(fn, globalns=vars(sys.modules[fn.__module__]))
