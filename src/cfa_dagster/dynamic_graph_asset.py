@@ -308,7 +308,10 @@ def dynamic_graph_asset(
         # -- gen_config op --
         @dg.op(
             name=f"{asset_name}__gen_config",
-            ins={"_": dg.In(dg.Nothing), **{name: dg.In(dg.Nothing) for name in op_ins}},
+            ins={
+                "_": dg.In(dg.Nothing),
+                **{name: dg.In(dg.Nothing) for name in op_ins},
+            },
             out=dg.DynamicOut(dg.Nothing),
             tags=in_process_config.to_run_tags(),
         )
