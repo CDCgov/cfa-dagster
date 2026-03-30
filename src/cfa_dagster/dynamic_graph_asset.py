@@ -97,6 +97,42 @@ def _decode_mapping_key(mapping_key: str) -> list:
     return [_decode_segment(segment) for segment in mapping_key.split("__")]
 
 
+def _in_to_asset_in(name: str, op_in: dg.In) -> dg.AssetIn:
+    """
+    Translate a dg.In (op-level) to a dg.AssetIn (asset-level).
+
+    Direct mappings:
+        In.metadata            → AssetIn.metadata
+        In.input_manager_key   → AssetIn.input_manager_key
+        In.dagster_type        → AssetIn.dagster_type
+        In.asset_key           → AssetIn.key          (if static AssetKey)
+
+    No equivalent:
+        In.description         → dropped (no AssetIn equivalent)
+        In.default_value       → dropped (asset deps are always required)
+        In.asset_partitions    → dropped (use AssetIn.partition_mapping instead)
+        In.asset_key callable  → dropped (AssetIn.key is static only)
+    """
+    # Resolve asset key: In.asset_key can be a callable, AssetIn.key must be static
+    asset_key = None
+    if isinstance(op_in.asset_key, dg.AssetKey):
+        asset_key = op_in.asset_key
+    elif callable(op_in.asset_key):
+        log.warning(
+            f"In(asset_key=<callable>) for input '{name}' cannot be translated to "
+            f"AssetIn.key (which must be static). The asset key will be inferred from "
+            f"the parameter name instead."
+        )
+
+    return dg.AssetIn(
+        key=asset_key,
+        metadata=op_in.metadata,
+        input_manager_key=op_in.input_manager_key,
+        dagster_type=op_in.dagster_type,
+        # key_prefix and partition_mapping have no In equivalent — left as defaults
+    )
+
+
 class _CaptureOutput(Exception):
     def __init__(self, output: dg.Output):
         self._output = output
@@ -163,6 +199,7 @@ class DynamicGraphAssetExecutionContext(dg.OpExecutionContext):
 # -- Decorator --
 def dynamic_graph_asset(
     graph_dimensions: List[str],
+    ins: dict[str, dg.In] = None,
     **graph_asset_kwargs,
 ):
     """
@@ -247,25 +284,36 @@ def dynamic_graph_asset(
                     f"on {config_cls.__name__} must be an iterable type (e.g. list[str]), "
                     f"got '{field_annotation}'"
                 )
-        # Infer upstream asset ins from all parameters that aren't context or config
+        # Infer upstream op ins from all parameters that aren't context or config
         inferred_ins = {
-            name: dg.AssetIn(name)
+            name: dg.In()
             for name in sig.parameters
             if name not in ["config", "context"]
         }
+        dg.AutomationCondition.eager()
+
+        # User overrides at op level
+        op_ins = {**inferred_ins, **(ins or {})}
+
+        # Asset-level ins for @graph_asset
+        asset_ins: dict[str, dg.AssetIn] = {
+            name: _in_to_asset_in(name, op_in)
+            for name, op_in in op_ins.items()
+        }
 
         log.debug(f"inferred_ins: '{inferred_ins}'")
-
-        # -- Pull ins out of graph_asset_kwargs --
-        asset_ins = {**inferred_ins, **graph_asset_kwargs.pop("ins", {})}
+        log.debug(f"op_ins: '{op_ins}'")
+        log.debug(f"asset_ins: '{asset_ins}'")
 
         # -- gen_config op --
         @dg.op(
             name=f"{asset_name}__gen_config",
+            ins={"_": dg.In(dg.Nothing), **{name: dg.In(dg.Nothing) for name in op_ins}},
             out=dg.DynamicOut(dg.Nothing),
             tags=in_process_config.to_run_tags(),
         )
-        def gen_config(context):
+        def gen_config(context, **kwargs):
+            log.debug(f"kwargs: '{kwargs}'")
             config = config_cls(**context.op_config)
             axes = [getattr(config, field) for field in graph_dimensions]
             for combo in itertools.product(*axes):
@@ -275,7 +323,7 @@ def dynamic_graph_asset(
         # -- compute op --
         @dg.op(
             name=f"{asset_name}__compute",
-            ins={"_": dg.In(dg.Nothing), **{k: dg.In() for k in asset_ins}},
+            ins={"_": dg.In(dg.Nothing), **op_ins},
             out=dg.Out(dg.Nothing),
             config_schema=config_cls.to_config_schema(),
         )
@@ -297,7 +345,7 @@ def dynamic_graph_asset(
         # -- output op --
         @dg.op(
             name=f"{asset_name}__output",
-            ins={"_": dg.In(dg.Nothing), **{k: dg.In() for k in asset_ins}},
+            ins={"_": dg.In(dg.Nothing), **op_ins},
             config_schema=config_cls.to_config_schema(),
             **({} if did_register_output else {"out": dg.Out(dg.Nothing)}),
             tags=in_process_config.to_run_tags(),
@@ -335,7 +383,7 @@ def dynamic_graph_asset(
             **graph_asset_kwargs,
         )
         def _asset(**ins_kwargs):
-            keys = gen_config()
+            keys = gen_config(**ins_kwargs)
             res = keys.map(lambda nothing: compute(_=nothing, **ins_kwargs))
             return output_op(_=res.collect(), **ins_kwargs)
 
