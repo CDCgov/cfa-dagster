@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 from typing import Any, Union
@@ -7,6 +8,7 @@ from azure.storage.filedatalake import (
     DataLakeServiceClient,
 )
 from dagster import (
+    AssetKey,
     ConfigurableIOManager,
     InputContext,
     OutputContext,
@@ -18,7 +20,10 @@ from dagster_azure.adls2 import ADLS2DefaultAzureCredential, ADLS2Resource
 from pydantic import Field
 from upath import UPath
 
+from ..dynamic_graph_asset import DynamicGraphAssetMetadata
 from ..utils import is_production
+
+log = logging.getLogger(__name__)
 
 
 class FilesystemADLS2IOManager(UPathIOManager):
@@ -107,6 +112,96 @@ class FilesystemADLS2IOManager(UPathIOManager):
         # and load_from_path to use the Azure SDK directly)
         super().__init__(base_path=UPath(self._prefix))
 
+    def handle_output(self, context: OutputContext, obj: Any):
+        output_metadata = context.output_metadata
+        log.debug(f"output_metadata: '{output_metadata}'")
+        dga_metadata = DynamicGraphAssetMetadata.from_metadata(output_metadata)
+        if dga_metadata:
+            log.debug(
+                "@dynamic_graph_asset, modifying context to mimic an asset"
+            )
+            has_asset_partitions = not not dga_metadata.asset_partition_keys
+            context.__class__.asset_partition_keys = property(
+                lambda self: dga_metadata.asset_partition_keys
+            )
+            context.__class__.has_asset_partitions = property(
+                lambda self: has_asset_partitions
+            )
+            context.__class__.asset_key = property(
+                lambda self: AssetKey(dga_metadata.asset_key)
+            )
+            context.__class__.has_asset_key = property(
+                lambda self: not not dga_metadata.asset_key
+            )
+            log.debug(
+                f"context.has_asset_partitions: '{context.has_asset_partitions}'"
+            )
+        super().handle_output(context, obj)
+
+    def _get_paths_for_partitions(
+        self, context: Union[InputContext, OutputContext]
+    ) -> dict[str, "UPath"]:
+        paths = super()._get_paths_for_partitions(context)
+        # 2026-04-07 14:40:55,994 - cfa_dagster.azure_adls2.filesystem_io_manager - DEBUG - _get_paths_for_partitions: '{'2026-04-06': PosixUPath('dagster-files/gio/cfa_county_rt/2026-04-06')}'
+        log.debug(f"_get_paths_for_partitions: '{paths}'")
+        if isinstance(context, InputContext):
+            io_metadata = context.definition_metadata
+            log.debug(f"input_metadata: '{io_metadata}'")
+        else:
+            io_metadata = context.output_metadata
+            log.debug(f"output_metadata: '{io_metadata}'")
+        dga_metadata = DynamicGraphAssetMetadata.from_metadata(io_metadata)
+
+        if not dga_metadata:
+            return paths
+
+        # Build a new dict of paths with graph_dimensions appended
+        new_paths = {}
+        for partition_key, base_path in paths.items():
+            # Append the graph dimensions to the UPath
+            final_path = base_path
+            for dim in dga_metadata.graph_dimensions:
+                final_path = final_path / dim
+            new_paths[partition_key] = final_path
+        log.debug(
+            f"_get_paths_for_partitions (with graph_dimensions): '{new_paths}'"
+        )
+        return new_paths
+
+    def _get_path_without_extension(
+        self, context: Union[InputContext, OutputContext]
+    ) -> "UPath":
+        path = super()._get_path_without_extension(context)
+        log.debug(f"_get_path_without_extension: '{path}'")
+
+        if isinstance(context, InputContext):
+            io_metadata = context.definition_metadata
+            log.debug(f"input_metadata: '{io_metadata}'")
+        else:
+            io_metadata = context.output_metadata
+            log.debug(f"output_metadata: '{io_metadata}'")
+        dga_metadata = DynamicGraphAssetMetadata.from_metadata(io_metadata)
+
+        if not dga_metadata or dga_metadata.asset_partition_keys:
+            return path
+        # Append graph_dimensions to the path
+        for dim in dga_metadata.graph_dimensions:
+            path = path / dim
+
+        log.debug(
+            f"_get_path_without_extension (with graph_dimensions): '{path}'"
+        )
+        return path
+
+    def load_input(self, context: InputContext) -> Union[Any, dict[str, Any]]:
+        input_metadata = context.definition_metadata
+        log.debug(f"input_metadata: '{input_metadata}'")
+        dga_metadata = DynamicGraphAssetMetadata.from_metadata(input_metadata)
+        if dga_metadata:
+            log.debug("@dynamic_graph_asset, returning dummy abfss://")
+            return
+        return super().load_input(context)
+
     # -------------------------------------------------------------------------
     # Path construction
     # -------------------------------------------------------------------------
@@ -127,6 +222,15 @@ class FilesystemADLS2IOManager(UPathIOManager):
         ``obj`` should be a ``pathlib.Path`` pointing to a local file or directory.
         ``path`` is the ADLS2 destination path as constructed by UPathIOManager.
         """
+        output_metadata = context.output_metadata
+        log.debug(f"output_metadata: '{output_metadata}'")
+        dga_metadata = DynamicGraphAssetMetadata.from_metadata(output_metadata)
+        if dga_metadata and dga_metadata.should_suppress_output:
+            log.info(
+                "@dynamic_graph_asset.should_suppress_output==True, ignoring dump_to_path"
+            )
+            return
+
         if not isinstance(obj, Path):
             raise TypeError(
                 f"{self.__class__.__name__} requires assets to return a pathlib.Path, "
@@ -172,9 +276,12 @@ class FilesystemADLS2IOManager(UPathIOManager):
         """
         adls2_prefix = str(path)
 
+        input_metadata = context.definition_metadata
+        log.debug(f"input_metadata: '{input_metadata}'")
+        dga_metadata = DynamicGraphAssetMetadata.from_metadata(input_metadata)
         # If the downstream asset wants a string, return the ADLS2 URI directly
         # so the asset can use the SDK to selectively download files itself
-        if context.dagster_type.typing_type is str:
+        if context.dagster_type.typing_type is str or dga_metadata:
             return self._uri_for_prefix(adls2_prefix)
 
         # Use the input name (as declared in `ins`) as the local folder name so that
