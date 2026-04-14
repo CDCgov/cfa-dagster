@@ -5,17 +5,30 @@ import logging
 import re
 import sys
 import textwrap
+from collections.abc import Sequence
+from types import GeneratorType
 from typing import (
+    AbstractSet,
     Any,
     Callable,
     Dict,
     List,
+    Mapping,
     Optional,
+    TypedDict,
+    Union,
     get_origin,
     get_type_hints,
 )
+from typing import Sequence as TypeSequence
 
 import dagster as dg
+from dagster._core.definitions.events import (
+    CoercibleToAssetKey,
+    CoercibleToAssetKeyPrefix,
+)
+from dagster._core.definitions.metadata import RawMetadataMapping
+from typing_extensions import Unpack
 
 from .execution.utils import ExecutionConfig, SelectorConfig
 
@@ -159,13 +172,13 @@ class DynamicGraphAssetMetadata:
         self,
         asset_key: List[str],
         graph_dimensions: Optional[List[str]] = [],
-        should_suppress_output: Optional[bool] = False,
+        should_return_parent: Optional[bool] = False,
         asset_partition_keys: Optional[List[str]] = [],
     ):
         self.asset_key = asset_key
         self.asset_partition_keys = asset_partition_keys or []
         self.graph_dimensions = graph_dimensions or []
-        self.should_suppress_output = should_suppress_output
+        self.should_return_parent = should_return_parent
 
     @staticmethod
     def _extract_value(obj: Any) -> Any:
@@ -201,9 +214,7 @@ class DynamicGraphAssetMetadata:
         asset_key = dynamic_meta.get("asset_key", [])
         asset_partition_keys = dynamic_meta.get("asset_partition_keys", [])
         graph_dimensions = dynamic_meta.get("graph_dimensions", [])
-        should_suppress_output = dynamic_meta.get(
-            "should_suppress_output", False
-        )
+        should_return_parent = dynamic_meta.get("should_return_parent", False)
 
         if not isinstance(asset_key, list) or not isinstance(
             graph_dimensions, list
@@ -218,7 +229,7 @@ class DynamicGraphAssetMetadata:
             asset_key=asset_key,
             graph_dimensions=graph_dimensions,
             asset_partition_keys=asset_partition_keys,
-            should_suppress_output=should_suppress_output,
+            should_return_parent=should_return_parent,
         )
 
     def to_metadata(self) -> Dict[str, Any]:
@@ -230,7 +241,7 @@ class DynamicGraphAssetMetadata:
                 "asset_key": self.asset_key,
                 "asset_partition_keys": self.asset_partition_keys,
                 "graph_dimensions": self.graph_dimensions,
-                "should_suppress_output": self.should_suppress_output,
+                "should_return_parent": self.should_return_parent,
             }
         }
 
@@ -238,7 +249,7 @@ class DynamicGraphAssetMetadata:
         return (
             f"DynamicGraphAssetMetadata(asset_key={self.asset_key}, "
             f"asset_partition_keys={self.asset_partition_keys}, "
-            f"should_suppress_output={self.should_suppress_output}, "
+            f"should_return_parent={self.should_return_parent}, "
             f"graph_dimensions={self.graph_dimensions})"
         )
 
@@ -309,7 +320,7 @@ class DynamicGraphAssetExecutionContext(dg.OpExecutionContext):
 def add_metadata_to_output(
     result,
     asset_key: dg.AssetKey,
-    should_suppress_output: Optional[bool] = False,
+    should_return_parent: Optional[bool] = False,
     graph_dimensions: Optional[list[str]] = [],
     asset_partition_keys: Optional[list[str]] = [],
 ) -> dg.Output:
@@ -328,7 +339,7 @@ def add_metadata_to_output(
             asset_key=asset_key.path,
             graph_dimensions=graph_dimensions,
             asset_partition_keys=asset_partition_keys,
-            should_suppress_output=should_suppress_output,
+            should_return_parent=should_return_parent,
         ).to_metadata(),
     }
     log.debug(f"merged_metadata: '{merged_metadata}'")
@@ -337,11 +348,34 @@ def add_metadata_to_output(
     return dg.Output(value=user_value, metadata=merged_metadata)
 
 
+class GraphAssetKwargs(TypedDict, total=False):
+    name: Optional[str] = (None,)
+    description: Optional[str] = (None,)
+    # ins: Optional[Mapping[str, dg.AssetIn]] = None,
+    config: Optional[Union[dg.ConfigMapping, Mapping[str, Any]]] = (None,)
+    key_prefix: Optional[CoercibleToAssetKeyPrefix] = (None,)
+    group_name: Optional[str] = (None,)
+    partitions_def: Optional[dg.PartitionsDefinition] = (None,)
+    hooks: Optional[AbstractSet[dg.HookDefinition]] = (None,)
+    metadata: Optional[RawMetadataMapping] = (None,)
+    tags: Optional[Mapping[str, str]] = (None,)
+    owners: Optional[TypeSequence[str]] = (None,)
+    automation_condition: Optional[dg.AutomationCondition] = (None,)
+    backfill_policy: Optional[dg.BackfillPolicy] = (None,)
+    resource_defs: Optional[Mapping[str, dg.ResourceDefinition]] = (None,)
+    check_specs: Optional[TypeSequence[dg.AssetCheckSpec]] = (None,)
+    code_version: Optional[str] = (None,)
+    key: Optional[CoercibleToAssetKey] = (None,)
+    kinds: Optional[AbstractSet[str]] = (None,)
+
+
+# TODO: remove register_output
 # -- Decorator --
 def dynamic_graph_asset(
     graph_dimensions: List[str],
     ins: dict[str, dg.In] = None,
-    **graph_asset_kwargs,
+    io_manager_key: Optional[str] = None,
+    **graph_asset_kwargs: Unpack[GraphAssetKwargs],
 ):
     """
     Decorator that wires a function into a dynamic graph asset.
@@ -352,21 +386,78 @@ def dynamic_graph_asset(
     of graph_dimensions field values. Config fields listed in `graph_dimensions` are unpacked to
     single scalar values inside the function body.
 
-    graph_dimensions values are encoded into the internap op mapping key using _XX_ hex escaping
+    graph_dimensions values are encoded into the internal op mapping key using _XX_ hex escaping
     so original values (including spaces, hyphens, etc.) are recovered exactly in
     the compute op, while safe characters remain human-readable in the Dagster UI.
 
-    Output can be returned by calling context.register_output(Callable[Any, dg.Output]) in
-    the first line of the decorated function.
+    Return type annotations are required since they determine the behavior of the output.
+    To return a single Output, use a simple type like str, int, bool.
+    To return an Output from each graph dimension, use a 'list[some_type]'.
+    This is especially powerful with the ADLS2FilesystemIOManager since you can upload a file or directory for each graph dimension and return the parent directory as the final output.
+    Downstream assets using the ADLS2FilesystemIOManager will download the structured directory automatically.
 
     Args:
         graph_dimensions: List of config field names to fan out over. Must be iterable
                 fields on the Config class (e.g. List[str]). The cartesian
                 product of all fields becomes the set of dynamic mapping keys.
-        **graph_asset_kwargs: Passed through to @dg.graph_asset, e.g.
-                              partitions_def, ins, metadata, etc.
+
+        name (Optional[str]): The name of the asset.  If not provided, defaults to the name of the
+            decorated function. The asset's name must be a valid name in Dagster (ie only contains
+            letters, numbers, and underscores) and may not contain Python reserved keywords.
+        description (Optional[str]):
+            A human-readable description of the asset.
+            about the input.
+        ins (Optional[Dict[str, In]]):
+            Information about the inputs to the op. Information provided here will be combined
+            with what can be inferred from the function signature.
+        config (Optional[Union[ConfigMapping], Mapping[str, Any]):
+            Describes how the graph underlying the asset is configured at runtime.
+
+            If a :py:class:`ConfigMapping` object is provided, then the graph takes on the config
+            schema of this object. The mapping will be applied at runtime to generate the config for
+            the graph's constituent nodes.
+
+            If a dictionary is provided, then it will be used as the default run config for the
+            graph. This means it must conform to the config schema of the underlying nodes. Note
+            that the values provided will be viewable and editable in the Dagster UI, so be careful
+            with secrets.
+
+            If no value is provided, then the config schema for the graph is the default (derived
+            from the underlying nodes).
+        key_prefix (Optional[Union[str, Sequence[str]]]): If provided, the asset's key is the
+            concatenation of the key_prefix and the asset's name, which defaults to the name of
+            the decorated function. Each item in key_prefix must be a valid name in Dagster (ie only
+            contains letters, numbers, and underscores) and may not contain Python reserved keywords.
+        group_name (Optional[str]): A string name used to organize multiple assets into groups. If
+            not provided, the name "default" is used.
+        partitions_def (Optional[PartitionsDefinition]): Defines the set of partition keys that
+            compose the asset.
+        hooks (Optional[AbstractSet[HookDefinition]]): A set of hooks to attach to the asset.
+            These hooks will be executed when the asset is materialized.
+        metadata (Optional[RawMetadataMapping]): Dictionary of metadata to be associated with
+            the asset.
+        io_manager_key (Optional[str]): The resource key of the IOManager used
+            for storing the output of the op as an asset, and for loading it in downstream ops
+            (default: "io_manager").
+        tags (Optional[Mapping[str, str]]): Tags for filtering and organizing. These tags are not
+            attached to runs of the asset.
+        owners (Optional[Sequence[str]]): A list of strings representing owners of the asset. Each
+            string can be a user's email address, or a team name prefixed with `team:`,
+            e.g. `team:finops`.
+        kinds (Optional[Set[str]]): A list of strings representing the kinds of the asset. These
+            will be made visible in the Dagster UI.
+        automation_condition (Optional[AutomationCondition]): The AutomationCondition to use
+            for this asset.
+        backfill_policy (Optional[BackfillPolicy]): The BackfillPolicy to use for this asset.
+        code_version (Optional[str]): Version of the code that generates this asset. In
+            general, versions should be set only for code that deterministically produces the same
+            output when given the same inputs.
+        key (Optional[CoeercibleToAssetKey]): The key for this asset. If provided, cannot specify key_prefix or name.
+
 
     Example:
+        Single value for all graph dimensions:
+
         class MyAssetConfig(dg.Config):
             disease: List[str]
             state: List[str]
@@ -377,12 +468,69 @@ def dynamic_graph_asset(
             partitions_def=daily_partitions,
             ins={"upstream": dg.AssetIn("some_upstream_asset")},
         )
-        def my_dynamic_asset(context: dg.OpExecutionContext, config: MyAssetConfig, upstream_asset):
-            context.register_output(lambda: dg.Output(
+        def my_dynamic_asset(context: dg.OpExecutionContext, config: MyAssetConfig, upstream_asset) -> str:
+            my_code_pipeline(context.graph_dimension["disease"], context.graph_dimension["state"], upstream_asset)
+            return dg.Output(
                 value=f"staging/{context.partition_key}",
                 metadata={"container": config.base_output_prefix},
-            ))
-            my_code_pipeline(context.graph_dimension["disease"], context.graph_dimension["state"], upstream_asset)
+            )
+        Returns: staging/2026-03-10
+
+        Aggregated value from each graph dimension:
+
+        class MyAssetConfig(dg.Config):
+            disease: List[str]
+            state: List[str]
+            container: str
+
+        @dynamic_graph_asset(
+            graph_dimensions=["disease", "state"],
+            partitions_def=daily_partitions,
+            io_manager_key="ADLS2PickleIOManager",
+            ins={"upstream": dg.AssetIn("some_upstream_asset")},
+        )
+        def my_dynamic_asset(context: dg.OpExecutionContext, config: MyAssetConfig, upstream_asset) -> list[str]:
+            result = my_code_pipeline(context.graph_dimension["disease"], context.graph_dimension["state"], upstream_asset)
+            return dg.Output(
+                value=result,
+                metadata={"container": config.base_output_prefix},
+            )
+        Returns: [result_1, result_2, ... result_n]
+
+        File from each graph dimension:
+
+        class MyAssetConfig(dg.Config):
+            disease: List[str]
+            state: List[str]
+            container: str
+
+        @dynamic_graph_asset(
+            graph_dimensions=["disease", "state"],
+            partitions_def=daily_partitions,
+            io_manager_key="ADLS2FilesystemIOManager",
+            ins={"upstream": dg.AssetIn("some_upstream_asset")},
+        )
+        def my_dynamic_asset(context: dg.OpExecutionContext, config: MyAssetConfig, upstream_asset) -> list[str]:
+            output_path = my_code_pipeline(context.graph_dimension["disease"], context.graph_dimension["state"], upstream_asset)
+            return dg.Output(
+                value=output_path,
+                metadata={"container": config.base_output_prefix},
+            )
+        Returns: abfss://cfadagster/dagster-files/username/my_dynamic_asset/2026-03-20
+        Downstream dependencies will download the files directly with the following structure:
+        my_dynamic_asset/
+        └── 2026-04-13
+            ├── COVID
+            │   ├── AZ
+            │   │   └── COVID_AZ.txt
+            │   └── NY
+            │       └── COVID_NY.txt
+            └── FLU
+                ├── AZ
+                │   └── FLU_AZ.txt
+                └── NY
+                    └── FLU_NY.txt
+
     """
 
     def decorator(fn):
@@ -391,24 +539,33 @@ def dynamic_graph_asset(
         hints = get_type_hints(fn)
         return_type = hints.get("return")
         log.debug(f"return_type: '{return_type}'")
-        ann = inspect.signature(fn).return_annotation
+        origin = get_origin(return_type) or return_type
 
-        if ann is inspect.Signature.empty:
-            log.debug(fn.__name__, "inspected → no annotation")
-        elif ann is None:
-            log.debug(fn.__name__, "inspected → explicitly returns None")
-        else:
-            log.debug(fn.__name__, f"inspected → returns {ann}")
+        is_annotated_sequence = (
+            isinstance(origin, type)
+            and issubclass(origin, Sequence)
+            and not issubclass(origin, (str, bytes))
+        )
+        log.debug(f"is_annotated_sequence: '{is_annotated_sequence}'")
 
         sig = inspect.signature(fn)
 
         # -- Validate register_output is first --
         did_register_output = _has_register_output_fn(fn)
         log.debug(f"did_register_output: '{did_register_output}'")
-        did_return_value = _has_return_value(fn)
-        log.debug(f"did_return_value: '{did_return_value}'")
+        does_return_value = inspect.isgeneratorfunction(
+            fn
+        ) or _has_return_value(fn)
+        log.debug(f"does_return_value: '{does_return_value}'")
 
-        if did_register_output and did_return_value:
+        if does_return_value and return_type is None:
+            raise ValueError(
+                f"@dynamic_graph_asset '{asset_name}': decorated function must "
+                "have a return type annotation when returning a value. Use list[some_type] "
+                "to return the value from each graph_dimension."
+            )
+
+        if did_register_output and does_return_value:
             raise ValueError(
                 f"@dynamic_graph_asset '{asset_name}': decorated function can not "
                 f"use both register_output() and return a value. "
@@ -513,8 +670,17 @@ def dynamic_graph_asset(
             ins={"_": dg.In(dg.Nothing), **op_ins},
             **(
                 {"out": dg.Out(dg.Nothing)}
-                if did_register_output or not did_return_value
-                else {}
+                if did_register_output or not does_return_value
+                else {
+                    "out": dg.Out(
+                        is_required=False,
+                        **(
+                            {"io_manager_key": io_manager_key}
+                            if io_manager_key
+                            else {}
+                        ),
+                    )
+                }
             ),
             config_schema=config_cls.to_config_schema(),
         )
@@ -526,26 +692,31 @@ def dynamic_graph_asset(
                 False,
             )
             config = context.op_config
-            context.log.info(f"config: '{config}'")
+            log.debug(f"config: '{config}'")
             graph_dimension = dynamic_context.graph_dimension
-            context.log.info(f"graph_dimension: '{graph_dimension}'")
+            log.debug(f"graph_dimension: '{graph_dimension}'")
 
             is_first_dimension = all(
-                graph_dimension[key] == values[0]
+                graph_dimension.get(key) == values[0]
                 for key, values in config.items()
+                if key in graph_dimension
             )
-            context.log.info(f"is_first_dimension: '{is_first_dimension}'")
+            log.debug(f"is_first_dimension: '{is_first_dimension}'")
 
             result = fn(dynamic_context, context.op_config, **upstream_kwargs)
+            # handle yielded Output
+            if isinstance(result, GeneratorType):
+                result = next(result)
             log.debug(f"compute result: '{result}'")
-            return add_metadata_to_output(
-                result=result,
-                asset_key=final_asset_key,
-                graph_dimensions=list(
-                    dynamic_context.graph_dimension.values()
-                ),
-                asset_partition_keys=dynamic_context.partition_keys,
-            )
+            if is_annotated_sequence or is_first_dimension:
+                yield add_metadata_to_output(
+                    result=result,
+                    asset_key=final_asset_key,
+                    graph_dimensions=list(
+                        dynamic_context.graph_dimension.values()
+                    ),
+                    asset_partition_keys=dynamic_context.partition_keys,
+                )
 
         # -- output op to return results --
         @dg.op(
@@ -553,19 +724,32 @@ def dynamic_graph_asset(
             ins={
                 "compute_result": (
                     dg.In(dg.Nothing)
-                    if did_register_output
+                    if did_register_output or not does_return_value
                     else dg.In(
+                        **(
+                            {"input_manager_key": io_manager_key}
+                            if io_manager_key
+                            else {}
+                        ),
                         metadata=DynamicGraphAssetMetadata(
                             asset_key=final_asset_key.path,
-                        ).to_metadata()
+                        ).to_metadata(),
                     )
                 ),
                 **op_ins,
             },
             config_schema=config_cls.to_config_schema(),
             **(
-                {}
-                if did_register_output or did_return_value
+                {
+                    "out": dg.Out(
+                        **(
+                            {"io_manager_key": io_manager_key}
+                            if io_manager_key
+                            else {}
+                        ),
+                    )
+                }
+                if did_register_output or does_return_value
                 else {"out": dg.Out(dg.Nothing)}
             ),
             tags=in_process_config.to_run_tags(),
@@ -586,11 +770,17 @@ def dynamic_graph_asset(
                 graph_dimensions,
                 True,
             )
-            if did_return_value:
+            if does_return_value:
+                result = compute_result
+                # handle yielded Output
+                if isinstance(result, GeneratorType):
+                    result = next(result)
                 return add_metadata_to_output(
-                    result=compute_result,
+                    result=result
+                    if is_annotated_sequence
+                    else compute_result[0],
                     asset_key=final_asset_key,
-                    should_suppress_output=True,
+                    should_return_parent=True,
                     graph_dimensions=graph_dimensions,
                     asset_partition_keys=dynamic_context.partition_keys,
                 )
@@ -602,7 +792,7 @@ def dynamic_graph_asset(
                 return add_metadata_to_output(
                     result=e._output,
                     asset_key=final_asset_key,
-                    should_suppress_output=True,
+                    should_return_parent=True,
                     graph_dimensions=graph_dimensions,
                     asset_partition_keys=dynamic_context.partition_keys,
                 )

@@ -152,7 +152,7 @@ class FilesystemADLS2IOManager(UPathIOManager):
             log.debug(f"output_metadata: '{io_metadata}'")
         dga_metadata = DynamicGraphAssetMetadata.from_metadata(io_metadata)
 
-        if not dga_metadata:
+        if not dga_metadata or dga_metadata.should_return_parent:
             return paths
 
         # Build a new dict of paths with graph_dimensions appended
@@ -182,7 +182,11 @@ class FilesystemADLS2IOManager(UPathIOManager):
             log.debug(f"output_metadata: '{io_metadata}'")
         dga_metadata = DynamicGraphAssetMetadata.from_metadata(io_metadata)
 
-        if not dga_metadata or dga_metadata.asset_partition_keys:
+        if (
+            not dga_metadata
+            or dga_metadata.asset_partition_keys
+            or dga_metadata.should_return_parent
+        ):
             return path
         # Append graph_dimensions to the path
         for dim in dga_metadata.graph_dimensions:
@@ -225,9 +229,9 @@ class FilesystemADLS2IOManager(UPathIOManager):
         output_metadata = context.output_metadata
         log.debug(f"output_metadata: '{output_metadata}'")
         dga_metadata = DynamicGraphAssetMetadata.from_metadata(output_metadata)
-        if dga_metadata and dga_metadata.should_suppress_output:
+        if dga_metadata and dga_metadata.should_return_parent:
             log.info(
-                "@dynamic_graph_asset.should_suppress_output==True, ignoring dump_to_path"
+                "@dynamic_graph_asset.should_return_parent==True, ignoring dump_to_path"
             )
             return
 
