@@ -10,7 +10,6 @@ from types import GeneratorType
 from typing import (
     AbstractSet,
     Any,
-    Callable,
     Dict,
     List,
     Mapping,
@@ -526,13 +525,14 @@ def dynamic_graph_asset(
 
         # capture kwargs from decorated function to be later used in compute op
         decorated_fn_kwargs = {
-                name
-                for name, param in sig.parameters.items()
-                if param.kind in (
-                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                    inspect.Parameter.KEYWORD_ONLY,
-                    )
-                }
+            name
+            for name, param in sig.parameters.items()
+            if param.kind
+            in (
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.KEYWORD_ONLY,
+            )
+        }
 
         # Determine the base key: explicit key or function name
         base_key = graph_asset_kwargs.get("key") or fn.__name__
@@ -606,16 +606,18 @@ def dynamic_graph_asset(
                             {"io_manager_key": io_manager_key}
                             if io_manager_key
                             else {}
-                            ),
-                        )
-                    }
+                        ),
+                    )
+                }
                 if does_return_value
                 else {"out": dg.Out(dg.Nothing)}
-                ),
+            ),
             config_schema=config_cls.to_config_schema(),
         )
         def compute(context, **kwargs):
-            upstream_kwargs = {k: v for k, v in kwargs.items() if k in decorated_fn_kwargs}
+            upstream_kwargs = {
+                k: v for k, v in kwargs.items() if k in decorated_fn_kwargs
+            }
             dynamic_context = DynamicGraphAssetExecutionContext.inject(
                 context,
                 graph_dimensions,
@@ -657,15 +659,15 @@ def dynamic_graph_asset(
                             {"input_manager_key": io_manager_key}
                             if io_manager_key
                             else {}
-                            ),
+                        ),
                         metadata=DynamicGraphAssetMetadata(
                             asset_key=final_asset_key.path,
-                            ).to_metadata(),
-                        )
+                        ).to_metadata(),
+                    )
                     if does_return_value
                     else dg.In(dg.Nothing)
-                    ),
-                },
+                ),
+            },
             config_schema=config_cls.to_config_schema(),
             **(
                 {
@@ -690,9 +692,7 @@ def dynamic_graph_asset(
                 if isinstance(result, GeneratorType):
                     result = next(result)
                 return add_metadata_to_output(
-                    result=result
-                    if is_annotated_sequence
-                    else result[0],
+                    result=result if is_annotated_sequence else result[0],
                     asset_key=final_asset_key,
                     should_return_parent=True,
                     graph_dimensions=graph_dimensions,
