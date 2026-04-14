@@ -35,16 +35,6 @@ from .execution.utils import ExecutionConfig, SelectorConfig
 log = logging.getLogger(__name__)
 
 
-def _is_register_output_call(node) -> bool:
-    return (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "register_output"
-        and isinstance(node.func.value, ast.Name)
-        and node.func.value.id == "context"
-    )
-
-
 def _has_return_value(fn) -> bool:
     """Check if a function contains a return statement with a value."""
     source = inspect.getsource(fn)
@@ -56,42 +46,6 @@ def _has_return_value(fn) -> bool:
         if isinstance(node, ast.Return) and node.value is not None:
             return True
     return False
-
-
-def _has_register_output_fn(fn):
-    """
-    Checks if context.register_output was called
-    If it is called, but not as the first line of the function, throws a ValueError
-    """
-    source = textwrap.dedent(inspect.getsource(fn))
-    tree = ast.parse(source)
-
-    fn_def = next(
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and node.name == fn.__name__
-    )
-
-    register_output_lines = [
-        node.lineno
-        for node in ast.walk(fn_def)
-        if _is_register_output_call(node)
-    ]
-
-    if not register_output_lines:
-        return False  # optional, not present — fine
-
-    first = fn_def.body[0]
-    if not (
-        isinstance(first, ast.Expr) and _is_register_output_call(first.value)
-    ):
-        raise ValueError(
-            f"@dynamic_graph_asset '{fn.__name__}': context.register_output(...) was "
-            f"found at line(s) {register_output_lines} but must be the first statement "
-            f"of the function if used."
-        )
-    return True
 
 
 # using this causes the code location to crash when running multiple assets at once
@@ -254,11 +208,6 @@ class DynamicGraphAssetMetadata:
         )
 
 
-class _CaptureOutput(Exception):
-    def __init__(self, output: dg.Output):
-        self._output = output
-
-
 class DynamicGraphAssetExecutionContext(dg.OpExecutionContext):
     """
     OpExecutionContext subclass that exposes the current graph dimension as a dictionary.
@@ -268,13 +217,10 @@ class DynamicGraphAssetExecutionContext(dg.OpExecutionContext):
             context.graph_dimension["state"]    # "AK"
             context.graph_dimension["disease"]  # "COVID-19"
 
-    This subclass also exposes a register_output() function to provide an Output for the asset
-    in the absence of the traditional `yield dg.Output or dg.AssetMaterialization`
     """
 
     _mapping_key: dict | None = None
     _mapping_key_names: list[str] = []
-    _should_run_output_fn = False
 
     @property
     def graph_dimension(self) -> dict[str, str]:
@@ -283,25 +229,10 @@ class DynamicGraphAssetExecutionContext(dg.OpExecutionContext):
             self._mapping_key = dict(zip(self._mapping_key_names, values))
         return self._mapping_key
 
-    def register_output(self, output_fn: Callable[[], dg.Output]) -> dg.Output:
-        log.debug(f"output_fn: '{output_fn}'")
-        log.debug(f"should_run_output_fn: '{self._should_run_output_fn}'")
-        output = None
-        if self._should_run_output_fn:
-            if output_fn:
-                output = output_fn()
-                log.debug(f"output from fn: '{output}'")
-            else:
-                output = dg.Output(dg.Nothing)
-                log.debug("Didn't run output fn")
-            # raise an exception to exit before running the user code
-            raise _CaptureOutput(output)
-
     @staticmethod
     def inject(
         context: dg.OpExecutionContext,
         mapping_key_names: list[str],
-        should_run_output_fn: bool,
     ) -> "DynamicGraphAssetExecutionContext":
         """
         Patch an existing OpExecutionContext instance into a DynamicGraphAssetExecutionContext
@@ -313,7 +244,6 @@ class DynamicGraphAssetExecutionContext(dg.OpExecutionContext):
         # context = cast(DynamicGraphAssetExecutionContext, context)
         context._mapping_key_names = mapping_key_names
         context._mapping_key = None
-        context._should_run_output_fn = should_run_output_fn
         return context  # type: ignore[return-value]
 
 
@@ -369,7 +299,6 @@ class GraphAssetKwargs(TypedDict, total=False):
     kinds: Optional[AbstractSet[str]] = (None,)
 
 
-# TODO: remove register_output
 # -- Decorator --
 def dynamic_graph_asset(
     graph_dimensions: List[str],
@@ -378,7 +307,7 @@ def dynamic_graph_asset(
     **graph_asset_kwargs: Unpack[GraphAssetKwargs],
 ):
     """
-    Decorator that wires a function into a dynamic graph asset.
+    Decorator that wires a function into a dynamic graph asset to run steps in parallel based on provided Config.
     See https://docs.dagster.io/guides/build/ops/dynamic-graphs#using-dynamic-outputs
     and https://docs.dagster.io/guides/build/assets/graph-backed-assets
 
@@ -550,9 +479,6 @@ def dynamic_graph_asset(
 
         sig = inspect.signature(fn)
 
-        # -- Validate register_output is first --
-        did_register_output = _has_register_output_fn(fn)
-        log.debug(f"did_register_output: '{did_register_output}'")
         does_return_value = inspect.isgeneratorfunction(
             fn
         ) or _has_return_value(fn)
@@ -563,12 +489,6 @@ def dynamic_graph_asset(
                 f"@dynamic_graph_asset '{asset_name}': decorated function must "
                 "have a return type annotation when returning a value. Use list[some_type] "
                 "to return the value from each graph_dimension."
-            )
-
-        if did_register_output and does_return_value:
-            raise ValueError(
-                f"@dynamic_graph_asset '{asset_name}': decorated function can not "
-                f"use both register_output() and return a value. "
             )
 
         # -- Locate the Config parameter --
@@ -603,6 +523,16 @@ def dynamic_graph_asset(
                     f"on {config_cls.__name__} must be an iterable type (e.g. list[str]), "
                     f"got '{field_annotation}'"
                 )
+
+        # capture kwargs from decorated function to be later used in compute op
+        decorated_fn_kwargs = {
+                name
+                for name, param in sig.parameters.items()
+                if param.kind in (
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                    inspect.Parameter.KEYWORD_ONLY,
+                    )
+                }
 
         # Determine the base key: explicit key or function name
         base_key = graph_asset_kwargs.get("key") or fn.__name__
@@ -669,27 +599,26 @@ def dynamic_graph_asset(
             name=f"{asset_name}__compute",
             ins={"_": dg.In(dg.Nothing), **op_ins},
             **(
-                {"out": dg.Out(dg.Nothing)}
-                if did_register_output or not does_return_value
-                else {
+                {
                     "out": dg.Out(
                         is_required=False,
                         **(
                             {"io_manager_key": io_manager_key}
                             if io_manager_key
                             else {}
-                        ),
-                    )
-                }
-            ),
+                            ),
+                        )
+                    }
+                if does_return_value
+                else {"out": dg.Out(dg.Nothing)}
+                ),
             config_schema=config_cls.to_config_schema(),
         )
         def compute(context, **kwargs):
-            upstream_kwargs = {k: v for k, v in kwargs.items() if k != "_"}
+            upstream_kwargs = {k: v for k, v in kwargs.items() if k in decorated_fn_kwargs}
             dynamic_context = DynamicGraphAssetExecutionContext.inject(
                 context,
                 graph_dimensions,
-                False,
             )
             config = context.op_config
             log.debug(f"config: '{config}'")
@@ -723,21 +652,20 @@ def dynamic_graph_asset(
             name=f"{asset_name}__output",
             ins={
                 "compute_result": (
-                    dg.In(dg.Nothing)
-                    if did_register_output or not does_return_value
-                    else dg.In(
+                    dg.In(
                         **(
                             {"input_manager_key": io_manager_key}
                             if io_manager_key
                             else {}
-                        ),
+                            ),
                         metadata=DynamicGraphAssetMetadata(
                             asset_key=final_asset_key.path,
-                        ).to_metadata(),
-                    )
-                ),
-                **op_ins,
-            },
+                            ).to_metadata(),
+                        )
+                    if does_return_value
+                    else dg.In(dg.Nothing)
+                    ),
+                },
             config_schema=config_cls.to_config_schema(),
             **(
                 {
@@ -749,27 +677,13 @@ def dynamic_graph_asset(
                         ),
                     )
                 }
-                if did_register_output or does_return_value
+                if does_return_value
                 else {"out": dg.Out(dg.Nothing)}
             ),
             tags=in_process_config.to_run_tags(),
         )
         def output_op(context, **kwargs):
-            config = config_cls(**context.op_config)
-            log.debug(f"kwargs.keys(): '{kwargs.keys()}'")
-
             compute_result = kwargs.get("compute_result")
-            log.debug(f"compute_result: '{compute_result}'")
-            upstream_kwargs = {
-                k: v
-                for k, v in kwargs.items()
-                if k != "_" and k != f"{asset_name}__compute"
-            }
-            dynamic_context = DynamicGraphAssetExecutionContext.inject(
-                context,
-                graph_dimensions,
-                True,
-            )
             if does_return_value:
                 result = compute_result
                 # handle yielded Output
@@ -778,23 +692,11 @@ def dynamic_graph_asset(
                 return add_metadata_to_output(
                     result=result
                     if is_annotated_sequence
-                    else compute_result[0],
+                    else result[0],
                     asset_key=final_asset_key,
                     should_return_parent=True,
                     graph_dimensions=graph_dimensions,
-                    asset_partition_keys=dynamic_context.partition_keys,
-                )
-            if not did_register_output:
-                return
-            try:
-                fn(dynamic_context, config, **upstream_kwargs)
-            except _CaptureOutput as e:
-                return add_metadata_to_output(
-                    result=e._output,
-                    asset_key=final_asset_key,
-                    should_return_parent=True,
-                    graph_dimensions=graph_dimensions,
-                    asset_partition_keys=dynamic_context.partition_keys,
+                    asset_partition_keys=context.partition_keys,
                 )
 
         # -- config mapping --
@@ -816,7 +718,7 @@ def dynamic_graph_asset(
         def _asset(**ins_kwargs):
             keys = gen_config(**ins_kwargs)
             res = keys.map(lambda nothing: compute(_=nothing, **ins_kwargs))
-            return output_op(compute_result=res.collect(), **ins_kwargs)
+            return output_op(compute_result=res.collect())
 
         return _asset
 
