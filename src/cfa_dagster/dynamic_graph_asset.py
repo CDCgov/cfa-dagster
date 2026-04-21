@@ -303,6 +303,7 @@ def dynamic_graph_asset(
     graph_dimensions: List[str],
     ins: dict[str, dg.In] = None,
     io_manager_key: Optional[str] = None,
+    retry_policy: Optional[dg.RetryPolicy] = None,
     **graph_asset_kwargs: Unpack[GraphAssetKwargs],
 ):
     """
@@ -380,6 +381,7 @@ def dynamic_graph_asset(
         code_version (Optional[str]): Version of the code that generates this asset. In
             general, versions should be set only for code that deterministically produces the same
             output when given the same inputs.
+        retry_policy (Optional[RetryPolicy]): The retry policy for this asset.
         key (Optional[CoeercibleToAssetKey]): The key for this asset. If provided, cannot specify key_prefix or name.
 
 
@@ -612,6 +614,7 @@ def dynamic_graph_asset(
                 if does_return_value
                 else {"out": dg.Out(dg.Nothing)}
             ),
+            retry_policy=retry_policy,
             config_schema=config_cls.to_config_schema(),
         )
         def compute(context, **kwargs):
