@@ -15,8 +15,6 @@ from azure.batch.models import (
 from azure.core.credentials import TokenCredential
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
-from azure.mgmt.containerinstance import ContainerInstanceManagementClient
-from azure.mgmt.loganalytics import LogAnalyticsManagementClient
 from azure.mgmt.subscription import SubscriptionClient
 from msrest.authentication import BasicTokenAuthentication
 
@@ -176,30 +174,25 @@ def get_code_location_name(
         "grpc_port": dg.Out(int),
     }
 )
-def create_or_update_code_location_aci(
-    context: dg.OpExecutionContext,
+def create_or_update_code_location_aca(
+    context,
     registry_image: str,
     code_location_name: str,
 ) -> tuple[str, str, int]:
     """
-    Launches an Azure Container Instance with the given image.
+    Creates or updates an Azure Container App running the given image.
     """
+
     credential = DefaultAzureCredential()
-    first_subscription_id = (
-        SubscriptionClient(credential)
-        .subscriptions.list()
-        .next()
-        .subscription_id
-    )
-    subscription_id = first_subscription_id
+
+    subscription_id = next(
+        SubscriptionClient(credential).subscriptions.list()
+    ).subscription_id
 
     resource_group_name = "ext-edav-cfa-prd"
+    location = "eastus"
 
-    aci_subnet_id = (
-        f"/subscriptions/{subscription_id}/resourceGroups/"
-        "EXT-EDAV-CFA-Network-PRD/providers/Microsoft.Network/virtualNetworks/"
-        "EXT_EDAV_CFA_VNET_PRD/subnets/EXT_EDAV_CFA_CONTAINER_INSTANCE_PRD"
-    )
+    containerapp_env_name = "ext-edav-cfa-cae-prd"
 
     managed_identity_id = (
         f"/subscriptions/{subscription_id}/resourceGroups/"
@@ -207,101 +200,88 @@ def create_or_update_code_location_aci(
         "userAssignedIdentities/dagster-daemon-mi"
     )
 
-    la_resource_group = "DefaultResourceGroup-EUS"
-    log_analytics_workspace_name = f"DefaultWorkspace-{subscription_id}-EUS"
+    containerapp_client = ContainerAppsAPIClient(credential, subscription_id)
 
-    log_analytics_client = LogAnalyticsManagementClient(
-        credential, subscription_id
-    )
-    workspace = log_analytics_client.workspaces.get(
-        la_resource_group, log_analytics_workspace_name
-    )
-    log_analytics_workspace_id = workspace.customer_id
-
-    shared_keys = log_analytics_client.shared_keys.get_shared_keys(
-        la_resource_group, log_analytics_workspace_name
-    )
-    log_analytics_workspace_key = shared_keys.primary_shared_key
-
-    aci_client = ContainerInstanceManagementClient(credential, subscription_id)
-
-    container_group_name = f"dcl--{code_location_name}"
-
-    container_resource_requests = {"memory_in_gb": 1.0, "cpu": 0.5}
+    app_name = f"dcl-{code_location_name}"
     grpc_port = 4000
-
-    container_group = {
-        "location": "eastus",
+    deploy_date = datetime.now(timezone.utc).isoformat()
+    container_app_def = {
+        "location": location,
         "identity": {
             "type": "UserAssigned",
-            "user_assigned_identities": {managed_identity_id: {}},
+            "userAssignedIdentities": {managed_identity_id: {}},
         },
-        "imageRegistryCredentials": [
-            {
-                "server": "cfaprdbatchcr.azurecr.io",
-                "identity": managed_identity_id,
-            }
-        ],
-        "containers": [
-            {
-                "name": container_group_name,
-                "image": registry_image,
-                "resources": {
-                    "requests": container_resource_requests,
+        "properties": {
+            "environmentId": (
+                f"/subscriptions/{subscription_id}/resourceGroups/"
+                f"{resource_group_name}/providers/Microsoft.App/"
+                f"managedEnvironments/{containerapp_env_name}"
+            ),
+            "configuration": {
+                "ingress": {
+                    "external": False,
+                    "targetPort": grpc_port,
+                    "transport": "tcp",
                 },
-                "command": [
-                    "dagster",
-                    "code-server",
-                    "start",
-                    "-h",
-                    "0.0.0.0",
-                    "-p",
-                    f"{grpc_port}",
-                    "-f",
-                    "dagster_defs.py",
-                    "--container-image",
-                    registry_image,
+                "registries": [
+                    {
+                        "server": "cfaprdbatchcr.azurecr.io",
+                        "identity": "system-environment",
+                    }
                 ],
-                "ports": [{"port": grpc_port, "protocol": "TCP"}],
-                "environment_variables": [
-                    {"name": "DAGSTER_USER", "value": "prod"},
-                    {"name": "CFA_DAGSTER_ENV", "value": "prod"},
+            },
+            "template": {
+                "containers": [
+                    {
+                        "name": app_name,
+                        "image": registry_image,
+                        "resources": {
+                            "cpu": 0.5,
+                            "memory": "1Gi",
+                        },
+                        "command": [
+                            "dagster",
+                            "code-server",
+                            "start",
+                            "-h",
+                            "0.0.0.0",
+                            "-p",
+                            str(grpc_port),
+                            "-f",
+                            "dagster_defs.py",
+                            "--container-image",
+                            registry_image,
+                        ],
+                        "env": [
+                            {"name": "DAGSTER_USER", "value": "prod"},
+                            {"name": "CFA_DAGSTER_ENV", "value": "prod"},
+                            {"name": "DEPLOY_DATE", "value": deploy_date},
+                        ],
+                    }
                 ],
-            }
-        ],
-        "os_type": "Linux",
-        "restart_policy": "OnFailure",
-        "ip_address": {
-            "type": "Private",
-            "ports": [{"port": grpc_port, "protocol": "TCP"}],
-        },
-        "subnet_ids": [{"id": aci_subnet_id}],
-        "dns_config": {"name_servers": ["172.45.0.36", "172.45.0.37"]},
-        "diagnostics": {
-            "log_analytics": {
-                "workspace_id": log_analytics_workspace_id,
-                "workspace_key": log_analytics_workspace_key,
-            }
+                "scale": {
+                    "minReplicas": 1,
+                    "maxReplicas": 1,
+                },
+            },
         },
     }
 
-    context.log.info(f"Creating container group '{container_group_name}'...")
-    poller = aci_client.container_groups.begin_create_or_update(
+    context.log.info(f"Creating container app '{app_name}'...")
+
+    poller = containerapp_client.container_apps.begin_create_or_update(
         resource_group_name,
-        container_group_name,
-        container_group,
-    )
-    new_cg = poller.result()
-    context.log.info(
-        f"Container group '{new_cg.name}' "
-        f"created with state '{new_cg.provisioning_state}'."
-    )
-    context.log.info(
-        f"Container group '{new_cg.name}' "
-        f"has IP address '{new_cg.ip_address.ip}'."
+        app_name,
+        container_app_def,
     )
 
-    return (code_location_name, new_cg.ip_address.ip, grpc_port)
+    app = poller.result()
+
+    context.log.info(
+        f"Container app '{app_name}' created with state {app.provisioning_state}"
+    )
+
+    return (code_location_name, app_name, grpc_port)
 
 
 @dg.op
@@ -437,7 +417,7 @@ def reload_dagster_workspace(context: dg.OpExecutionContext):
 def update_code_location():
     registry_image, code_location_name = get_code_location_name()
     code_location_name, grpc_host, grpc_port = (
-        create_or_update_code_location_aci(registry_image, code_location_name)
+        create_or_update_code_location_aca(registry_image, code_location_name)
     )
     did_update = update_workspace_yaml(
         code_location_name, grpc_host, grpc_port
