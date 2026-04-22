@@ -24,7 +24,7 @@ Our dagster-daemon is running as a sidecar container in the same Container App a
 
 Code locations are the source of Dagster workflows.
 
-Our code locations are currently deployed as small Azure Container Instances (ACI). Using ACI allows each location to have totally independent dependencies according to what is specified in the location's Dockerfile.
+Our code locations are currently deployed as small Azure Container Apps (ACA). Using ACA allows each location to have totally independent dependencies according to what is specified in the location's Dockerfile, while maintaining stable DNS names across restarts.
 
 ## The Database
 
