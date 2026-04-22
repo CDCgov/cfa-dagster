@@ -22,6 +22,7 @@ env:
 
 jobs:
   build-and-push-image:
+    if: false #TODO: remove
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -48,8 +49,8 @@ jobs:
             "docker://$REGISTRY_IMAGE"
 
   deploy-container-app:
-    if: github.ref == 'refs/heads/main'
-    runs-on: cfa-cdcent-aca
+    # if: github.ref == 'refs/heads/main' #TODO: restore
+    runs-on: ubuntu-latest
     needs: build-and-push-image
     environment: production
     permissions:
@@ -67,5 +68,8 @@ jobs:
           subscription-id: ${{ secrets.AZ_SUBSCRIPTION_ID }}
           tenant-id: ${{ secrets.AZ_TENANT_ID }}
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
       - name: Deploy Container App
-        run: cd infra && uv run dagster_defs.py job execute -f dagster_defs.py -a update_dagster_containerapp
+        run: cd infra && uv sync && source .venv/bin/activate && dagster job execute -f dagster_defs.py -a update_dagster_containerapp
