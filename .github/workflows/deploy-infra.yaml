@@ -68,4 +68,4 @@ jobs:
           tenant-id: ${{ secrets.AZ_TENANT_ID }}
 
       - name: Deploy Container App
-        run: bash infra/deploy-container-app.sh
+        run: cd infra && uv run dagster_defs.py job execute -f dagster_defs.py -a reload_workspace

@@ -285,6 +285,162 @@ def create_or_update_code_location_aca(
 
 
 @dg.op
+def update_dagster_aca(context):
+    credential = DefaultAzureCredential()
+
+    subscription_id = next(
+        SubscriptionClient(credential).subscriptions.list()
+    ).subscription_id
+
+    resource_group_name = "ext-edav-cfa-prd"
+    location = "eastus"
+    containerapp_env_name = "ext-edav-cfa-cae-prd"
+
+    managed_identity_id = (
+        f"/subscriptions/{subscription_id}/resourceGroups/"
+        f"{resource_group_name}/providers/Microsoft.ManagedIdentity/"
+        "userAssignedIdentities/dagster-daemon-mi"
+    )
+
+    containerapp_client = ContainerAppsAPIClient(credential, subscription_id)
+
+    app_name = "dagster"
+    deploy_date = datetime.now(timezone.utc).isoformat()
+
+    # -----------------------------
+    # Shared container configuration
+    # -----------------------------
+    shared_container_args = {
+        "image": "ghcr.io/cdcgov/cfa-dagster:latest",
+        "env": [
+            {
+                "name": "DAGSTER_POSTGRES_HOST",
+                "secretRef": "cfa-pg-dagster-host",  # pragma: allowlist secret
+            },
+            {
+                "name": "DAGSTER_POSTGRES_USER",
+                "secretRef": "cfa-pg-dagster-admin-username",  # pragma: allowlist secret
+            },
+            {
+                "name": "DAGSTER_POSTGRES_PASSWORD",
+                "secretRef": "cfa-pg-dagster-admin-password",  # pragma: allowlist secret
+            },
+            {"name": "DAGSTER_POSTGRES_DB", "value": "postgres"},
+            {"name": "DAGSTER_USER", "value": "prod"},
+            {
+                "name": "AZURE_CLIENT_ID",
+                "value": "bdca4f03-d071-4928-914e-def0dcdbe460",
+            },
+            {"name": "CFA_DAGSTER_LOG_LEVEL", "value": "INFO"},
+            {"name": "CFA_DAGSTER_ENV", "value": "prod"},
+            {"name": "DEPLOY_DATE", "value": deploy_date},
+            # daemon-specific var included for both (harmless for web)
+            {"name": "DAGSTER_HOME", "value": "/opt/dagster/dagster_home"},
+        ],
+        "volumeMounts": [
+            {
+                "volumeName": "cfadagster",
+                "mountPath": "/opt/dagster",
+            }
+        ],
+        "resources": {
+            "cpu": 1,
+            "memory": "2Gi",
+        },
+    }
+    # -----------------------------
+    # Container App definition
+    # -----------------------------
+    container_app_def = {
+        "location": location,
+        "identity": {
+            "type": "UserAssigned",
+            "userAssignedIdentities": {managed_identity_id: {}},
+        },
+        "properties": {
+            "environmentId": (
+                f"/subscriptions/{subscription_id}/resourceGroups/"
+                f"{resource_group_name}/providers/Microsoft.App/"
+                f"managedEnvironments/{containerapp_env_name}"
+            ),
+            "configuration": {
+                "secrets": [
+                    {
+                        "name": "cfa-pg-dagster-admin-password",
+                        "keyVaultUrl": "https://cfa-tools.vault.azure.net/secrets/cfa-pg-dagster-admin-password",
+                        "identity": managed_identity_id,
+                    },
+                    {
+                        "name": "cfa-pg-dagster-admin-username",
+                        "keyVaultUrl": "https://cfa-tools.vault.azure.net/secrets/cfa-pg-dagster-admin-username",
+                        "identity": managed_identity_id,
+                    },
+                    {
+                        "name": "cfa-pg-dagster-host",
+                        "keyVaultUrl": "https://cfa-tools.vault.azure.net/secrets/cfa-pg-dagster-host",
+                        "identity": managed_identity_id,
+                    },
+                ],
+                "registries": [
+                    {
+                        "server": "cfaprdbatchcr.azurecr.io",
+                        "identity": "system-environment",
+                    }
+                ],
+                "ingress": {
+                    "external": True,
+                    "targetPort": 3000,
+                    "allowInsecure": True,
+                },
+            },
+            "template": {
+                "containers": [
+                    {
+                        "name": "dagster",
+                        "command": ["dagster-webserver"],
+                        "args": ["-h", "0.0.0.0", "-p", "3000"],
+                        **shared_container_args,
+                    },
+                    {
+                        "name": "dagster-daemon",
+                        "command": ["dagster-daemon"],
+                        "args": ["run"],
+                        **shared_container_args,
+                    },
+                ],
+                "scale": {
+                    "minReplicas": 0,
+                    "maxReplicas": 1,
+                },
+                "volumes": [
+                    {
+                        "name": "cfadagster",
+                        "storageType": "AzureFile",
+                        "storageName": "cfadagster",
+                    }
+                ],
+            },
+        },
+    }
+
+    context.log.info(f"Creating container app '{app_name}'...")
+
+    poller = containerapp_client.container_apps.begin_create_or_update(
+        resource_group_name,
+        app_name,
+        container_app_def,
+    )
+
+    app = poller.result()
+
+    context.log.info(
+        f"Container app '{app_name}' created with state {app.provisioning_state}"
+    )
+
+    return app
+
+
+@dg.op
 def update_workspace_yaml(
     context: dg.OpExecutionContext,
     code_location_name: str,
@@ -423,6 +579,11 @@ def update_code_location():
         code_location_name, grpc_host, grpc_port
     )
     reload_dagster_workspace(did_update)
+
+
+@dg.job
+def update_dagster_containerapp():
+    update_dagster_aca()
 
 
 @dg.job
