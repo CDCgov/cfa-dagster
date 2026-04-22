@@ -72,4 +72,6 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Deploy Container App
-        run: cd infra && uv sync && source .venv/bin/activate && dagster job execute -f dagster_defs.py -a update_dagster_containerapp
+        run: |
+          cd infra && uv sync && source .venv/bin/activate
+          DAGSTER_USER=githubactions dagster job execute -f dagster_defs.py -a update_dagster_containerapp
