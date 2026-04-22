@@ -5,7 +5,7 @@ description = "The project for CFA's Dagster webserver, daemon, and primary code
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "dagster>=1.12.2",
+    "dagster>=1.13.1",
     "dagster-pipes>=1.12.2",
     "dagster-graphql>=1.12.2",
     "dagster-webserver>=1.12.2",
