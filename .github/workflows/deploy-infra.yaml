@@ -49,7 +49,7 @@ jobs:
 
   deploy-container-app:
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: cfa-cdcent-aca
     needs: build-and-push-image
     environment: production
     permissions:
@@ -66,9 +66,6 @@ jobs:
           client-id: ${{ secrets.AZ_CLIENT_ID }}
           subscription-id: ${{ secrets.AZ_SUBSCRIPTION_ID }}
           tenant-id: ${{ secrets.AZ_TENANT_ID }}
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
 
       - name: Deploy Container App
         run: cd infra && uv run dagster_defs.py job execute -f dagster_defs.py -a update_dagster_containerapp
