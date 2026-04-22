@@ -67,5 +67,8 @@ jobs:
           subscription-id: ${{ secrets.AZ_SUBSCRIPTION_ID }}
           tenant-id: ${{ secrets.AZ_TENANT_ID }}
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
       - name: Deploy Container App
         run: cd infra && uv run dagster_defs.py job execute -f dagster_defs.py -a update_dagster_containerapp
