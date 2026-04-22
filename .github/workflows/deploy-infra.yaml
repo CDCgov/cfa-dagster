@@ -22,7 +22,6 @@ env:
 
 jobs:
   build-and-push-image:
-    if: false #TODO: remove
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -49,9 +48,9 @@ jobs:
             "docker://$REGISTRY_IMAGE"
 
   deploy-container-app:
-    # if: github.ref == 'refs/heads/main' #TODO: restore
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # needs: build-and-push-image
+    needs: build-and-push-image
     environment: production
     permissions:
       contents: read
