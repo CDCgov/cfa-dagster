@@ -488,7 +488,7 @@ def dynamic_graph_asset(
         if does_return_value and return_type is None:
             raise ValueError(
                 f"@dynamic_graph_asset '{asset_name}': decorated function must "
-                "have a return type annotation when returning a value. Use list[some_type] "
+                "have a return type annotation when returning a value e.g. -> str. Use list[some_type] "
                 "to return the value from each graph_dimension."
             )
 
