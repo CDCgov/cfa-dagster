@@ -503,26 +503,6 @@ class AzureBatchStepHandler(StepHandler):
                 fi = task.execution_info.failure_info
                 failure_details = f"{fi.category}: {fi.code} - {fi.message}"
 
-            # --- Check node-level issues ---
-            node_issue = None
-            if task.node_info and task.node_info.node_id:
-                try:
-                    node = self._batch_client.compute_node.get(
-                        task.node_info.pool_id, task.node_info.node_id
-                    )
-
-                    if node.errors:
-                        node_issue = "; ".join(
-                            f"{e.code}: {e.message}" for e in node.errors
-                        )
-
-                    # Disk full / unusable node scenarios often show up as unusable state
-                    if node.state and node.state.lower() in ("unusable", "starttaskfailed"):
-                        node_issue = node_issue or f"Node in bad state: {node.state}"
-
-                except Exception as node_err:
-                    node_issue = f"Failed to fetch node info: {node_err}"
-
             # --- State handling ---
             if task.state in ("active", "preparing", "running"):
                 return CheckStepHealthResult.healthy()
@@ -543,9 +523,6 @@ class AzureBatchStepHandler(StepHandler):
 
                 if failure_details:
                     reasons.append(f"Task failure: {failure_details}")
-
-                if node_issue:
-                    reasons.append(f"Node issue: {node_issue}")
 
                 return CheckStepHealthResult.unhealthy(
                     reason=" | ".join(reasons)
