@@ -23,10 +23,8 @@ from dagster._core.executor.step_delegating import StepDelegatingExecutor
 # ruff: noqa: F401
 from dagster_docker import docker_executor
 
-from cfa_dagster import (
-    azure_batch_executor,
-    azure_container_app_job_executor,
-)
+from ..azure_batch import azure_batch_executor
+from ..azure_container_app_job import azure_container_app_job_executor
 
 # using relative import to avoid circular dependency
 from .step_handler import RoutingStepHandler

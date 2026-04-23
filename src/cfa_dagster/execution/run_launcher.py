@@ -23,10 +23,7 @@ from dagster._serdes.config_class import ConfigurableClassData
 from dagster_docker import DockerRunLauncher
 from typing_extensions import Self
 
-from cfa_dagster import (
-    AzureContainerAppJobRunLauncher,
-)
-
+from ..azure_container_app_job import AzureContainerAppJobRunLauncher
 from .utils import ExecutionConfig, SelectorConfig
 
 log = logging.getLogger(__name__)

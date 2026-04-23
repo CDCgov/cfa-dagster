@@ -168,7 +168,7 @@ def start_dev_env(caller_name: str):
             if result.returncode != 0:
                 # explicity pass -f
                 fallback_cmd = base_cmd + ["-f", script]
-                log.debug(f"Running fallback command: '{base_cmd}'")
+                log.info(f"Running fallback command: '{base_cmd}'")
                 fallback_result = subprocess.run(fallback_cmd)
 
                 if fallback_result.returncode != 0:
