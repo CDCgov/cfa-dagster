@@ -649,7 +649,9 @@ def dynamic_graph_asset(
                     graph_dimensions=list(
                         dynamic_context.graph_dimension.values()
                     ),
-                    asset_partition_keys=dynamic_context.partition_keys if dynamic_context.has_partition_key else [],
+                    asset_partition_keys=dynamic_context.partition_keys
+                    if dynamic_context.has_partition_key
+                    else [],
                 )
 
         # -- output op to return results --
@@ -699,7 +701,9 @@ def dynamic_graph_asset(
                     asset_key=final_asset_key,
                     should_return_parent=True,
                     graph_dimensions=graph_dimensions,
-                    asset_partition_keys=context.partition_keys if context.has_partition_key else [],
+                    asset_partition_keys=context.partition_keys
+                    if context.has_partition_key
+                    else [],
                 )
 
         # -- config mapping --
