@@ -496,6 +496,82 @@ class AzureBatchStepHandler(StepHandler):
 
         try:
             task = self._batch_client.task.get(job_id, task_id)
+
+            # --- Check for explicit task failure info ---
+            failure_details = None
+            if task.execution_info and task.execution_info.failure_info:
+                fi = task.execution_info.failure_info
+                failure_details = f"{fi.category}: {fi.code} - {fi.message}"
+
+            # --- Check node-level issues ---
+            node_issue = None
+            if task.node_info and task.node_info.node_id:
+                try:
+                    node = self._batch_client.compute_node.get(
+                        task.node_info.pool_id, task.node_info.node_id
+                    )
+
+                    if node.errors:
+                        node_issue = "; ".join(
+                            f"{e.code}: {e.message}" for e in node.errors
+                        )
+
+                    # Disk full / unusable node scenarios often show up as unusable state
+                    if node.state and node.state.lower() in ("unusable", "starttaskfailed"):
+                        node_issue = node_issue or f"Node in bad state: {node.state}"
+
+                except Exception as node_err:
+                    node_issue = f"Failed to fetch node info: {node_err}"
+
+            # --- State handling ---
+            if task.state in ("active", "preparing", "running"):
+                return CheckStepHealthResult.healthy()
+
+            elif task.state == "completed":
+                exit_code = task.execution_info.exit_code
+
+                if exit_code == 0 and not failure_details:
+                    return CheckStepHealthResult.healthy()
+
+                # Build detailed failure message
+                reasons = [
+                    f"Azure Batch task {task_id} in job {job_id} failed."
+                ]
+
+                if exit_code is not None:
+                    reasons.append(f"Exit code: {exit_code}")
+
+                if failure_details:
+                    reasons.append(f"Task failure: {failure_details}")
+
+                if node_issue:
+                    reasons.append(f"Node issue: {node_issue}")
+
+                return CheckStepHealthResult.unhealthy(
+                    reason=" | ".join(reasons)
+                )
+
+            else:
+                return CheckStepHealthResult.unhealthy(
+                    reason=(
+                        f"Azure Batch task {task_id} in job {job_id} "
+                        f"has unexpected state {task.state}."
+                    )
+                )
+
+        except BatchErrorException as err:
+            return CheckStepHealthResult.unhealthy(
+                reason=f"Error checking Azure Batch task status: {err}"
+            )
+
+    def _check_step_health(
+        self, step_handler_context: StepHandlerContext
+    ) -> CheckStepHealthResult:
+        job_id = self._get_job_id(step_handler_context)
+        task_id = self._get_task_id(step_handler_context)
+
+        try:
+            task = self._batch_client.task.get(job_id, task_id)
             if task.state in ("active", "preparing", "running"):
                 return CheckStepHealthResult.healthy()
             elif task.state == "completed":
