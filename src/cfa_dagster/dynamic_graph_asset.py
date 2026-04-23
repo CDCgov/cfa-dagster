@@ -446,7 +446,7 @@ def dynamic_graph_asset(
                 value=output_path,
                 metadata={"container": config.base_output_prefix},
             )
-        Returns: abfss://cfadagster/dagster-files/username/my_dynamic_asset/2026-03-20
+        Returns: abfss://cfadagster/dagster-files/username/my_dynamic_asset/2026-04-13
         Downstream dependencies will download the files directly with the following structure:
         my_dynamic_asset/
         └── 2026-04-13
@@ -649,7 +649,7 @@ def dynamic_graph_asset(
                     graph_dimensions=list(
                         dynamic_context.graph_dimension.values()
                     ),
-                    asset_partition_keys=dynamic_context.partition_keys,
+                    asset_partition_keys=dynamic_context.partition_keys if dynamic_context.has_partition_key else [],
                 )
 
         # -- output op to return results --
@@ -699,7 +699,7 @@ def dynamic_graph_asset(
                     asset_key=final_asset_key,
                     should_return_parent=True,
                     graph_dimensions=graph_dimensions,
-                    asset_partition_keys=context.partition_keys,
+                    asset_partition_keys=context.partition_keys if context.has_partition_key else [],
                 )
 
         # -- config mapping --
