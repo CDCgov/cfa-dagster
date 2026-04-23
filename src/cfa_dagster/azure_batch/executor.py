@@ -467,7 +467,7 @@ class AzureBatchStepHandler(StepHandler):
 
         task = TaskAddParameter(
             id=task_id,
-            command_line=f"/bin/bash -c '{' '.join(command)}'",
+            command_line=' '.join(command),
             container_settings=container_settings,
             environment_settings=[
                 {"name": k, "value": v} for k, v in env_vars.items()
