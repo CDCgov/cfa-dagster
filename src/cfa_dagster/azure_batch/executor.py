@@ -496,6 +496,59 @@ class AzureBatchStepHandler(StepHandler):
 
         try:
             task = self._batch_client.task.get(job_id, task_id)
+
+            # --- Check for explicit task failure info ---
+            failure_details = None
+            if task.execution_info and task.execution_info.failure_info:
+                fi = task.execution_info.failure_info
+                failure_details = f"{fi.category}: {fi.code} - {fi.message}"
+
+            # --- State handling ---
+            if task.state in ("active", "preparing", "running"):
+                return CheckStepHealthResult.healthy()
+
+            elif task.state == "completed":
+                exit_code = task.execution_info.exit_code
+
+                if exit_code == 0 and not failure_details:
+                    return CheckStepHealthResult.healthy()
+
+                # Build detailed failure message
+                reasons = [
+                    f"Azure Batch task {task_id} in job {job_id} failed."
+                ]
+
+                if exit_code is not None:
+                    reasons.append(f"Exit code: {exit_code}")
+
+                if failure_details:
+                    reasons.append(f"Task failure: {failure_details}")
+
+                return CheckStepHealthResult.unhealthy(
+                    reason=" | ".join(reasons)
+                )
+
+            else:
+                return CheckStepHealthResult.unhealthy(
+                    reason=(
+                        f"Azure Batch task {task_id} in job {job_id} "
+                        f"has unexpected state {task.state}."
+                    )
+                )
+
+        except BatchErrorException as err:
+            return CheckStepHealthResult.unhealthy(
+                reason=f"Error checking Azure Batch task status: {err}"
+            )
+
+    def _check_step_health(
+        self, step_handler_context: StepHandlerContext
+    ) -> CheckStepHealthResult:
+        job_id = self._get_job_id(step_handler_context)
+        task_id = self._get_task_id(step_handler_context)
+
+        try:
+            task = self._batch_client.task.get(job_id, task_id)
             if task.state in ("active", "preparing", "running"):
                 return CheckStepHealthResult.healthy()
             elif task.state == "completed":
