@@ -637,7 +637,8 @@ def dynamic_graph_asset(
             )
             log.debug(f"is_first_dimension: '{is_first_dimension}'")
 
-            result = fn(dynamic_context, context.op_config, **upstream_kwargs)
+            config = config_cls(**context.op_config)
+            result = fn(dynamic_context, config, **upstream_kwargs)
             # handle yielded Output
             if isinstance(result, GeneratorType):
                 result = next(result)
