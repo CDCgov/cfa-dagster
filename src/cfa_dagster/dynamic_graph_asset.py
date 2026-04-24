@@ -614,6 +614,9 @@ def dynamic_graph_asset(
                 if does_return_value
                 else {"out": dg.Out(dg.Nothing)}
             ),
+            required_resource_keys=list(
+                graph_asset_kwargs.get("resource_defs", {}).keys()
+            ),
             retry_policy=retry_policy,
             config_schema=config_cls.to_config_schema(),
         )
