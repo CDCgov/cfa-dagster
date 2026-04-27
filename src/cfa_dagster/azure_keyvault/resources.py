@@ -1,6 +1,6 @@
-from dagster import ConfigurableResource
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
+from dagster import ConfigurableResource
 
 KEY_VAULT_URL_CFA_PREDICT = "https://CFA-Predict.vault.azure.net/"
 
@@ -16,8 +16,7 @@ class AzureKeyVaultResource(ConfigurableResource):
 def get_secret(secret_name: str) -> str:
     credential = DefaultAzureCredential()
     client = SecretClient(
-            vault_url=KEY_VAULT_URL_CFA_PREDICT,
-            credential=credential
-            )
+        vault_url=KEY_VAULT_URL_CFA_PREDICT, credential=credential
+    )
 
     return client.get_secret(secret_name).value

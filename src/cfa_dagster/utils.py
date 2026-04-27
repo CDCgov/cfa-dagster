@@ -15,6 +15,7 @@ from dagster._core.definitions.unresolved_asset_job_definition import (
 )
 from dagster_graphql import DagsterGraphQLClient
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+
 from .azure_keyvault import KEY_VAULT_URL_CFA_PREDICT
 
 log = logging.getLogger(__name__)
