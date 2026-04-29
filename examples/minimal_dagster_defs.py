@@ -11,8 +11,6 @@
 # ]
 # ///
 
-import os
-
 # from time import sleep
 from typing import List
 
@@ -20,7 +18,6 @@ import dagster as dg
 
 # ruff: noqa: F401
 from cfa_dagster import (
-    ADLS2PickleIOManager,
     DynamicGraphAssetExecutionContext,
     collect_definitions,
     dynamic_graph_asset,
@@ -29,8 +26,6 @@ from cfa_dagster import (
 
 # function to start the dev server
 start_dev_env(__name__)
-
-user = os.getenv("DAGSTER_USER")
 
 
 class MyAssetConfig(dg.Config):
@@ -50,11 +45,4 @@ def my_asset(
 collected_defs = collect_definitions(globals())
 
 # Create Definitions object
-defs = dg.Definitions(
-    **collected_defs,
-    resources={
-        # This IOManager lets Dagster serialize asset outputs and store them
-        # in Azure to pass between assets
-        "io_manager": ADLS2PickleIOManager(),
-    },
-)
+defs = dg.Definitions(**collected_defs)
