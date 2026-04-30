@@ -713,8 +713,12 @@ def dynamic_graph_asset(
         # -- config mapping --
         @dg.config_mapping(config_schema=config_cls.to_config_schema())
         def _config_mapping(config):
+            # initialize the config class to ensure any default_factories run
+            # once and pass the same values to all compute ops
+            resolved = config_cls(**config)
+            resolved_dict = resolved.model_dump()
             ops = {
-                f"{asset_name}__{op}": {"config": config}
+                f"{asset_name}__{op}": {"config": resolved_dict}
                 for op in ("config", "compute", "output")
             }
             return ops
