@@ -47,6 +47,8 @@ from dagster_docker.utils import (
 )
 from msrest.authentication import BasicTokenAuthentication
 
+from ..utils import get_run_timestamp
+
 log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -286,13 +288,7 @@ class AzureBatchStepHandler(StepHandler):
 
         location_name = run.remote_job_origin.repository_origin.code_location_origin.location_name
         dagster_user = os.getenv("DAGSTER_USER")
-        run_record = step_handler_context.instance.get_run_record_by_id(
-            run.run_id
-        )
-        if not run_record:
-            raise RuntimeError(f"No run record for run id: {run.run_id}")
-
-        run_creation_hour = run_record.create_timestamp.strftime("%Y-%m-%dT%H")
+        run_creation_hour = get_run_timestamp(run).strftime("%Y-%m-%dT%H")
         log.debug(f"dagster_user: '{dagster_user}'")
         log.debug(f"pool_id: '{self._pool_id}'")
         log.debug(f"location_name: '{location_name}'")

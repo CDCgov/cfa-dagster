@@ -2,6 +2,7 @@ import json
 import logging
 import os
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from typing import Any, Optional, Union
 
 import yaml
@@ -272,7 +273,13 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
 
         launcher = self._create_launcher(execution_config)
 
-        self._instance.add_run_tags(run.run_id, execution_config.to_run_tags())
+        self._instance.add_run_tags(
+            run.run_id,
+            {
+                "cfa_dagster/run_ts": datetime.now(timezone.utc).isoformat(),
+                **execution_config.to_run_tags(),
+            },
+        )
         self._instance.report_engine_event(
             message=f"Launching run using {launcher.__class__.__name__}",
             dagster_run=run,

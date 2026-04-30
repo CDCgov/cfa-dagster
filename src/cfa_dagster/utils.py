@@ -3,6 +3,7 @@ import logging
 import os
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
@@ -54,6 +55,32 @@ def get_graphql_client() -> DagsterGraphQLClient:
         return DagsterGraphQLClient(
             hostname=LOCAL_HOSTNAME, port_number=LOCAL_PORT
         )
+
+
+def get_run_timestamp(run: dg.DagsterRun) -> datetime:
+    """
+    Return the run start timestamp parsed from the ``cfa_dagster/run_ts`` tag.
+
+    Parameters
+    ----------
+    run : dg.DagsterRun
+        The Dagster run object containing run metadata and tags.
+
+    Returns
+    -------
+    datetime
+        A timezone-aware ``datetime`` object parsed from the ISO 8601 timestamp
+        stored in the ``cfa_dagster/run_ts`` tag.
+
+    Raises
+    ------
+    KeyError
+        If the ``cfa_dagster/run_ts`` tag is not present on the run.
+    ValueError
+        If the tag value is not a valid ISO 8601 datetime string.
+    """
+    ts = run.tags["cfa_dagster/run_ts"]
+    return datetime.fromisoformat(ts)
 
 
 def configure_dev_db():

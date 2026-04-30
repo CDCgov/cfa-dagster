@@ -3,7 +3,6 @@
 # /// script
 # requires-python = ">=3.13,<3.14"
 # dependencies = [
-#    "dagster-azure>=0.27.4",
 #    "dagster-postgres>=0.27.4",
 #    "dagster-webserver>=1.12.2",
 #    "dagster>=1.12.2",
