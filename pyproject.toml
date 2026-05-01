@@ -16,7 +16,7 @@ dependencies = [
     "dagster-azure>=0.27.4",
     "dagster-docker>=0.27.4",
     "dagster-postgres>=0.27.4",
-    "dagster>=1.12.2",
+    "dagster>=1.13.1",
     "dagster-graphql>=1.12.2",
     "aiofiles>=24.1.0",
     "azure-keyvault-secrets",
