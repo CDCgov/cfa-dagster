@@ -12,7 +12,7 @@ DESCRIPTION = (
     "locations on the central Dagster server"
 )
 DAGSTER_BASE_URL = "http://dagster.apps.edav.ext.cdc.gov"
-# DAGSTER_BASE_URL = "http://127.0.0.1:3000"
+# DAGSTER_BASE_URL = "http://127.0.0.1:4000"
 DAGSTER_GRAPHQL_URL = f"{DAGSTER_BASE_URL}/graphql"
 
 
@@ -22,7 +22,7 @@ def main(registry_image: str):
         raise ValueError("Cannot use images from private ghcr.io/cdcent repos")
 
     query = """
-    mutation runJob($runConfigData: RunConfigData) {
+    mutation runJob($runConfigData: RunConfigData, $tags: [ExecutionTag!]) {
       launchRun(
         executionParams: {
           selector: {
@@ -30,7 +30,10 @@ def main(registry_image: str):
             repositoryName: "__repository__",
             repositoryLocationName: "cfa_dagster"
           },
-          runConfigData: $runConfigData
+          runConfigData: $runConfigData,
+          executionMetadata: {
+              tags: $tags
+          }
         }
       ) {
         __typename
@@ -57,13 +60,13 @@ def main(registry_image: str):
                     "inputs": {"registry_image": registry_image}
                 }
             }
-        }
+        },
+        "tags": [{"key": "registry_image", "value": registry_image}],
     }
     response = requests.post(
         DAGSTER_GRAPHQL_URL,
         json={"query": query, "variables": variables},
     )
-    response.raise_for_status()
     result = response.json()
 
     if "errors" in result:
@@ -81,6 +84,7 @@ def main(registry_image: str):
             "Failed to update code location: "
             + json.dumps(launch_run_result, indent=2)
         )
+    response.raise_for_status()
 
 
 if __name__ == "__main__":
