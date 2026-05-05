@@ -113,10 +113,8 @@ def configure_dev_db():
 
     existing_db_name = "postgres"
 
-    # Create a new database for the user based on home directory
-    # using the $USER env var includes the domain extension which is not
-    # valid for a postgres db name
-    user_db_name = Path.home().name.lower()
+    # expecting this to be set with set_env_vars()
+    user_db_name = os.environ["DAGSTER_USER"]
 
     conn = None
     try:
@@ -214,8 +212,8 @@ def _run_cli(
     """
     Runs a cli tool that can fall back to the default dagster_defs.py file on error
     """
-    configure_dev_db()
     set_env_vars()
+    configure_dev_db()
     raw_args = argv if argv is not None else sys.argv
     log.debug(f"raw_args: {raw_args}")
     args = add_default_args(raw_args)
