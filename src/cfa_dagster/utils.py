@@ -1,7 +1,6 @@
 import importlib.resources
 import logging
 import os
-import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -11,10 +10,12 @@ import dagster as dg
 import psycopg2
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
+from click.exceptions import UsageError
 from dagster._core.definitions.unresolved_asset_job_definition import (
     UnresolvedAssetJobDefinition,
 )
 from dagster_graphql import DagsterGraphQLClient
+from dagster_shared.check.functions import CheckError
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from .azure_keyvault import KEY_VAULT_URL_CFA_PREDICT
@@ -112,10 +113,8 @@ def configure_dev_db():
 
     existing_db_name = "postgres"
 
-    # Create a new database for the user based on home directory
-    # using the $USER env var includes the domain extension which is not
-    # valid for a postgres db name
-    user_db_name = Path.home().name.lower()
+    # expecting this to be set with set_env_vars()
+    user_db_name = os.environ["DAGSTER_USER"]
 
     conn = None
     try:
@@ -144,6 +143,136 @@ def configure_dev_db():
             conn.close()
 
 
+def set_env_vars(script: str = None):
+    dagster_home = str(importlib.resources.files("cfa_dagster"))
+    # used by cfa-dagster for database and blob storage locations
+    if not os.getenv("DAGSTER_USER"):
+        os.environ["DAGSTER_USER"] = Path.home().name.lower()
+    # used by dagster
+    if not os.getenv("DAGSTER_HOME"):
+        os.environ["DAGSTER_HOME"] = dagster_home
+
+
+def add_default_args(sys_argv) -> list[str]:
+    """
+    Strips the first element of sys.argv and adds default host and port args.
+    """
+    if not sys_argv:
+        return []
+
+    args = sys_argv[1:]  # strip the binary
+
+    extra = []
+    if "-h" not in args and "--host" not in args:
+        extra += ["-h", LOCAL_HOSTNAME]
+    if "-p" not in args and "--port" not in args:
+        extra += ["-p", str(LOCAL_PORT)]
+
+    return [*args, *extra]
+
+
+def _add_default_args(sys_argv) -> list[str]:
+    """
+    Strips the first element of sys.argv and adds default host and port args
+    """
+    # separate cmd, subcmd, args
+    if not sys_argv:
+        return []
+
+    if len(sys_argv) > 1 and not sys_argv[1].startswith("-"):
+        subcmd = sys_argv[1]
+        args = sys_argv[2:]
+    else:
+        subcmd = None
+        args = sys_argv[1:]
+
+    extra = []
+    if "-h" not in args and "--host" not in args:
+        extra += ["-h", LOCAL_HOSTNAME]
+
+    if "-p" not in args and "--port" not in args:
+        extra += ["-p", str(LOCAL_PORT)]
+
+    # return cmd, subcmd, args if there is a subcmd else cmd, args
+    if subcmd is not None:
+        result = [subcmd, *extra, *args]
+    else:
+        result = [*extra, *args]
+
+    return result
+
+
+def _run_cli(
+    cli,
+    env_prefix: str,
+    tool_name: str,
+    argv: list[str] | None = None,
+    defs_file: str = "dagster_defs.py",
+):
+    """
+    Runs a cli tool that can fall back to the default dagster_defs.py file on error
+    """
+    set_env_vars()
+    configure_dev_db()
+    raw_args = argv if argv is not None else sys.argv
+    log.debug(f"raw_args: {raw_args}")
+    args = add_default_args(raw_args)
+    log.debug(f"args: {args}")
+
+    def retry_with_defs_file():
+        if Path(defs_file).exists():
+            log.debug(f"{tool_name} failed, retrying with -f {defs_file}")
+            sys.exit(
+                cli(
+                    args=[*args, "-f", defs_file],
+                    auto_envvar_prefix=env_prefix,
+                    standalone_mode=False,
+                )
+            )
+
+    try:
+        cli(args=args, auto_envvar_prefix=env_prefix, standalone_mode=False)
+    except SystemExit as e:
+        if e.code != 0:
+            retry_with_defs_file()
+        sys.exit(e.code)
+    except CheckError:
+        retry_with_defs_file()
+        sys.exit(1)
+    except UsageError:
+        retry_with_defs_file()
+        sys.exit(1)
+    else:
+        sys.exit(0)
+
+
+def run_dagster_webserver():
+    """
+    Wrapper for the `dagster-webserver` cli
+    """
+    from dagster_webserver.cli import cli
+
+    _run_cli(cli, "DAGSTER_WEBSERVER", "dagster-webserver")
+
+
+def run_dagster():
+    """
+    Wrapper for the `dagster` cli
+    """
+    from dagster._cli import ENV_PREFIX, cli
+
+    _run_cli(cli, ENV_PREFIX, "dagster")
+
+
+def run_dg(argv: list[str] | None = None, defs_file: str = "dagster_defs.py"):
+    """
+    Wrapper for the `dg` cli
+    """
+    from dagster_dg_cli.cli import ENV_PREFIX, cli
+
+    _run_cli(cli, ENV_PREFIX, "dg", argv=argv, defs_file=defs_file)
+
+
 def start_dev_env(caller_name: str):
     """
     Parameters:
@@ -155,60 +284,16 @@ def start_dev_env(caller_name: str):
     1. creating a database on the dev server
     2. setting `DAGSTER_HOME` environment variable
     3. setting `DAGSTER_USER` environment variable
-    4. running `dagster dev *sys.argv[1]` if flags are included e.g. uv run dagster_defs.py -p 4001
+    4. running `dg dev *sys.argv[1]` if flags are included e.g. uv run dagster_defs.py -p 4001
         or
-    4. running `dagster *sys.argv[1]` if commands are provided e.g. uv run dagster_defs.py job launch ...
+    4. running `dg *sys.argv[1]` if commands are provided e.g. uv run dagster_defs.py launch --job ...
     5. Validating the DAGSTER_USER environment variable for non-dev scenarios
     """
-    dagster_home = str(importlib.resources.files("cfa_dagster"))
     # Start the Dagster UI and set necessary env vars if
-    # called directly via `uv run`
+    # called directly via `uv run dagster_defs.py` or `python dagster_defs.py`
     if caller_name == "__main__":
-        configure_dev_db()
-        # Set environment variables
-        os.environ["DAGSTER_USER"] = Path.home().name.lower()
-        if not os.getenv("DAGSTER_HOME"):
-            os.environ["DAGSTER_HOME"] = dagster_home
-
-        script = sys.argv[0]
-        args = sys.argv[1:]
-
-        # --- CASE 1: explicit dagster subcommand ---
-        if args and not args[0].startswith("-"):
-            result = subprocess.run(["dagster", *args])
-            sys.exit(result.returncode)
-
-        try:
-            # --- CASE 2: default to `dagster dev` ---
-            base_cmd = [
-                "dagster",
-                "dev",
-                "-h",
-                LOCAL_HOSTNAME,
-                "-p",
-                f"{LOCAL_PORT}",
-                *args,
-            ]
-
-            # run without -f to try workspace.yaml or [tool.dagster] config
-            log.debug(f"Running command: '{base_cmd}'")
-            result = subprocess.run(base_cmd)
-
-            if result.returncode != 0:
-                # explicity pass -f
-                fallback_cmd = base_cmd + ["-f", script]
-                log.info(f"Running fallback command: '{base_cmd}'")
-                fallback_result = subprocess.run(fallback_cmd)
-
-                if fallback_result.returncode != 0:
-                    print("Fallback with -f also failed.")
-                    sys.exit(fallback_result.returncode)
-
-        except KeyboardInterrupt:
-            print("\nShutting down cleanly...")
-            sys.exit(0)
-            if not is_production():
-                print("Running in local dev environment")
+        defs_file = Path(sys.argv[0]).name
+        run_dg(argv=[None, "dev", *sys.argv[1:]], defs_file=defs_file)
 
     # get the user from the environment, throw an error if variable is not set
     if not os.getenv("DAGSTER_USER"):

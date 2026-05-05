@@ -5,14 +5,6 @@ description = "The project for CFA's Dagster webserver, daemon, and primary code
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "dagster>=1.12.2",
-    "dagster-pipes>=1.12.2",
-    "dagster-graphql>=1.12.2",
-    "dagster-webserver>=1.12.2",
-    "dagster-azure>=0.27.4",
-    "dagster-docker>=0.27.4",
-    "dagster-postgres>=0.27.4",
-    "pyyaml>=6.0.2",
     "azure-identity>=1.23.0",
     "azure-batch>=14.2.0",
     "azure-mgmt-appcontainers==3.2.0",
@@ -20,8 +12,9 @@ dependencies = [
     "azure-mgmt-loganalytics",
     "azure-mgmt-subscription>=3.1.1",
     "requests>=2.32.5",
-    "cfa-dagster"
+    "cfa-dagster[dev]",
 ]
+
 
 [tool.uv.sources]
 cfa-dagster = { path = ".." }
@@ -29,3 +22,12 @@ cfa-dagster = { path = ".." }
 # necessary so uv doesn't try to capture the parent directory
 [tool.uv]
 workspace = { members = ["infra"] }
+
+# the below configures `dg dev` to look at the local dagster_defs.py file
+[tool.dg]
+directory_type = "project"
+
+[tool.dg.project]
+root_module = "dagster_defs"
+defs_module = "dagster_defs"
+code_location_target_module = "dagster_defs"
