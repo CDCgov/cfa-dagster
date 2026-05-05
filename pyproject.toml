@@ -17,11 +17,14 @@ dependencies = [
     "dagster-azure~=0.29.2",
     "dagster-docker~=0.29.2",
     "dagster>=1.12.2,<1.14",
+    "dagster-shared>=1.12.2,<1.14",
     "dagster-graphql>=1.12.2,<1.14",
     "dagster-postgres~=0.29.2",
     "aiofiles~=24.1.0",
     "azure-keyvault-secrets",
     "psycopg2-binary",
+    # used by dagster clis, just importing an error
+    "click"
 ]
 
 [project.scripts]
