@@ -5,17 +5,17 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
-from dagster_shared.check.functions import CheckError
-from click.exceptions import UsageError
 
 import dagster as dg
 import psycopg2
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
+from click.exceptions import UsageError
 from dagster._core.definitions.unresolved_asset_job_definition import (
     UnresolvedAssetJobDefinition,
 )
 from dagster_graphql import DagsterGraphQLClient
+from dagster_shared.check.functions import CheckError
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from .azure_keyvault import KEY_VAULT_URL_CFA_PREDICT
