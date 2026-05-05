@@ -8,18 +8,18 @@ authors = [
 ]
 requires-python = ">=3.10,<3.14"
 dependencies = [
-    "pyyaml>=6.0.2",
-    "azure-identity>=1.23.1",
-    "msrest>=0.7.1",
-    "azure-batch>=14.2.0",
-    "azure-mgmt-appcontainers>=3.2.0",
-    "azure-mgmt-subscription>=3.1.1",
-    "dagster-azure>=0.29.2",
-    "dagster-docker>=0.29.2",
+    "pyyaml~=6.0.2",
+    "azure-identity~=1.23.1",
+    "msrest~=0.7.1",
+    "azure-batch~=14.2.0",
+    "azure-mgmt-appcontainers~=3.2.0",
+    "azure-mgmt-subscription~=3.1.1",
+    "dagster-azure~=0.29.2",
+    "dagster-docker~=0.29.2",
     "dagster>=1.12.2,<1.14",
     "dagster-graphql>=1.12.2,<1.14",
-    "dagster-postgres>=0.29.2",
-    "aiofiles>=24.1.0",
+    "dagster-postgres~=0.29.2",
+    "aiofiles~=24.1.0",
     "azure-keyvault-secrets",
     "psycopg2-binary",
 ]
@@ -35,7 +35,7 @@ test = [
 ]
 dev = [
     "dagster-webserver>=1.12.2,<1.14",
-    "dagster-dg-cli>=1.13.3",
+    "dagster-dg-cli~=1.13.3",
 ]
 
 [build-system]
