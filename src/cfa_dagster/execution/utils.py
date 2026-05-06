@@ -423,6 +423,21 @@ def get_dynamic_executor_config_schema(
         alternate_launchers,
     )
 
+    multiprocess_executor_schema = merge_dicts(
+        multiprocess_executor.config_schema.config_type.fields,
+        {
+            "max_concurrent": Field(
+                IntSource,
+                is_required=False,
+                description=(
+                    "Limit on the number of containers that will run concurrently within the scope "
+                    "of a Dagster run. Note that this limit is per run, not global."
+                ),
+                default_value=5,
+            ),
+        },
+    )
+
     docker_executor_schema = merge_dicts(
         docker_executor.config_schema.config_type.fields,
         {
@@ -441,7 +456,7 @@ def get_dynamic_executor_config_schema(
     executor_fields = with_alternate_default(
         {
             "in_process_executor": in_process_executor.config_schema.config_type.fields,
-            "multiprocess_executor": multiprocess_executor.config_schema.config_type.fields,
+            "multiprocess_executor": multiprocess_executor_schema,
             "azure_batch_executor": azure_batch_executor.config_schema.config_type.fields,
             "azure_container_app_job_executor": azure_container_app_job_executor.config_schema.config_type.fields,
             **(

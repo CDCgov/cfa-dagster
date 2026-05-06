@@ -221,7 +221,7 @@ def _run_cli(
 
     def retry_with_defs_file():
         if Path(defs_file).exists():
-            log.debug(f"{tool_name} failed, retrying with -f {defs_file}")
+            log.info(f"{tool_name} failed, retrying with -f {defs_file}")
             sys.exit(
                 cli(
                     args=[*args, "-f", defs_file],
