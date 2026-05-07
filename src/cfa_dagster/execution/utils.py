@@ -437,6 +437,7 @@ def get_dynamic_executor_config_schema(
             ),
         },
     )
+    log.debug(multiprocess_executor_schema)
 
     docker_executor_schema = merge_dicts(
         docker_executor.config_schema.config_type.fields,
@@ -456,7 +457,7 @@ def get_dynamic_executor_config_schema(
     executor_fields = with_alternate_default(
         {
             "in_process_executor": in_process_executor.config_schema.config_type.fields,
-            "multiprocess_executor": multiprocess_executor_schema,
+            "multiprocess_executor": multiprocess_executor.config_schema.config_type.fields,
             "azure_batch_executor": azure_batch_executor.config_schema.config_type.fields,
             "azure_container_app_job_executor": azure_container_app_job_executor.config_schema.config_type.fields,
             **(
