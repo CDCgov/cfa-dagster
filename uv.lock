@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.10, <3.14"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -187,7 +187,7 @@ wheels = [
 
 [[package]]
 name = "azure-identity"
-version = "1.23.1"
+version = "1.25.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "azure-core" },
@@ -196,9 +196,9 @@ dependencies = [
     { name = "msal-extensions" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b5/29/1201ffbb6a57a16524dd91f3e741b4c828a70aaba436578bdcb3fbcb438c/azure_identity-1.23.1.tar.gz", hash = "sha256:226c1ef982a9f8d5dcf6e0f9ed35eaef2a4d971e7dd86317e9b9d52e70a035e4", size = 266185, upload-time = "2025-07-15T19:16:38.077Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c5/0e/3a63efb48aa4a5ae2cfca61ee152fbcb668092134d3eb8bfda472dd5c617/azure_identity-1.25.3.tar.gz", hash = "sha256:ab23c0d63015f50b630ef6c6cf395e7262f439ce06e5d07a64e874c724f8d9e6", size = 286304, upload-time = "2026-03-13T01:12:20.892Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/99/b3/e2d7ab810eb68575a5c7569b03c0228b8f4ce927ffa6211471b526f270c9/azure_identity-1.23.1-py3-none-any.whl", hash = "sha256:7eed28baa0097a47e3fb53bd35a63b769e6b085bb3cb616dfce2b67f28a004a1", size = 186810, upload-time = "2025-07-15T19:16:40.184Z" },
+    { url = "https://files.pythonhosted.org/packages/49/9a/417b3a533e01953a7c618884df2cb05a71e7b68bdbce4fbdb62349d2a2e8/azure_identity-1.25.3-py3-none-any.whl", hash = "sha256:f4d0b956a8146f30333e071374171f3cfa7bdb8073adb8c3814b65567aa7447c", size = 192138, upload-time = "2026-03-13T01:12:22.951Z" },
 ]
 
 [[package]]
@@ -217,17 +217,16 @@ wheels = [
 
 [[package]]
 name = "azure-mgmt-appcontainers"
-version = "3.2.0"
+version = "4.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "azure-common" },
     { name = "azure-mgmt-core" },
-    { name = "isodate" },
+    { name = "msrest" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1e/08/e1a6d0038028e9113f5e0f4676916497d8958e9cd6d7b15c7522d9e45282/azure_mgmt_appcontainers-3.2.0.tar.gz", hash = "sha256:6e9ed63c2c2cb0f643fad679d81308c4aa26156ced41fc033e5f4c0498218f3e", size = 181724, upload-time = "2025-04-21T04:24:47.032Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/73/01/e84cadcf7d71fdff9a79218c8fb165ab20ce6e64af8526be485039897fa5/azure_mgmt_appcontainers-4.0.0.tar.gz", hash = "sha256:1731136ca0166c5fbc21a58cd37ea76787d20989e7f95dc12ae627efaf1dc3a5", size = 213877, upload-time = "2025-10-24T07:28:42.834Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4e/90/252964c7c44a1e0e47642465eb0480ee9e5b97a43780af2792499ad32dbc/azure_mgmt_appcontainers-3.2.0-py3-none-any.whl", hash = "sha256:e5bd1e1b5bf1bb84b710e5d788e670b4b61e94a26c4d230cc403ab60b69bad12", size = 281146, upload-time = "2025-04-21T04:24:48.245Z" },
+    { url = "https://files.pythonhosted.org/packages/3e/1a/cb62ec5f12b2c7cf89e1a1607478ae3befd14420139f4cfc1dfea567645b/azure_mgmt_appcontainers-4.0.0-py3-none-any.whl", hash = "sha256:2338025ac0c3dc8867dbcda80d7446aaad3f3e8875e7cc71892e833f9ee7e0ef", size = 331814, upload-time = "2025-10-24T07:28:44.084Z" },
 ]
 
 [[package]]
@@ -396,9 +395,9 @@ test = [
 requires-dist = [
     { name = "aiofiles", specifier = "~=24.1.0" },
     { name = "azure-batch", specifier = "~=14.2.0" },
-    { name = "azure-identity", specifier = "~=1.23.1" },
+    { name = "azure-identity", specifier = "~=1.25.1" },
     { name = "azure-keyvault-secrets" },
-    { name = "azure-mgmt-appcontainers", specifier = "~=3.2.0" },
+    { name = "azure-mgmt-appcontainers", specifier = ">=4.0.0" },
     { name = "azure-mgmt-subscription", specifier = "~=3.1.1" },
     { name = "click" },
     { name = "dagster", specifier = ">=1.12.2,<1.14" },
