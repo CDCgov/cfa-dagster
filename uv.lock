@@ -397,7 +397,7 @@ requires-dist = [
     { name = "azure-batch", specifier = "~=14.2.0" },
     { name = "azure-identity", specifier = "~=1.25.1" },
     { name = "azure-keyvault-secrets" },
-    { name = "azure-mgmt-appcontainers", specifier = ">=4.0.0" },
+    { name = "azure-mgmt-appcontainers", specifier = "~=4.0.0" },
     { name = "azure-mgmt-subscription", specifier = "~=3.1.1" },
     { name = "click" },
     { name = "dagster", specifier = ">=1.12.2,<1.14" },
