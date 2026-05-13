@@ -251,16 +251,16 @@ defs = dg.Definitions(
     },
     executor=dynamic_executor(
         # try switching to Azure compute after pushing your image
-        # default_config=default_config
-        default_config=docker_config,
+        default_config=default_config,
+        # default_config=docker_config,
         # default_config=azure_caj_config
         # default_config=azure_batch_config
         # alternate configs show you default values in the Launchpad on hover
         alternate_configs=[
-            default_config,
+            # default_config,
             docker_config,
-            azure_caj_config,
-            azure_batch_config,
+            # azure_caj_config,
+            # azure_batch_config,
         ],
     ),
 )

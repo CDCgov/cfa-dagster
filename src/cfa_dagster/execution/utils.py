@@ -437,6 +437,7 @@ def get_dynamic_executor_config_schema(
             ),
         },
     )
+    multiprocess_executor_schema = multiprocess_executor.config_schema.config_type.fields
 
     docker_executor_schema = merge_dicts(
         docker_executor.config_schema.config_type.fields,
