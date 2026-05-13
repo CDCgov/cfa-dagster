@@ -16,6 +16,7 @@ from azure.core.credentials import TokenCredential
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.mgmt.subscription import SubscriptionClient
+from azure.mgmt.msi import ManagedServiceIdentityClient
 from msrest.authentication import BasicTokenAuthentication
 
 from cfa_dagster import (
@@ -193,11 +194,24 @@ def create_or_update_code_location_aca(
     location = "eastus"
 
     containerapp_env_name = "ext-edav-cfa-cae-prd"
+    managed_identity_name = "dagster-daemon-mi"
+
+    msi_client = ManagedServiceIdentityClient(
+        credential,
+        subscription_id,
+    )
+
+    managed_identity = msi_client.user_assigned_identities.get(
+        resource_group_name,
+        managed_identity_name,
+    )
+
+    managed_identity_client_id = managed_identity.client_id
 
     managed_identity_id = (
         f"/subscriptions/{subscription_id}/resourceGroups/"
         f"{resource_group_name}/providers/Microsoft.ManagedIdentity/"
-        "userAssignedIdentities/dagster-daemon-mi"
+        f"userAssignedIdentities/{managed_identity_name}"
     )
 
     containerapp_client = ContainerAppsAPIClient(credential, subscription_id)
@@ -256,6 +270,10 @@ def create_or_update_code_location_aca(
                             {"name": "DAGSTER_USER", "value": "prod"},
                             {"name": "CFA_DAGSTER_ENV", "value": "prod"},
                             {"name": "DEPLOY_DATE", "value": deploy_date},
+                            {
+                                "name": "AZURE_CLIENT_ID",
+                                "value": managed_identity_client_id,
+                            },
                         ],
                     }
                 ],
