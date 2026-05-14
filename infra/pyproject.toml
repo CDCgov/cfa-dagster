@@ -5,13 +5,13 @@ description = "The project for CFA's Dagster webserver, daemon, and primary code
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "azure-identity>=1.25.0",
-    "azure-batch>=14.2.0",
+    "azure-identity~=1.25.0",
+    "azure-batch~=14.2.0",
     "azure-mgmt-appcontainers~=4.0.0",
-    "azure-mgmt-containerinstance",
-    "azure-mgmt-loganalytics",
-    "azure-mgmt-subscription>=3.1.1",
-    "requests>=2.32.5",
+    "azure-mgmt-containerinstance~=10.1.0",
+    "azure-mgmt-loganalytics~=13.1.0",
+    "azure-mgmt-subscription~=3.1.1",
+    "requests~=2.32.5",
     "cfa-dagster[dev]",
     "azure-mgmt-msi~=7.1.0",
 ]

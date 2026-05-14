@@ -20,7 +20,6 @@ from dagster_azure.blob import (
 # ruff: noqa: F401
 from cfa_dagster import (
     ADLS2PickleIOManager,
-    AzureContainerAppJobRunLauncher,
     DynamicGraphAssetExecutionContext,
     ExecutionConfig,
     SelectorConfig,
@@ -102,9 +101,6 @@ azure_caj_config = ExecutionConfig(
 # task for maximum scale
 # add this to a job or the Definitions class to use it
 azure_batch_config = ExecutionConfig(
-    launcher=SelectorConfig(
-        class_name=AzureContainerAppJobRunLauncher.__name__
-    ),
     executor=SelectorConfig(
         class_name=azure_batch_executor.__name__,
         config={
@@ -253,14 +249,14 @@ defs = dg.Definitions(
         # try switching to Azure compute after pushing your image
         default_config=default_config,
         # default_config=docker_config,
-        # default_config=azure_caj_config
-        # default_config=azure_batch_config
+        # default_config=azure_caj_config,
+        # default_config=azure_batch_config,
         # alternate configs show you default values in the Launchpad on hover
         alternate_configs=[
-            # default_config,
+            default_config,
             docker_config,
-            # azure_caj_config,
-            # azure_batch_config,
+            azure_caj_config,
+            azure_batch_config,
         ],
     ),
 )

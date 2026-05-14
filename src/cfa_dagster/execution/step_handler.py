@@ -8,9 +8,11 @@ from dagster import (
     DagsterEvent,
     ExecutorDefinition,
     InitExecutorContext,
+    MetadataValue,
     in_process_executor,
     multiprocess_executor,
 )
+from dagster._core.events import EngineEventData
 from dagster._core.executor.step_delegating import (
     CheckStepHealthResult,
     StepDelegatingExecutor,
@@ -221,7 +223,9 @@ class RoutingStepHandler(StepHandler):
         return step_keys_to_execute[0]
 
     def _get_handler(
-        self, step_handler_context: StepHandlerContext
+        self,
+        step_handler_context: StepHandlerContext,
+        should_report_config: bool = False,
     ) -> StepHandler:
         # 1. Op-level executor tag
         step_tags = self._get_step_tags(step_handler_context)
@@ -257,12 +261,22 @@ class RoutingStepHandler(StepHandler):
                 self._init_context,
                 execution_config,
             )
+        if should_report_config:
+            step_handler_context.instance.report_engine_event(
+                message="Resolved execution config",
+                dagster_run=step_handler_context.dagster_run,
+                step_key=self._get_step_key(step_handler_context),
+                engine_event_data=EngineEventData(
+                    metadata=execution_config.to_metadata()
+                ),
+            )
+
         return self._handler_cache[handler_key]
 
     def launch_step(self, step_handler_context):
-        return self._get_handler(step_handler_context).launch_step(
-            step_handler_context
-        )
+        return self._get_handler(
+            step_handler_context, should_report_config=True
+        ).launch_step(step_handler_context)
 
     def check_step_health(self, step_handler_context):
         return self._get_handler(step_handler_context).check_step_health(

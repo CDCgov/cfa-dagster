@@ -55,28 +55,45 @@ in_process_config = ExecutionConfig(
     executor=SelectorConfig(class_name="in_process_executor")
 )
 
+#  Choosing a lesser-used alpha char as a prefix to prevent Dagster/python keyword errors
+# DagsterInvalidDefinitionError: "in" is not a valid name in Dagster. It conflicts with a Dagster or python reserved keyword.
+SEGMENT_PREFIX = "x_"
+# Using triple underscore as a separator since a single underscore could be an
+# encoded character and a double underscore could be two consecutive encoded character
+SEGMENT_SEPARATOR = "___"
+
 
 # -- Mapping key encoding --
 def _encode_segment(value: str) -> str:
     """Encode forbidden characters as _XX_ (hex), leave [a-zA-Z0-9] as-is."""
-    return re.sub(
-        r"[^a-zA-Z0-9]", lambda m: f"_{ord(m.group()):02X}_", str(value)
+    encoded = re.sub(
+        r"[^a-zA-Z0-9]|_",
+        lambda m: f"_{ord(m.group()):02X}_",
+        str(value),
     )
+    return f"{SEGMENT_PREFIX}{encoded}"
 
 
 def _decode_segment(encoded: str) -> str:
     """Decode _XX_ sequences back to original characters."""
+    encoded = encoded.removeprefix(SEGMENT_PREFIX)
+
     return re.sub(
-        r"_([0-9A-F]{2})_", lambda m: chr(int(m.group(1), 16)), encoded
+        r"_([0-9A-F]{2})_",
+        lambda m: chr(int(m.group(1), 16)),
+        encoded,
     )
 
 
 def _encode_mapping_key(values: tuple) -> str:
-    return "__".join(_encode_segment(v) for v in values)
+    return SEGMENT_SEPARATOR.join(_encode_segment(v) for v in values)
 
 
 def _decode_mapping_key(mapping_key: str) -> list:
-    return [_decode_segment(segment) for segment in mapping_key.split("__")]
+    return [
+        _decode_segment(segment)
+        for segment in mapping_key.split(SEGMENT_SEPARATOR)
+    ]
 
 
 def _in_to_asset_in(name: str, op_in: dg.In) -> dg.AssetIn:
