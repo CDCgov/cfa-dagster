@@ -1,6 +1,6 @@
 [project]
 name = "cfa-dagster"
-version = "0.1.0"
+version = "1.0.0"
 description = "CFA libraries for Dagster"
 readme = "README.md"
 authors = [

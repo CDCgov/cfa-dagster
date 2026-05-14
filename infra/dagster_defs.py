@@ -15,8 +15,8 @@ from azure.batch.models import (
 from azure.core.credentials import TokenCredential
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
-from azure.mgmt.subscription import SubscriptionClient
 from azure.mgmt.msi import ManagedServiceIdentityClient
+from azure.mgmt.subscription import SubscriptionClient
 from msrest.authentication import BasicTokenAuthentication
 
 from cfa_dagster import (

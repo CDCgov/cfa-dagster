@@ -4,19 +4,17 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping, Optional
 
 from dagster import (
-    Array,
     DagsterInvalidConfigError,
     Field,
-    IntSource,
+    Int,
     MetadataValue,
     Noneable,
-    Permissive,
     Selector,
     Shape,
     in_process_executor,
     multiprocess_executor,
 )
-from dagster._config import ConfigTypeKind, process_config
+from dagster._config import process_config
 from dagster._utils.merger import merge_dicts
 from dagster_docker import docker_executor
 from dagster_docker.utils import DOCKER_CONFIG_SCHEMA
@@ -142,30 +140,36 @@ class ExecutionConfig:
     # -------------------------
     @classmethod
     def from_executor_config(
-        cls, config: Mapping[str, Any]
+        cls, config: Mapping[str, Any], should_skip_executor: bool = False
     ) -> "ExecutionConfig":
         if not config:
             return cls()
         return cls(
             launcher=SelectorConfig.from_json(config.get("launcher")),
-            executor=SelectorConfig.from_json(config.get("executor")),
+            executor=None
+            if should_skip_executor
+            else SelectorConfig.from_json(config.get("executor")),
         )
 
     # -------------------------
     # From run config
     # -------------------------
     @classmethod
-    def from_run_config(cls, config: Mapping[str, Any]) -> "ExecutionConfig":
+    def from_run_config(
+        cls, config: Mapping[str, Any], should_skip_executor: bool = False
+    ) -> "ExecutionConfig":
         if not config:
             return cls()
         executor_config = config.get("execution", {}).get("config", {})
-        return cls.from_executor_config(executor_config)
+        return cls.from_executor_config(executor_config, should_skip_executor)
 
     # -------------------------
     # From run tags
     # -------------------------
     @classmethod
-    def from_run_tags(cls, tags: Mapping[str, str]) -> "ExecutionConfig":
+    def from_run_tags(
+        cls, tags: Mapping[str, str], should_skip_executor: bool = False
+    ) -> "ExecutionConfig":
         if not tags:
             return cls()
         raw_json = tags.get(cls.TAG_KEY)
@@ -176,7 +180,9 @@ class ExecutionConfig:
         #     raise ValueError(f"Unsupported execution tag version: {payload.get('v')}")
         return cls(
             launcher=SelectorConfig.from_json(payload.get("launcher")),
-            executor=SelectorConfig.from_json(payload.get("executor")),
+            executor=None
+            if should_skip_executor
+            else SelectorConfig.from_json(payload.get("executor")),
         )
 
     # -------------------------
@@ -184,7 +190,9 @@ class ExecutionConfig:
     # -------------------------
     @classmethod
     def from_metadata(
-        cls, metadata: Optional[dict[str, MetadataValue]]
+        cls,
+        metadata: Optional[dict[str, MetadataValue]],
+        should_skip_executor: bool = False,
     ) -> "ExecutionConfig":
         if not metadata:
             return cls()
@@ -197,7 +205,9 @@ class ExecutionConfig:
             return cls()
         return cls(
             launcher=SelectorConfig.from_json(value.get("launcher")),
-            executor=SelectorConfig.from_json(value.get("executor")),
+            executor=None
+            if should_skip_executor
+            else SelectorConfig.from_json(value.get("executor")),
         )
 
     def to_dict(self) -> Dict[str, str]:
@@ -210,7 +220,6 @@ class ExecutionConfig:
             if self.executor
             else None,
         }
-        log.debug(f"payload: '{payload}'")
         # remove None entries
         payload = {k: v for k, v in payload.items() if v is not None}
         return payload
@@ -222,119 +231,17 @@ class ExecutionConfig:
         payload = self.to_dict()
         return {self.TAG_KEY: json.dumps(payload, separators=(",", ":"))}
 
+    def to_metadata(self) -> Dict[str, str]:
+        payload = self.to_dict()
+        return {self.TAG_KEY: MetadataValue.json(payload)}
+
     def to_run_config(self) -> Dict[str, str]:
         return {"config": self.to_dict()}
 
 
-def _patch_config_type(config_type, default_value):
-    """
-    Recursively patches a config type with concrete types where possible,
-    using the default value to infer types for scalar/scalar_union fields.
-    Since values are pre-validated, we can trust their structure.
-    """
-    kind = config_type.kind
-
-    # Primitive scalars
-    if kind == ConfigTypeKind.SCALAR:
-        given_name = getattr(config_type, "given_name", None)
-        return {
-            "String": str,
-            "Int": int,
-            "Float": float,
-            "Bool": bool,
-        }.get(given_name, config_type)
-
-    # StringSource, IntSource etc - infer from default value
-    if kind == ConfigTypeKind.SCALAR_UNION:
-        for t in (str, bool, int, float):
-            if isinstance(default_value, t):
-                return t
-        return config_type
-
-    # Noneable - recurse into the inner type if value is not None
-    if kind == ConfigTypeKind.NONEABLE:
-        if default_value is None:
-            return config_type
-        # Access the inner type directly
-        inner = config_type.inner_type
-        patched_inner = _patch_config_type(inner, default_value)
-        return Noneable(patched_inner)
-
-    # Strict or permissive shape - recurse into fields
-    if kind in (ConfigTypeKind.STRICT_SHAPE, ConfigTypeKind.PERMISSIVE_SHAPE):
-        if not isinstance(default_value, dict):
-            return config_type
-        patched_fields = {}
-        existing_fields = getattr(config_type, "fields", {})
-        for fname, ffield in existing_fields.items():
-            if fname in default_value:
-                raw_type = (
-                    ffield.config_type if isinstance(ffield, Field) else ffield
-                )
-                patched_fields[fname] = Field(
-                    _patch_config_type(raw_type, default_value[fname]),
-                    default_value=default_value[fname],
-                    is_required=False,
-                    description=ffield.description
-                    if isinstance(ffield, Field)
-                    else None,
-                )
-            else:
-                patched_fields[fname] = ffield
-        if kind == ConfigTypeKind.PERMISSIVE_SHAPE:
-            return Permissive(patched_fields)
-        return Shape(patched_fields)
-
-    # Array - recurse into the inner type using the first element as a hint
-    if kind == ConfigTypeKind.ARRAY:
-        if not isinstance(default_value, list) or not default_value:
-            return config_type
-        inner = config_type.inner_type
-        # Use first element to infer inner type
-        patched_inner = _patch_config_type(inner, default_value[0])
-        return Array(patched_inner)
-
-    # ANY, SELECTOR, etc - return as-is
-    return config_type
-
-
 def with_alternate_default(fields: dict, alternates: dict[str, dict]) -> dict:
     """
-    Return a copy of a Dagster config field mapping with selected defaults overridden.
-
-    This function walks a mapping of config ``fields`` (typically a config schema
-    definition) and applies alternate default values specified in ``alternates``.
-    For each top-level field name present in ``alternates``:
-
-    - If the field's config type is a ``Shape`` (i.e., a dict of nested fields),
-      only the matching inner fields are patched with:
-          * a new config type adjusted via ``_patch_config_type``
-          * ``default_value`` set to the provided alternate
-          * ``is_required=False``
-
-      The outer field itself is rebuilt as a non-required ``Field(Shape(...))``.
-      No outer default is set, since the nested field defaults are sufficient.
-
-    - If the field is a scalar (or non-dict config type), the field is rebuilt
-      with:
-          * its config type patched via ``_patch_config_type``
-          * ``default_value`` set to the provided alternate
-          * ``is_required=False``
-
-    Fields not present in ``alternates`` are returned unchanged.
-
-    The original ``fields`` mapping is not mutated; a new mapping is returned.
-
-    Args:
-        fields: A mapping of field names to Dagster ``Field`` objects or raw
-            config types.
-        alternates: A mapping of field names to alternate default values. For
-            nested shapes, the value should itself be a dict mapping inner
-            field names to their alternate defaults.
-
-    Returns:
-        A new dictionary of field definitions with alternate defaults applied
-        where specified.
+    Takes a Dagster config schema and returns a copy with alternate default values
     """
     result = {}
     for name, field_def in fields.items():
@@ -355,9 +262,7 @@ def with_alternate_default(fields: dict, alternates: dict[str, dict]) -> dict:
                             else ffield
                         )
                         patched_fields[fname] = Field(
-                            _patch_config_type(
-                                raw_type, alternate_default[fname]
-                            ),
+                            raw_type,
                             default_value=alternate_default[fname],
                             is_required=False,
                             description=ffield.description
@@ -373,7 +278,7 @@ def with_alternate_default(fields: dict, alternates: dict[str, dict]) -> dict:
                 )
             else:
                 result[name] = Field(
-                    _patch_config_type(config_type, alternate_default),
+                    config_type,
                     default_value=alternate_default,
                     is_required=False,
                 )
@@ -427,7 +332,7 @@ def get_dynamic_executor_config_schema(
         multiprocess_executor.config_schema.config_type.fields,
         {
             "max_concurrent": Field(
-                IntSource,
+                Noneable(Int),
                 is_required=False,
                 description=(
                     "Limit on the number of containers that will run concurrently within the scope "
@@ -437,13 +342,12 @@ def get_dynamic_executor_config_schema(
             ),
         },
     )
-    multiprocess_executor_schema = multiprocess_executor.config_schema.config_type.fields
 
     docker_executor_schema = merge_dicts(
         docker_executor.config_schema.config_type.fields,
         {
             "max_concurrent": Field(
-                IntSource,
+                Noneable(Int),
                 is_required=False,
                 description=(
                     "Limit on the number of containers that will run concurrently within the scope "
