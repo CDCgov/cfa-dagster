@@ -490,6 +490,13 @@ class ADLS2FilesystemIOManager(ConfigurableIOManager):
         default=is_production(),
     )
     adls2: ResourceDependency[ADLS2Resource]
+    overrides: dict[str, Any] = Field(
+        description=(
+            "Override an upstream dependency input with a configured value e.g."
+            "`upstream_asset: 'static_value_for_testing'`"
+        ),
+        default_factory=dict,
+    )
     max_concurrency: int = Field(
         default=4,
         description=(
@@ -518,6 +525,15 @@ class ADLS2FilesystemIOManager(ConfigurableIOManager):
         )
 
     def load_input(self, context: "InputContext") -> Any:
+        upstream_key = context.upstream_output.asset_key.to_user_string()
+        context.log.debug(f"upstream_key: {upstream_key}")
+
+        if upstream_key in self.overrides:
+            override = self.overrides[upstream_key]
+            context.log.debug(
+                f"found key: {upstream_key} returning override: {override}"
+            )
+            return override
         return self._internal_io_manager.load_input(context)
 
     def handle_output(self, context: "OutputContext", obj: Any) -> None:
