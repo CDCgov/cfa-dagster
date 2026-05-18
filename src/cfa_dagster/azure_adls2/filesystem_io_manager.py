@@ -525,7 +525,7 @@ class ADLS2FilesystemIOManager(ConfigurableIOManager):
         )
 
     def load_input(self, context: "InputContext") -> Any:
-        upstream_key = context.upstream_output.asset_key.to_user_string()
+        upstream_key = context.upstream_output.asset_key
         context.log.debug(f"upstream_key: {upstream_key}")
 
         if upstream_key in self.overrides:
