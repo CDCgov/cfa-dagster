@@ -111,15 +111,17 @@ class ADLS2PickleIOManager(ConfigurableIOManager):
         )
 
     def load_input(self, context: "InputContext") -> Any:
-        upstream_key = context.upstream_output.asset_key.to_user_string()
-        context.log.debug(f"upstream_key: {upstream_key}")
+        if context.upstream_output and context.upstream_output.has_asset_key:
+            upstream_key = context.upstream_output.asset_key.to_user_string()
 
-        if upstream_key in self.overrides:
-            override = self.overrides[upstream_key]
-            context.log.debug(
-                f"found key: {upstream_key} returning override: {override}"
-            )
-            return override
+            context.log.debug(f"upstream_key: {upstream_key}")
+
+            if upstream_key in self.overrides:
+                override = self.overrides[upstream_key]
+                context.log.debug(
+                    f"found key: {upstream_key} returning override: {override}"
+                )
+                return override
         return self._internal_io_manager.load_input(context)
 
     def handle_output(self, context: "OutputContext", obj: Any) -> None:
