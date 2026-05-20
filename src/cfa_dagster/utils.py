@@ -211,9 +211,7 @@ def _run_cli(
         args = add_default_args(raw_args)
     log.debug(f"args: {args}")
 
-    has_subcommand = any(
-        not arg.startswith("-") for arg in raw_args[1:]
-    )
+    has_subcommand = any(not arg.startswith("-") for arg in raw_args[1:])
 
     def should_retry():
         return has_subcommand or retry_without_subcommand
@@ -240,7 +238,11 @@ def _run_cli(
             retry_with_defs_file()
         sys.exit(1)
     except NoArgsIsHelpError:
-        cli(args=["--help"], auto_envvar_prefix=env_prefix, standalone_mode=False)
+        cli(
+            args=["--help"],
+            auto_envvar_prefix=env_prefix,
+            standalone_mode=False,
+        )
         sys.exit(0)
     except UsageError:
         if should_retry():
@@ -256,7 +258,13 @@ def run_dagster_webserver():
     """
     from dagster_webserver.cli import cli
 
-    _run_cli(cli, "DAGSTER_WEBSERVER", "dagster-webserver", always_add_host_port=True, retry_without_subcommand=True)
+    _run_cli(
+        cli,
+        "DAGSTER_WEBSERVER",
+        "dagster-webserver",
+        always_add_host_port=True,
+        retry_without_subcommand=True,
+    )
 
 
 def run_dagster():
