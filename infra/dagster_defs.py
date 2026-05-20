@@ -303,7 +303,7 @@ def create_or_update_code_location_aca(
 
 
 @dg.op
-def update_dagster_aca(context):
+def update_dagster_aca(context, image_tag: str):
     credential = DefaultAzureCredential()
 
     subscription_id = next(
@@ -329,7 +329,7 @@ def update_dagster_aca(context):
     # Shared container configuration
     # -----------------------------
     shared_container_args = {
-        "image": "ghcr.io/cdcgov/cfa-dagster:latest",
+        "image": f"ghcr.io/cdcgov/cfa-dagster:{image_tag}",
         "env": [
             {
                 "name": "DAGSTER_POSTGRES_HOST",
@@ -599,9 +599,26 @@ def update_code_location():
     reload_dagster_workspace(did_update)
 
 
+@dg.op(config_schema={"image_tag": dg.Field(dg.String, is_required=False)})
+def get_latest_release_tag(context) -> str:
+    image_tag = context.op_config.get("image_tag")
+    if image_tag:
+        context.log.info(f"Using provided image_tag: {image_tag}")
+        return image_tag
+    resp = requests.get(
+        "https://api.github.com/repos/cdcgov/cfa-dagster/releases/latest",
+        headers={"Accept": "application/vnd.github+json"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    tag_name = resp.json()["tag_name"]
+    context.log.info(f"Latest GitHub release tag: {tag_name}")
+    return tag_name
+
+
 @dg.job
 def update_dagster_containerapp():
-    update_dagster_aca()
+    update_dagster_aca(get_latest_release_tag())
 
 
 @dg.job
@@ -612,6 +629,11 @@ def restart_webserver():
 @dg.job
 def reload_workspace():
     reload_dagster_workspace()
+
+
+@dg.job
+def fetch_latest_release_tag():
+    get_latest_release_tag()
 
 
 cleanup_batch_schedule = dg.ScheduleDefinition(
