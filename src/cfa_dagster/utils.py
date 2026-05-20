@@ -10,7 +10,7 @@ import dagster as dg
 import psycopg2
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
-from click.exceptions import UsageError
+from click.exceptions import NoArgsIsHelpError, UsageError
 from dagster._core.definitions.unresolved_asset_job_definition import (
     UnresolvedAssetJobDefinition,
 )
@@ -153,14 +153,26 @@ def set_env_vars(script: str = None):
         os.environ["DAGSTER_HOME"] = dagster_home
 
 
+def _subcommand_is_dev(sys_argv) -> bool:
+    """Check if the first non-flag argument after the program name is 'dev'."""
+    for arg in sys_argv[1:]:
+        if not arg.startswith("-"):
+            return arg in {"dev"}
+    return False
+
+
 def add_default_args(sys_argv) -> list[str]:
     """
-    Strips the first element of sys.argv and adds default host and port args.
+    Strips the first element of sys.argv and adds default host and port args
+    when the subcommand is 'dev'.
     """
     if not sys_argv:
         return []
 
-    args = sys_argv[1:]  # strip the binary
+    args = sys_argv[1:]
+
+    if not _subcommand_is_dev(sys_argv):
+        return args
 
     extra = []
     if "-h" not in args and "--host" not in args:
@@ -171,43 +183,14 @@ def add_default_args(sys_argv) -> list[str]:
     return [*args, *extra]
 
 
-def _add_default_args(sys_argv) -> list[str]:
-    """
-    Strips the first element of sys.argv and adds default host and port args
-    """
-    # separate cmd, subcmd, args
-    if not sys_argv:
-        return []
-
-    if len(sys_argv) > 1 and not sys_argv[1].startswith("-"):
-        subcmd = sys_argv[1]
-        args = sys_argv[2:]
-    else:
-        subcmd = None
-        args = sys_argv[1:]
-
-    extra = []
-    if "-h" not in args and "--host" not in args:
-        extra += ["-h", LOCAL_HOSTNAME]
-
-    if "-p" not in args and "--port" not in args:
-        extra += ["-p", str(LOCAL_PORT)]
-
-    # return cmd, subcmd, args if there is a subcmd else cmd, args
-    if subcmd is not None:
-        result = [subcmd, *extra, *args]
-    else:
-        result = [*extra, *args]
-
-    return result
-
-
 def _run_cli(
     cli,
     env_prefix: str,
     tool_name: str,
     argv: list[str] | None = None,
     defs_file: str = "dagster_defs.py",
+    always_add_host_port: bool = False,
+    retry_without_subcommand: bool = False,
 ):
     """
     Runs a cli tool that can fall back to the default dagster_defs.py file on error
@@ -216,8 +199,24 @@ def _run_cli(
     configure_dev_db()
     raw_args = argv if argv is not None else sys.argv
     log.debug(f"raw_args: {raw_args}")
-    args = add_default_args(raw_args)
+    if always_add_host_port:
+        stripped = raw_args[1:]
+        extra = []
+        if "-h" not in stripped and "--host" not in stripped:
+            extra += ["-h", LOCAL_HOSTNAME]
+        if "-p" not in stripped and "--port" not in stripped:
+            extra += ["-p", str(LOCAL_PORT)]
+        args = [*stripped, *extra]
+    else:
+        args = add_default_args(raw_args)
     log.debug(f"args: {args}")
+
+    has_subcommand = any(
+        not arg.startswith("-") for arg in raw_args[1:]
+    )
+
+    def should_retry():
+        return has_subcommand or retry_without_subcommand
 
     def retry_with_defs_file():
         if Path(defs_file).exists():
@@ -233,14 +232,19 @@ def _run_cli(
     try:
         cli(args=args, auto_envvar_prefix=env_prefix, standalone_mode=False)
     except SystemExit as e:
-        if e.code != 0:
+        if e.code != 0 and should_retry():
             retry_with_defs_file()
         sys.exit(e.code)
     except CheckError:
-        retry_with_defs_file()
+        if should_retry():
+            retry_with_defs_file()
         sys.exit(1)
+    except NoArgsIsHelpError:
+        cli(args=["--help"], auto_envvar_prefix=env_prefix, standalone_mode=False)
+        sys.exit(0)
     except UsageError:
-        retry_with_defs_file()
+        if should_retry():
+            retry_with_defs_file()
         sys.exit(1)
     else:
         sys.exit(0)
@@ -252,7 +256,7 @@ def run_dagster_webserver():
     """
     from dagster_webserver.cli import cli
 
-    _run_cli(cli, "DAGSTER_WEBSERVER", "dagster-webserver")
+    _run_cli(cli, "DAGSTER_WEBSERVER", "dagster-webserver", always_add_host_port=True, retry_without_subcommand=True)
 
 
 def run_dagster():
