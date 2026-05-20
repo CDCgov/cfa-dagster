@@ -17,6 +17,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
 
     steps:
       - uses: actions/checkout@v5
@@ -72,4 +74,4 @@ jobs:
           cd infra && uv sync && source .venv/bin/activate
           DAGSTER_USER=githubactions dg launch \
             --job update_dagster_containerapp \
-            --config-json '{"ops":{"get_latest_release_tag":{"config":{"image_tag":"${{ steps.version.outputs.tag }}"}}}}'
+            --config-json '{"ops":{"get_latest_release_tag":{"config":{"image_tag":"${{ needs.build-and-push-image.outputs.tag }}"}}}}'
