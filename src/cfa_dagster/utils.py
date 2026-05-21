@@ -153,34 +153,35 @@ def set_env_vars(script: str = None):
         os.environ["DAGSTER_HOME"] = dagster_home
 
 
-def _subcommand_is_dev(sys_argv) -> bool:
-    """Check if the first non-flag argument after the program name is 'dev'."""
-    for arg in sys_argv[1:]:
-        if not arg.startswith("-"):
-            return arg in {"dev"}
-    return False
+def _add_host_port(args: list[str]) -> list[str]:
+    """Add default host/port args if not already present."""
+    extra = []
+    if "-h" not in args and "--host" not in args:
+        extra += ["-h", LOCAL_HOSTNAME]
+    if "-p" not in args and "--port" not in args:
+        extra += ["-p", str(LOCAL_PORT)]
+    return [*args, *extra]
 
 
 def add_default_args(sys_argv) -> list[str]:
     """
     Strips the first element of sys.argv and adds default host and port args
-    when the subcommand is 'dev'.
+    when the subcommand is 'dev' or 'code-server'.
     """
     if not sys_argv:
         return []
 
     args = sys_argv[1:]
 
-    if not _subcommand_is_dev(sys_argv):
+    subcommand = next(
+        (arg for arg in args if not arg.startswith("-")),
+        None,
+    )
+
+    if subcommand not in {"dev", "code-server"}:
         return args
 
-    extra = []
-    if "-h" not in args and "--host" not in args:
-        extra += ["-h", LOCAL_HOSTNAME]
-    if "-p" not in args and "--port" not in args:
-        extra += ["-p", str(LOCAL_PORT)]
-
-    return [*args, *extra]
+    return _add_host_port(args)
 
 
 def _run_cli(
@@ -200,13 +201,7 @@ def _run_cli(
     raw_args = argv if argv is not None else sys.argv
     log.debug(f"raw_args: {raw_args}")
     if always_add_host_port:
-        stripped = raw_args[1:]
-        extra = []
-        if "-h" not in stripped and "--host" not in stripped:
-            extra += ["-h", LOCAL_HOSTNAME]
-        if "-p" not in stripped and "--port" not in stripped:
-            extra += ["-p", str(LOCAL_PORT)]
-        args = [*stripped, *extra]
+        args = _add_host_port(raw_args[1:])
     else:
         args = add_default_args(raw_args)
     log.debug(f"args: {args}")
