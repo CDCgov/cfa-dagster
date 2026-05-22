@@ -29,6 +29,7 @@ from dagster._core.definitions.events import (
 from dagster._core.definitions.metadata import RawMetadataMapping
 from typing_extensions import Unpack
 
+from .azure_adls2.pickle_io_manager import ADLS2PickleIOManager
 from .execution.utils import ExecutionConfig, SelectorConfig
 
 log = logging.getLogger(__name__)
@@ -595,6 +596,12 @@ def dynamic_graph_asset(
         log.debug(f"op_ins: '{op_ins}'")
         log.debug(f"asset_ins: '{asset_ins}'")
 
+        # Internal IO manager used ONLY for transporting shared config
+        # between isolated mapped compute steps.
+        INTERNAL_CONFIG_IO_MANAGER_KEY = (
+            "internal_dynamic_graph_asset_io_manager"
+        )
+
         # -- config op to create DynamicOutputs for fanout --
         @dg.op(
             name=f"{asset_name}__config",
@@ -602,21 +609,47 @@ def dynamic_graph_asset(
                 "_": dg.In(dg.Nothing),
                 **{name: dg.In(dg.Nothing) for name in op_ins},
             },
-            out=dg.DynamicOut(dg.Nothing),
+            out={
+                # Cheap fanout signal
+                "fanout": dg.DynamicOut(dg.Nothing),
+                # Persisted ONCE and loaded by every mapped compute op
+                "shared_config": dg.Out(
+                    io_manager_key=INTERNAL_CONFIG_IO_MANAGER_KEY,
+                ),
+            },
+            required_resource_keys=[INTERNAL_CONFIG_IO_MANAGER_KEY],
             tags=in_process_config.to_run_tags(),
         )
         def gen_config(context, **kwargs):
             log.debug(f"kwargs: '{kwargs}'")
             config = config_cls(**context.op_config)
+
+            # Persist config once for all isolated compute workers
+            yield dg.Output(
+                value=config.model_dump(),
+                output_name="shared_config",
+            )
+
+            # Generate dynamic fanout keys
             axes = [getattr(config, field) for field in graph_dimensions]
+
             for combo in itertools.product(*axes):
                 mapping_key = _encode_mapping_key(combo)
-                yield dg.DynamicOutput(value=None, mapping_key=mapping_key)
+                yield dg.DynamicOutput(
+                    value=None, mapping_key=mapping_key, output_name="fanout"
+                )
 
         # -- compute op to run decorated function body --
         @dg.op(
             name=f"{asset_name}__compute",
-            ins={"_": dg.In(dg.Nothing), **op_ins},
+            ins={
+                "_": dg.In(dg.Nothing),
+                # Shared config loaded from internal IO manager
+                "shared_config": dg.In(
+                    input_manager_key=INTERNAL_CONFIG_IO_MANAGER_KEY,
+                ),
+                **op_ins,
+            },
             **(
                 {
                     "out": dg.Out(
@@ -633,11 +666,12 @@ def dynamic_graph_asset(
             ),
             required_resource_keys=list(
                 graph_asset_kwargs.get("resource_defs", {}).keys()
-            ),
+            )
+            + [INTERNAL_CONFIG_IO_MANAGER_KEY],
             retry_policy=retry_policy,
             config_schema=config_cls.to_config_schema(),
         )
-        def compute(context, **kwargs):
+        def compute(context, shared_config, **kwargs):
             upstream_kwargs = {
                 k: v for k, v in kwargs.items() if k in decorated_fn_kwargs
             }
@@ -645,19 +679,18 @@ def dynamic_graph_asset(
                 context,
                 graph_dimensions,
             )
-            config = context.op_config
+            config = config_cls(**shared_config)
             log.debug(f"config: '{config}'")
             graph_dimension = dynamic_context.graph_dimension
             log.debug(f"graph_dimension: '{graph_dimension}'")
 
             is_first_dimension = all(
                 graph_dimension.get(key) == values[0]
-                for key, values in config.items()
+                for key, values in config.dict().items()
                 if key in graph_dimension
             )
             log.debug(f"is_first_dimension: '{is_first_dimension}'")
 
-            config = config_cls(**context.op_config)
             result = fn(dynamic_context, config, **upstream_kwargs)
             # handle yielded Output
             if isinstance(result, GeneratorType):
@@ -740,16 +773,37 @@ def dynamic_graph_asset(
             }
             return ops
 
+        # Merge internal IO manager resource with any user resources
+        existing_resource_defs = graph_asset_kwargs.get("resource_defs") or {}
+
+        merged_resource_defs = {
+            INTERNAL_CONFIG_IO_MANAGER_KEY: ADLS2PickleIOManager().get_resource_definition(),
+            **existing_resource_defs,
+        }
+
         # -- graph asset --
         @dg.graph_asset(
             name=asset_name,
             config=_config_mapping,
             ins={k: v for k, v in asset_ins.items()},
-            **graph_asset_kwargs,
+            resource_defs=merged_resource_defs,
+            **{
+                k: v
+                for k, v in graph_asset_kwargs.items()
+                if k != "resource_defs"
+            },
         )
         def _asset(**ins_kwargs):
-            keys = gen_config(**ins_kwargs)
-            res = keys.map(lambda nothing: compute(_=nothing, **ins_kwargs))
+            fanout, shared_config = gen_config(**ins_kwargs)
+
+            # Map fanout while passing shared config to every isolated compute worker
+            res = fanout.map(
+                lambda nothing: compute(
+                    _=nothing,
+                    shared_config=shared_config,
+                    **ins_kwargs,
+                )
+            )
             return output_op(compute_result=res.collect())
 
         return _asset

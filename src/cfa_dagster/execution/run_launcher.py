@@ -185,20 +185,21 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         Once a launcher is found, lower-priority sources are skipped for that part.
         """
         launcher: Optional[SelectorConfig] = None
+        executor: Optional[SelectorConfig] = None
 
+        # TODO: test this tagged executor exception
         # from Run tags cfa_dagster/execution
-        tag_config = ExecutionConfig.from_run_tags(
-            run.tags, should_skip_executor=True
-        )
+        tag_config = ExecutionConfig.from_run_tags(run.tags)
         if tag_config:
             launcher = launcher or tag_config.launcher
-            log.debug(f"After tag config: launcher={launcher}")
+            executor = executor or tag_config.executor
+            log.debug(
+                f"After tag config: launcher={launcher}, executor={executor}"
+            )
 
         # Run config (only fill missing parts)
         if not launcher:
-            run_config = ExecutionConfig.from_run_config(
-                run.run_config, should_skip_executor=True
-            )
+            run_config = ExecutionConfig.from_run_config(run.run_config)
             if run_config:
                 launcher = run_config.launcher
                 log.debug(f"After run config: launcher={launcher}")
@@ -206,9 +207,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         if context and not launcher:
             # from Definitions(executor=)
             exec_config = self._get_execution_config(context)
-            exec_config = ExecutionConfig.from_executor_config(
-                exec_config, should_skip_executor=True
-            )
+            exec_config = ExecutionConfig.from_executor_config(exec_config)
             if exec_config:
                 launcher = launcher or exec_config.launcher
             log.debug(f"exec_config: '{exec_config}'")
@@ -216,11 +215,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
             # from Definitions(metadata=cfa_dagster/execution)
             metadata = self._get_location_metadata(context)
             metadata_config = (
-                ExecutionConfig.from_metadata(
-                    metadata, should_skip_executor=True
-                )
-                if metadata
-                else None
+                ExecutionConfig.from_metadata(metadata) if metadata else None
             )
             if metadata_config:
                 launcher = launcher or metadata_config.launcher
@@ -251,6 +246,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         log.debug(f"ExecutionConfig.default(): '{defaults}'")
         final_config = ExecutionConfig(
             launcher=launcher or defaults.launcher,
+            executor=executor,
         ).validate()
         log.debug(f"Final resolved execution config: {final_config}")
         return final_config
