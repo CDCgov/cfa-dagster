@@ -183,11 +183,13 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
 
         Any missing launcher will be filled from ExecutionConfig.default().
         Once a launcher is found, lower-priority sources are skipped for that part.
+
+        This function also attempts to capture the executor config from run tags
+        to avoid overwriting user-provided execution tags
         """
         launcher: Optional[SelectorConfig] = None
         executor: Optional[SelectorConfig] = None
 
-        # TODO: test this tagged executor exception
         # from Run tags cfa_dagster/execution
         tag_config = ExecutionConfig.from_run_tags(run.tags)
         if tag_config:
@@ -199,7 +201,9 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
 
         # Run config (only fill missing parts)
         if not launcher:
-            run_config = ExecutionConfig.from_run_config(run.run_config)
+            run_config = ExecutionConfig.from_run_config(
+                run.run_config, should_skip_executor=True
+            )
             if run_config:
                 launcher = run_config.launcher
                 log.debug(f"After run config: launcher={launcher}")

@@ -140,39 +140,49 @@ class ExecutionConfig:
     # -------------------------
     @classmethod
     def from_executor_config(
-        cls, config: Mapping[str, Any]
+        cls, config: Mapping[str, Any], should_skip_executor: bool = False
     ) -> "ExecutionConfig":
         if not config:
             return cls()
         return cls(
             launcher=SelectorConfig.from_json(config.get("launcher")),
-            executor=SelectorConfig.from_json(config.get("executor")),
+            executor=None
+            if should_skip_executor
+            else SelectorConfig.from_json(config.get("executor")),
         )
 
     # -------------------------
     # From run config
     # -------------------------
     @classmethod
-    def from_run_config(cls, config: Mapping[str, Any]) -> "ExecutionConfig":
+    def from_run_config(
+        cls, config: Mapping[str, Any], should_skip_executor: bool = False
+    ) -> "ExecutionConfig":
         if not config:
             return cls()
         executor_config = config.get("execution", {}).get("config", {})
-        return cls.from_executor_config(executor_config)
+        return cls.from_executor_config(executor_config, should_skip_executor)
 
     # -------------------------
     # From run tags
     # -------------------------
     @classmethod
-    def from_run_tags(cls, tags: Mapping[str, str]) -> "ExecutionConfig":
+    def from_run_tags(
+        cls, tags: Mapping[str, str], should_skip_executor: bool = False
+    ) -> "ExecutionConfig":
         if not tags:
             return cls()
         raw_json = tags.get(cls.TAG_KEY)
         if not raw_json:
             return cls()
         payload = json.loads(raw_json)
+        # if payload.get("v") != cls.TAG_VERSION:
+        #     raise ValueError(f"Unsupported execution tag version: {payload.get('v')}")
         return cls(
             launcher=SelectorConfig.from_json(payload.get("launcher")),
-            executor=SelectorConfig.from_json(payload.get("executor")),
+            executor=None
+            if should_skip_executor
+            else SelectorConfig.from_json(payload.get("executor")),
         )
 
     # -------------------------
@@ -182,18 +192,22 @@ class ExecutionConfig:
     def from_metadata(
         cls,
         metadata: Optional[dict[str, MetadataValue]],
+        should_skip_executor: bool = False,
     ) -> "ExecutionConfig":
         if not metadata:
             return cls()
         data = metadata.get(cls.TAG_KEY)
         if not data:
             return cls()
+        # Only unwrap the top-level value
         value = data.value
         if not isinstance(value, dict):
             return cls()
         return cls(
             launcher=SelectorConfig.from_json(value.get("launcher")),
-            executor=SelectorConfig.from_json(value.get("executor")),
+            executor=None
+            if should_skip_executor
+            else SelectorConfig.from_json(value.get("executor")),
         )
 
     def to_dict(self) -> Dict[str, str]:
