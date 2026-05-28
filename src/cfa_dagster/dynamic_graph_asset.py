@@ -1,11 +1,11 @@
 import ast
 import inspect
 import itertools
-import warnings
 import logging
 import re
 import sys
 import textwrap
+import warnings
 from collections.abc import Sequence
 from types import GeneratorType
 from typing import (
