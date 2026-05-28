@@ -1,6 +1,7 @@
 import ast
 import inspect
 import itertools
+import warnings
 import logging
 import re
 import sys
@@ -27,12 +28,15 @@ from dagster._core.definitions.events import (
     CoercibleToAssetKeyPrefix,
 )
 from dagster._core.definitions.metadata import RawMetadataMapping
+from dagster._utils.warnings import BetaWarning
 from typing_extensions import Unpack
 
 from .azure_adls2.pickle_io_manager import ADLS2PickleIOManager
 from .execution.utils import ExecutionConfig, SelectorConfig
 
 log = logging.getLogger(__name__)
+
+INTERNAL_CONFIG_IO_MANAGER = ADLS2PickleIOManager().get_resource_definition()
 
 
 def _has_return_value(fn) -> bool:
@@ -777,35 +781,42 @@ def dynamic_graph_asset(
         existing_resource_defs = graph_asset_kwargs.get("resource_defs") or {}
 
         merged_resource_defs = {
-            INTERNAL_CONFIG_IO_MANAGER_KEY: ADLS2PickleIOManager().get_resource_definition(),
+            INTERNAL_CONFIG_IO_MANAGER_KEY: INTERNAL_CONFIG_IO_MANAGER,
             **existing_resource_defs,
         }
 
-        # -- graph asset --
-        @dg.graph_asset(
-            name=asset_name,
-            config=_config_mapping,
-            ins={k: v for k, v in asset_ins.items()},
-            resource_defs=merged_resource_defs,
-            **{
-                k: v
-                for k, v in graph_asset_kwargs.items()
-                if k != "resource_defs"
-            },
-        )
-        def _asset(**ins_kwargs):
-            fanout, shared_config = gen_config(**ins_kwargs)
-
-            # Map fanout while passing shared config to every isolated compute worker
-            res = fanout.map(
-                lambda nothing: compute(
-                    _=nothing,
-                    shared_config=shared_config,
-                    **ins_kwargs,
-                )
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=".*resource_defs.*",
+                category=BetaWarning,
             )
-            return output_op(compute_result=res.collect())
 
-        return _asset
+            # -- graph asset --
+            @dg.graph_asset(
+                name=asset_name,
+                config=_config_mapping,
+                ins={k: v for k, v in asset_ins.items()},
+                resource_defs=merged_resource_defs,
+                **{
+                    k: v
+                    for k, v in graph_asset_kwargs.items()
+                    if k != "resource_defs"
+                },
+            )
+            def _asset(**ins_kwargs):
+                fanout, shared_config = gen_config(**ins_kwargs)
+
+                # Map fanout while passing shared config to every isolated compute worker
+                res = fanout.map(
+                    lambda nothing: compute(
+                        _=nothing,
+                        shared_config=shared_config,
+                        **ins_kwargs,
+                    )
+                )
+                return output_op(compute_result=res.collect())
+
+            return _asset
 
     return decorator
