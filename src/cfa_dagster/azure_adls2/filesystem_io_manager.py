@@ -1,11 +1,16 @@
 import logging
 import os
+import tempfile
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Union
+from typing import Any, Literal, Union
 
 from azure.core.exceptions import ResourceNotFoundError
 from azure.storage.filedatalake import (
+    DataLakeDirectoryClient,
+    DataLakeFileClient,
     DataLakeServiceClient,
+    FileSystemClient,
 )
 from dagster import (
     AssetKey,
@@ -24,6 +29,112 @@ from ..dynamic_graph_asset import DynamicGraphAssetMetadata
 from ..utils import is_production
 
 log = logging.getLogger(__name__)
+
+InputMode = Literal["path", "download", "reference"]
+
+# TODO: replace DynamicGraphAssetMetadata-based behavior with explicit feature metadata native to this IOManager
+
+
+@dataclass(frozen=True)
+class ADLS2Path:
+    """
+    Represents a path in ADLS2.
+
+    This object provides authenticated access to the underlying Azure SDK
+    clients while also exposing convenience methods for common operations.
+
+    Users can always drop down to the Azure SDK if they need functionality
+    beyond the convenience methods.
+
+    Examples
+    --------
+
+    Download entire asset:
+
+        local_dir = data.download()
+
+    Download only a subfolder:
+
+        parquet_dir = data.download("parquet")
+
+    Access Azure SDK directly:
+
+        directory_client = data.get_directory_client()
+
+        for item in directory_client.get_paths():
+            ...
+    """
+
+    _io_manager: "FilesystemADLS2IOManager"
+    _path: str
+    local_dir: Path
+
+    @property
+    def uri(self) -> str:
+        return self._io_manager._uri_for_prefix(self._path)
+
+    @property
+    def file_system_client(self) -> FileSystemClient:
+        return self._io_manager._file_system_client
+
+    def get_directory_client(self) -> DataLakeDirectoryClient:
+        return self.file_system_client.get_directory_client(self._path)
+
+    def get_file_client(self) -> DataLakeFileClient:
+        return self.file_system_client.get_file_client(self._path)
+
+    def list(self, recursive: bool = False):
+        """
+        List paths beneath this ADLS location.
+
+        Returns Azure SDK PathProperties objects.
+        """
+        return self.file_system_client.get_paths(
+            path=self._path,
+            recursive=recursive,
+        )
+
+    def download(
+        self,
+        relative_path: str | None = None,
+        local_dir: Path | None = None,
+    ) -> Path:
+        """
+        Download this path or a subpath.
+
+        Examples
+        --------
+
+        Download entire asset:
+
+            data.download()
+
+        Download parquet subdirectory:
+
+            data.download("parquet")
+
+        Download nested path:
+
+            data.download("parquet/2026/01")
+        """
+
+        local_dir = local_dir or self.local_dir
+
+        target_path = self._path
+
+        if relative_path:
+            target_path = (Path(target_path) / relative_path).as_posix()
+
+        return self._io_manager.download_prefix(
+            adls2_prefix=target_path,
+            local_dir=local_dir,
+        )
+
+    def __str__(self) -> str:
+        return self.uri
+
+    def __repr__(self) -> str:
+        return f"ADLS2Path(uri='{self.uri}')"
 
 
 class FilesystemADLS2IOManager(UPathIOManager):
@@ -93,8 +204,10 @@ class FilesystemADLS2IOManager(UPathIOManager):
         self,
         file_system: str,
         adls2_client: DataLakeServiceClient,
+        input_mode: InputMode,
         prefix: str = "dagster",
         max_concurrency: int = 4,
+        delete_after_upload: bool = False,
     ):
         self._file_system = file_system
         self._adls2_client = adls2_client
@@ -103,6 +216,8 @@ class FilesystemADLS2IOManager(UPathIOManager):
         )
         self._prefix = prefix
         self._max_concurrency = max_concurrency
+        self._input_mode = input_mode
+        self._delete_after_upload = delete_after_upload
 
         # Verify the file system exists and we have access
         self._file_system_client.get_file_system_properties()
@@ -269,6 +384,29 @@ class FilesystemADLS2IOManager(UPathIOManager):
             f"{self._uri_for_prefix(adls2_prefix)}"
         )
 
+        if self._delete_after_upload:
+            try:
+                if obj.is_file():
+                    obj.unlink()
+                    context.log.debug(f"Deleted local file: {obj}")
+                else:
+                    # remove directory tree
+                    for p in sorted(obj.rglob("*"), reverse=True):
+                        if p.is_file():
+                            p.unlink()
+                        elif p.is_dir():
+                            try:
+                                p.rmdir()
+                            except OSError:
+                                pass
+                    obj.rmdir()
+                    context.log.debug(f"Deleted local directory: {obj}")
+
+            except Exception as e:
+                context.log.warning(
+                    f"Failed to delete local path {obj} after upload: {e}"
+                )
+
     def load_from_path(
         self, context: InputContext, path: UPath
     ) -> Union[Path, str]:
@@ -285,8 +423,8 @@ class FilesystemADLS2IOManager(UPathIOManager):
         dga_metadata = DynamicGraphAssetMetadata.from_metadata(input_metadata)
         # If the downstream asset wants a string, return the ADLS2 URI directly
         # so the asset can use the SDK to selectively download files itself
-        if context.dagster_type.typing_type is str or dga_metadata:
-            return self._uri_for_prefix(adls2_prefix)
+        ttype = context.dagster_type.typing_type
+        log.debug(f"ttype: {ttype}")
 
         # Use the input name (as declared in `ins`) as the local folder name so that
         # the downloaded directory matches what the asset code expects, e.g.:
@@ -306,6 +444,31 @@ class FilesystemADLS2IOManager(UPathIOManager):
             local_dir = Path(input_name) / Path(*asset_relative_parts[1:])
         else:
             local_dir = Path(input_name)
+
+        # ------------------------------------------------------------
+        # MODE 1: return raw abfss path (no download)
+        # ------------------------------------------------------------
+        if (
+            # DEPRECATED, using the annotated type is not reliable
+            # maintaining for backwards compatibility until replaced
+            ttype is str or self._input_mode == "path"
+        ):
+            return self._uri_for_prefix(adls2_prefix)
+
+        # ------------------------------------------------------------
+        # MODE 2: return rich ADLS2 handle
+        # ------------------------------------------------------------
+        if self._input_mode == "reference" or dga_metadata:
+            return ADLS2Path(
+                _io_manager=self,
+                _path=adls2_prefix,
+                local_dir=local_dir,
+            )
+
+        # ------------------------------------------------------------
+        # MODE 3 (default): download locally
+        # ------------------------------------------------------------
+
         local_dir.mkdir(parents=True, exist_ok=True)
 
         file_count = self._download_directory(
@@ -431,6 +594,41 @@ class FilesystemADLS2IOManager(UPathIOManager):
         file_client = self._file_system_client.get_file_client(str(path))
         file_client.delete_file()
 
+    def download_prefix(
+        self,
+        adls2_prefix: str,
+        local_dir: Path | None = None,
+    ) -> Path:
+        """
+        Download an ADLS prefix to a local directory.
+
+        Parameters
+        ----------
+        adls2_prefix:
+            ADLS path relative to the filesystem root.
+
+        local_dir:
+            Destination directory. If omitted, a temporary
+            directory is created.
+
+        Returns
+        -------
+        Path
+            Local directory containing downloaded files.
+        """
+
+        if local_dir is None:
+            local_dir = Path(tempfile.mkdtemp())
+
+        local_dir.mkdir(parents=True, exist_ok=True)
+
+        self._download_directory(
+            adls2_prefix=adls2_prefix,
+            local_dir=local_dir,
+        )
+
+        return local_dir
+
 
 class ADLS2FilesystemIOManager(ConfigurableIOManager):
     """An IOManager that stores directories and files on ADLS2.
@@ -505,6 +703,22 @@ class ADLS2FilesystemIOManager(ConfigurableIOManager):
             "which gives a good balance for files in the hundreds of MB to GB range."
         ),
     )
+    input_mode: InputMode = Field(
+        default="download",
+        description=(
+            "Mode to determine behavior on loading inputs from upstream. "
+            "'download': Download the file(s) from upstream, "
+            "'path': return an abfss:// formatted path, "
+            "'reference': return an ADLS2Path which includes an authenticated ADLS2 client."
+        ),
+    )
+    delete_after_upload: bool = Field(
+        default=False,
+        description=(
+            "Whether files/directories should be deleted after upload."
+            "Default: False"
+        ),
+    )
 
     @property
     @cached_method
@@ -520,6 +734,8 @@ class ADLS2FilesystemIOManager(ConfigurableIOManager):
         return FilesystemADLS2IOManager(
             file_system=adls2.storage_account,
             adls2_client=adls2.adls2_client,
+            input_mode=self.input_mode,
+            delete_after_upload=self.delete_after_upload,
             prefix=f"dagster-files/{user}",
             max_concurrency=self.max_concurrency,
         )
