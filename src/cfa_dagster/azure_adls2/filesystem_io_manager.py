@@ -118,12 +118,12 @@ class ADLS2Path:
             data.download("parquet/2026/01")
         """
 
-        local_dir = local_dir or self.local_dir
-
         target_path = self._path
 
         if relative_path:
             target_path = (Path(target_path) / relative_path).as_posix()
+            if not local_dir:
+                local_dir = self.local_dir / relative_path
 
         return self._io_manager.download_prefix(
             adls2_prefix=target_path,
