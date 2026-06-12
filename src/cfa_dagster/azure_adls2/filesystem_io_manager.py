@@ -29,12 +29,11 @@ from ..dynamic_graph_asset import DynamicGraphAssetMetadata
 from ..utils import is_production
 
 log = logging.getLogger(__name__)
+azure_http_logger = logging.getLogger("azure.core.pipeline.policies.http_logging_policy")
 
 InputMode = Literal["path", "download", "reference"]
 
 # TODO: replace DynamicGraphAssetMetadata-based behavior with explicit feature metadata native to this IOManager
-
-
 @dataclass(frozen=True)
 class ADLS2Path:
     """
@@ -687,6 +686,10 @@ class ADLS2FilesystemIOManager(ConfigurableIOManager):
         description="Whether to use the production storage account for IO",
         default=is_production(),
     )
+    log_azure_http_io: bool = Field(
+        description="Whether to display Azure http policy logs in stderr always or only when explciitly setting the log level to DEBUG or higher.",
+        default=False
+    )
     adls2: ResourceDependency[ADLS2Resource]
     overrides: dict[str, Any] = Field(
         description=(
@@ -719,6 +722,11 @@ class ADLS2FilesystemIOManager(ConfigurableIOManager):
             "Default: False"
         ),
     )
+
+    # By default, this will be false, thus we will only log azure http requests if
+    # the log level is otherwise set to WARNING.
+    if not log_azure_http_io:
+        azure_http_logger.setLevel(logging.DEBUG)
 
     @property
     @cached_method

@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Any
 
@@ -17,6 +18,7 @@ from pydantic import Field
 
 from ..utils import is_production
 
+azure_http_logger = logging.getLogger("azure.core.pipeline.policies.http_logging_policy")
 
 class ADLS2PickleIOManager(ConfigurableIOManager):
     """Persistent IO manager using Azure Data Lake Storage Gen2 for storage.
@@ -81,6 +83,10 @@ class ADLS2PickleIOManager(ConfigurableIOManager):
         description="Whether to use the production storage account for IO",
         default=is_production(),
     )
+    log_azure_http_io: bool = Field(
+        description="Whether to display Azure http policy logs in stderr always or only when explciitly setting the log level to WARNING or higher.",
+        default=False
+    )
     adls2: ResourceDependency[ADLS2Resource]
     overrides: dict[str, Any] = Field(
         description=(
@@ -89,6 +95,11 @@ class ADLS2PickleIOManager(ConfigurableIOManager):
         ),
         default_factory=dict,
     )
+
+    # By default, this will be false, thus we will only log azure http requests if
+    # the log level is otherwise set to WARNING.
+    if not log_azure_http_io:
+        azure_http_logger.setLevel(logging.WARNING)
 
     @property
     @cached_method
