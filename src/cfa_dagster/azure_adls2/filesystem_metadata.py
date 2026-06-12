@@ -1,0 +1,61 @@
+from dataclasses import dataclass, field
+from typing import Optional, Literal
+import dagster as dg
+
+InputMode = Literal["path", "download", "reference"]
+
+METADATA_KEY = "adls2_fs_io_manager"
+
+
+@dataclass
+class ADLS2FilesystemIOManagerMetadata:
+    """
+    Per-asset metadata contract for FilesystemADLS2IOManager.
+
+    Set via input/output metadata to override IOManager behavior for a specific asset:
+
+        @asset(
+            metadata={
+                "adls2_io_manager": {
+                    "skip_output": True,
+                }
+            }
+        )
+
+        @asset(
+            ins={
+                "upstream": AssetIn(
+                    metadata={
+                        "adls2_io_manager": {
+                            "input_mode": "reference",
+                            "synthetic_partitions": ["nodeA", "nodeB"],
+                        }
+                    }
+                )
+            }
+        )
+    """
+    skip_input: bool = False
+    skip_output: bool = False
+    input_mode: Optional[InputMode] = None  # overrides IOManager-level input_mode if set
+    synthetic_partitions: list[str] = field(default_factory=list)
+    asset_key: Optional[str] = None
+
+    @classmethod
+    def from_metadata(cls, metadata: dict) -> Optional["ADLS2FilesystemIOManagerMetadata"]:
+        raw = metadata.get(METADATA_KEY)
+        if raw is None:
+            return None
+        if isinstance(raw, dg.MetadataValue):
+            raw = raw.value
+        if not isinstance(raw, dict):
+            raise TypeError(
+                f"Expected 'adls2_io_manager' metadata to be a dict, got {type(raw)}"
+            )
+        return cls(
+            skip_input=raw.get("skip_input", False),
+            skip_output=raw.get("skip_output", False),
+            input_mode=raw.get("input_mode", None),
+            asset_key=raw.get("asset_key", None),
+            synthetic_partitions=raw.get("synthetic_partitions", []),
+        )
