@@ -31,6 +31,7 @@ from dagster._core.definitions.metadata import RawMetadataMapping
 from dagster._utils.warnings import BetaWarning
 from typing_extensions import Unpack
 
+from .azure_adls2.filesystem_metadata import ADLS2FilesystemIOManagerMetadata
 from .azure_adls2.pickle_io_manager import ADLS2PickleIOManager
 from .execution.utils import ExecutionConfig, SelectorConfig
 
@@ -266,6 +267,16 @@ class DynamicGraphAssetExecutionContext(dg.OpExecutionContext):
         context._mapping_key_names = mapping_key_names
         context._mapping_key = None
         return context  # type: ignore[return-value]
+
+
+def unpack_output(output) -> tuple[Any, dict]:
+    if isinstance(output, dg.Output):
+        user_value = output.value
+        user_metadata = output.metadata or {}
+    else:
+        user_value = output
+        user_metadata = {}
+    return user_value, user_metadata
 
 
 def add_metadata_to_output(
@@ -701,16 +712,35 @@ def dynamic_graph_asset(
                 result = next(result)
             log.debug(f"compute result: '{result}'")
             if is_annotated_sequence or is_first_dimension:
-                yield add_metadata_to_output(
-                    result=result,
-                    asset_key=final_asset_key,
-                    graph_dimensions=list(
-                        dynamic_context.graph_dimension.values()
-                    ),
-                    asset_partition_keys=dynamic_context.partition_keys
-                    if dynamic_context.has_partition_key
-                    else [],
-                )
+                result, metadata = unpack_output(result)
+
+                # Merge our graph_dimensions metadata
+                merged_metadata = {
+                    **dict(metadata),
+                    **ADLS2FilesystemIOManagerMetadata(
+                        asset_key_path=final_asset_key.path,
+                        asset_partition_keys=dynamic_context.partition_keys
+                        if dynamic_context.has_partition_key
+                        else [],
+                        synthetic_partition_keys=list(
+                            dynamic_context.graph_dimension.values()
+                        ),
+                    ).to_dict(),
+                }
+                log.debug(f"merged_metadata: '{merged_metadata}'")
+
+                yield dg.Output(value=result, metadata=merged_metadata)
+
+                # yield add_metadata_to_output(
+                #     result=result,
+                #     asset_key=final_asset_key,
+                #     graph_dimensions=list(
+                #         dynamic_context.graph_dimension.values()
+                #     ),
+                #     asset_partition_keys=dynamic_context.partition_keys
+                #     if dynamic_context.has_partition_key
+                #     else [],
+                # )
 
         # -- output op to return results --
         @dg.op(
@@ -723,9 +753,11 @@ def dynamic_graph_asset(
                             if io_manager_key
                             else {}
                         ),
-                        metadata=DynamicGraphAssetMetadata(
-                            asset_key=final_asset_key.path,
-                        ).to_metadata(),
+                        metadata=(
+                            ADLS2FilesystemIOManagerMetadata(
+                                skip_input=True
+                            ).to_dict()
+                        ),
                     )
                     if does_return_value
                     else dg.In(dg.Nothing)
@@ -754,15 +786,32 @@ def dynamic_graph_asset(
                 # handle yielded Output
                 if isinstance(result, GeneratorType):
                     result = next(result)
-                return add_metadata_to_output(
-                    result=result if is_annotated_sequence else result[0],
-                    asset_key=final_asset_key,
-                    should_return_parent=True,
-                    graph_dimensions=graph_dimensions,
-                    asset_partition_keys=context.partition_keys
-                    if context.has_partition_key
-                    else [],
-                )
+
+                # handle sequences
+                result = (result if is_annotated_sequence else result[0],)
+
+                result, metadata = unpack_output(result)
+
+                # Merge our graph_dimensions metadata
+                merged_metadata = {
+                    **dict(metadata),
+                    **ADLS2FilesystemIOManagerMetadata(
+                        skip_output=True
+                    ).to_dict(),
+                }
+                log.debug(f"merged_metadata: '{merged_metadata}'")
+
+                # Yield a new Output object with merged metadata
+                yield dg.Output(value=result, metadata=merged_metadata)
+                # return add_metadata_to_output(
+                #     result=result if is_annotated_sequence else result[0],
+                #     asset_key=final_asset_key,
+                #     should_return_parent=True,
+                #     graph_dimensions=graph_dimensions,
+                #     asset_partition_keys=context.partition_keys
+                #     if context.has_partition_key
+                #     else [],
+                # )
 
         # -- config mapping --
         @dg.config_mapping(config_schema=config_cls.to_config_schema())

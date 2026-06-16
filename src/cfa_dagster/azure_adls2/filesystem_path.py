@@ -1,6 +1,7 @@
-from typing import TYPE_CHECKING
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
+
 from azure.storage.filedatalake import (
     DataLakeDirectoryClient,
     DataLakeFileClient,

@@ -13,21 +13,24 @@ from dagster import (
     OutputContext,
     ResourceDependency,
 )
-from dagster._core.storage.upath_io_manager import UPathIOManager
 from dagster._core.definitions.partitions.utils import MultiPartitionKey
-from dagster._core.definitions.partitions.utils.multi import MULTIPARTITION_KEY_DELIMITER
+from dagster._core.definitions.partitions.utils.multi import (
+    MULTIPARTITION_KEY_DELIMITER,
+)
+from dagster._core.storage.upath_io_manager import UPathIOManager
 from dagster._utils.cached_method import cached_method
 from dagster_azure.adls2 import ADLS2DefaultAzureCredential, ADLS2Resource
 from pydantic import Field
 from upath import UPath
-from .filesystem_path import ADLS2Path
-from .filesystem_metadata import InputMode
-from ..dynamic_graph_asset import DynamicGraphAssetMetadata
+
 from ..utils import is_production
+from .filesystem_metadata import (
+    ADLS2FilesystemIOManagerMetadata,
+    InputMode,
+)
+from .filesystem_path import ADLS2Path
 
 log = logging.getLogger(__name__)
-
-# TODO: replace DynamicGraphAssetMetadata-based behavior with explicit feature metadata native to this IOManager
 
 
 class FilesystemADLS2IOManager(UPathIOManager):
@@ -123,7 +126,7 @@ class FilesystemADLS2IOManager(UPathIOManager):
     @staticmethod
     def _expand_and_combine(
         real_keys: list[str | MultiPartitionKey],
-        graph_dimensions: list[str],
+        synthetic_partition_keys: list[str],
     ) -> list[str]:
         """
         Normalize partition keys to slash-separated path segments and append
@@ -133,11 +136,12 @@ class FilesystemADLS2IOManager(UPathIOManager):
         so the pipe-separated string is already in the correct order — we
         just replace the delimiter.
         """
+
         def normalize(key: str) -> str:
             return key.replace(MULTIPARTITION_KEY_DELIMITER, "/")
 
         expanded = [normalize(k) for k in real_keys]
-        dim_suffix = "/".join(graph_dimensions)
+        dim_suffix = "/".join(synthetic_partition_keys)
 
         if expanded and dim_suffix:
             return [f"{key}/{dim_suffix}" for key in expanded]
@@ -149,7 +153,7 @@ class FilesystemADLS2IOManager(UPathIOManager):
     @staticmethod
     def _patch_context(
         context: InputContext | OutputContext,
-        dga: "DynamicGraphAssetMetadata",
+        meta: ADLS2FilesystemIOManagerMetadata,
     ):
         """
         Monkey-patch context class properties so the parent UPathIOManager
@@ -158,47 +162,77 @@ class FilesystemADLS2IOManager(UPathIOManager):
         Patching at the class level is required because Dagster context
         properties are defined as class-level descriptors.
         """
-        synthetic_keys = FilesystemADLS2IOManager._expand_and_combine(
-            real_keys=dga.asset_partition_keys,
-            graph_dimensions=dga.graph_dimensions,
-        )
-        has_partitions = bool(synthetic_keys)
+        if meta.synthetic_partition_keys:
+            real_keys = (
+                context.asset_partition_keys
+                if context.has_asset_partitions
+                else meta.asset_partition_keys or []
+            )
+            synthetic_keys = FilesystemADLS2IOManager._expand_and_combine(
+                real_keys=real_keys,
+                synthetic_partition_keys=meta.synthetic_partition_keys,
+            )
+            has_partitions = bool(synthetic_keys)
 
-        context.__class__.asset_partition_keys = property(lambda self: synthetic_keys)
-        context.__class__.has_asset_partitions = property(lambda self: has_partitions)
+            context.__class__.asset_partition_keys = property(
+                lambda self: synthetic_keys
+            )
+            context.__class__.has_asset_partitions = property(
+                lambda self: has_partitions
+            )
+            log.debug(
+                f"Patched context: synthetic_partition_keys={synthetic_keys}"
+            )
 
-        if dga.asset_key:
-            context.__class__.asset_key = property(lambda self: AssetKey(dga.asset_key))
+        if meta.asset_key_path:
+            context.__class__.asset_key = property(
+                lambda self: AssetKey(meta.asset_key_path)
+            )
             context.__class__.has_asset_key = property(lambda self: True)
-
-        log.debug(
-            f"Patched context: asset_key={dga.asset_key}, "
-            f"synthetic_partition_keys={synthetic_keys}"
-        )
+            log.debug(f"Patched context: asset_key={meta.asset_key_path}")
 
     def handle_output(self, context: OutputContext, obj: Any):
-        """
-        On write: read DGA metadata from output_metadata, patch the context,
-        then delegate to the parent which calls dump_to_path at the right path.
-        """
-        output_metadata = context.output_metadata or {}
-        dga = DynamicGraphAssetMetadata.from_metadata(output_metadata)
+        meta = ADLS2FilesystemIOManagerMetadata.from_metadata(
+            context.output_metadata or {}
+        )
 
-        if dga and not dga.should_return_parent:
-            log.debug(f"handle_output: DGA metadata found → {dga}")
-            self._patch_context(context, dga)
+        output_metadata = context.output_metadata
+        log.debug(f"output_metadata: '{output_metadata}'")
+        meta = ADLS2FilesystemIOManagerMetadata.from_metadata(output_metadata)
+
+        if meta and meta.skip_output:
+            log.info("dump_to_path: skip_output=True, skipping upload")
+            return
+
+        if meta:
+            if meta.skip_output:
+                log.debug(
+                    f"handle_output found output metadata, patching context: {meta}"
+                )
+
+            log.debug(
+                f"handle_output found output metadata, patching context: {meta}"
+            )
+            self._patch_context(context, meta)
         else:
-            log.debug("handle_output: no DGA metadata, using standard behaviour")
+            log.debug("handle_output no metadata found.")
 
         super().handle_output(context, obj)
 
     def load_input(self, context: InputContext) -> Union[Any, dict[str, Any]]:
         input_metadata = context.definition_metadata
         log.debug(f"input_metadata: '{input_metadata}'")
-        dga_metadata = DynamicGraphAssetMetadata.from_metadata(input_metadata)
-        if dga_metadata:
-            log.debug("@dynamic_graph_asset, returning dummy abfss://")
-            return
+        meta = ADLS2FilesystemIOManagerMetadata.from_metadata(input_metadata)
+
+        if meta:
+            if meta.skip_input:
+                log.debug("load_input: skip_input=True, returning None")
+                return
+
+            # TODO: is this needed?
+            # if meta.synthetic_partition_keys:
+            #     self._patch_context(context, meta)
+
         return super().load_input(context)
 
     # -------------------------------------------------------------------------
@@ -221,14 +255,6 @@ class FilesystemADLS2IOManager(UPathIOManager):
         ``obj`` should be a ``pathlib.Path`` pointing to a local file or directory.
         ``path`` is the ADLS2 destination path as constructed by UPathIOManager.
         """
-        output_metadata = context.output_metadata
-        log.debug(f"output_metadata: '{output_metadata}'")
-        dga_metadata = DynamicGraphAssetMetadata.from_metadata(output_metadata)
-        if dga_metadata and dga_metadata.should_return_parent:
-            log.info(
-                "@dynamic_graph_asset.should_return_parent==True, ignoring dump_to_path"
-            )
-            return
 
         if not isinstance(obj, Path):
             raise TypeError(
@@ -298,9 +324,6 @@ class FilesystemADLS2IOManager(UPathIOManager):
         """
         adls2_prefix = str(path)
 
-        input_metadata = context.definition_metadata
-        log.debug(f"input_metadata: '{input_metadata}'")
-        dga_metadata = DynamicGraphAssetMetadata.from_metadata(input_metadata)
         # If the downstream asset wants a string, return the ADLS2 URI directly
         # so the asset can use the SDK to selectively download files itself
         ttype = context.dagster_type.typing_type
@@ -338,7 +361,7 @@ class FilesystemADLS2IOManager(UPathIOManager):
         # ------------------------------------------------------------
         # MODE 2: return rich ADLS2 handle
         # ------------------------------------------------------------
-        if self._input_mode == "reference" or dga_metadata:
+        if self._input_mode == "reference":
             return ADLS2Path(
                 _io_manager=self,
                 _path=adls2_prefix,
