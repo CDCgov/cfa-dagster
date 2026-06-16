@@ -11,7 +11,6 @@ from types import GeneratorType
 from typing import (
     AbstractSet,
     Any,
-    Dict,
     List,
     Mapping,
     Optional,
@@ -138,98 +137,6 @@ def _in_to_asset_in(name: str, op_in: dg.In) -> dg.AssetIn:
     )
 
 
-class DynamicGraphAssetMetadata:
-    """
-    Class to represent dynamic graph asset metadata for Dagster.
-    Replaces the old `has_partitions` boolean with a list of `asset_partition_keys`.
-    """
-
-    def __init__(
-        self,
-        asset_key: List[str],
-        graph_dimensions: Optional[List[str]] = [],
-        should_return_parent: Optional[bool] = False,
-        asset_partition_keys: Optional[List[str]] = [],
-    ):
-        self.asset_key = asset_key
-        self.asset_partition_keys = asset_partition_keys or []
-        self.graph_dimensions = graph_dimensions or []
-        self.should_return_parent = should_return_parent
-
-    @staticmethod
-    def _extract_value(obj: Any) -> Any:
-        """
-        Recursively extract .value from dg.MetadataValue objects.
-        """
-        if isinstance(obj, dg.MetadataValue):
-            return obj.value
-        elif isinstance(obj, dict):
-            return {
-                k: DynamicGraphAssetMetadata._extract_value(v)
-                for k, v in obj.items()
-            }
-        elif isinstance(obj, list):
-            return [DynamicGraphAssetMetadata._extract_value(v) for v in obj]
-        else:
-            return obj
-
-    @classmethod
-    def from_metadata(
-        cls, metadata: Dict[str, Any]
-    ) -> Optional["DynamicGraphAssetMetadata"]:
-        """
-        Construct a DynamicGraphAssetMetadata object from Dagster metadata,
-        handling dg.MetadataValue wrappers.
-        """
-        dynamic_meta = metadata.get("dynamic_graph_asset")
-        if dynamic_meta is None:
-            return None
-
-        dynamic_meta = cls._extract_value(dynamic_meta)
-
-        asset_key = dynamic_meta.get("asset_key", [])
-        asset_partition_keys = dynamic_meta.get("asset_partition_keys", [])
-        graph_dimensions = dynamic_meta.get("graph_dimensions", [])
-        should_return_parent = dynamic_meta.get("should_return_parent", False)
-
-        if not isinstance(asset_key, list) or not isinstance(
-            graph_dimensions, list
-        ):
-            raise TypeError(
-                "Expected 'asset_key' and 'graph_dimensions' to be lists"
-            )
-        if not isinstance(asset_partition_keys, list):
-            raise TypeError("Expected 'asset_partition_keys' to be a list")
-
-        return cls(
-            asset_key=asset_key,
-            graph_dimensions=graph_dimensions,
-            asset_partition_keys=asset_partition_keys,
-            should_return_parent=should_return_parent,
-        )
-
-    def to_metadata(self) -> Dict[str, Any]:
-        """
-        Convert the object back into Dagster metadata format (plain Python values).
-        """
-        return {
-            "dynamic_graph_asset": {
-                "asset_key": self.asset_key,
-                "asset_partition_keys": self.asset_partition_keys,
-                "graph_dimensions": self.graph_dimensions,
-                "should_return_parent": self.should_return_parent,
-            }
-        }
-
-    def __repr__(self):
-        return (
-            f"DynamicGraphAssetMetadata(asset_key={self.asset_key}, "
-            f"asset_partition_keys={self.asset_partition_keys}, "
-            f"should_return_parent={self.should_return_parent}, "
-            f"graph_dimensions={self.graph_dimensions})"
-        )
-
-
 class DynamicGraphAssetExecutionContext(dg.OpExecutionContext):
     """
     OpExecutionContext subclass that exposes the current graph dimension as a dictionary.
@@ -277,37 +184,6 @@ def unpack_output(output) -> tuple[Any, dict]:
         user_value = output
         user_metadata = {}
     return user_value, user_metadata
-
-
-def add_metadata_to_output(
-    result,
-    asset_key: dg.AssetKey,
-    should_return_parent: Optional[bool] = False,
-    graph_dimensions: Optional[list[str]] = [],
-    asset_partition_keys: Optional[list[str]] = [],
-) -> dg.Output:
-    # Extract user metadata if the user returned an Output
-    if isinstance(result, dg.Output):
-        user_value = result.value
-        user_metadata = result.metadata or {}
-    else:
-        user_value = result
-        user_metadata = {}
-
-    # Merge our graph_dimensions metadata
-    merged_metadata = {
-        **dict(user_metadata),
-        **DynamicGraphAssetMetadata(
-            asset_key=asset_key.path,
-            graph_dimensions=graph_dimensions,
-            asset_partition_keys=asset_partition_keys,
-            should_return_parent=should_return_parent,
-        ).to_metadata(),
-    }
-    log.debug(f"merged_metadata: '{merged_metadata}'")
-
-    # Yield a new Output object with merged metadata
-    return dg.Output(value=user_value, metadata=merged_metadata)
 
 
 class GraphAssetKwargs(TypedDict, total=False):
@@ -568,6 +444,7 @@ def dynamic_graph_asset(
                 inspect.Parameter.KEYWORD_ONLY,
             )
         }
+        log.debug(f"decorated_fn_kwargs: {decorated_fn_kwargs}")
 
         # Determine the base key: explicit key or function name
         base_key = graph_asset_kwargs.get("key") or fn.__name__
@@ -591,11 +468,27 @@ def dynamic_graph_asset(
         has_partitions = graph_asset_kwargs.get("partitions_def") is not None
         log.debug(f"has_partitions: '{has_partitions}'")
 
+        # -- Locate Resource parameters --
+        # Maps parameter name -> resource class for all ConfigurableResource-annotated params
+        resource_params: dict[str, type] = {
+            name: hint
+            for name, hint in hints.items()
+            if name != "return"
+            and inspect.isclass(hint)
+            and issubclass(hint, dg.ConfigurableResource)
+        }
+        log.debug(f"resource_params: '{resource_params}'")
+
+        # Build the required_resource_keys set so @graph_asset and inner @op
+        # declarations both declare the resources they need
+        required_resource_keys: set[str] = set(resource_params.keys())
+        log.debug(f"required_resource_keys: '{required_resource_keys}'")
+
         # Infer upstream op ins from all parameters that aren't context or config
         inferred_ins = {
             name: dg.In()
             for name in sig.parameters
-            if name not in ["config", "context"]
+            if name not in ["config", "context", *required_resource_keys]
         }
 
         # User overrides at op level
@@ -626,9 +519,9 @@ def dynamic_graph_asset(
             },
             out={
                 # Cheap fanout signal
-                "fanout": dg.DynamicOut(dg.Nothing),
+                "dga_internal_fanout": dg.DynamicOut(dg.Nothing),
                 # Persisted ONCE and loaded by every mapped compute op
-                "shared_config": dg.Out(
+                "dga_internal_shared_config": dg.Out(
                     io_manager_key=INTERNAL_CONFIG_IO_MANAGER_KEY,
                 ),
             },
@@ -642,7 +535,7 @@ def dynamic_graph_asset(
             # Persist config once for all isolated compute workers
             yield dg.Output(
                 value=config.model_dump(),
-                output_name="shared_config",
+                output_name="dga_internal_shared_config",
             )
 
             # Generate dynamic fanout keys
@@ -651,7 +544,9 @@ def dynamic_graph_asset(
             for combo in itertools.product(*axes):
                 mapping_key = _encode_mapping_key(combo)
                 yield dg.DynamicOutput(
-                    value=None, mapping_key=mapping_key, output_name="fanout"
+                    value=None,
+                    mapping_key=mapping_key,
+                    output_name="dga_internal_fanout",
                 )
 
         # -- compute op to run decorated function body --
@@ -660,7 +555,7 @@ def dynamic_graph_asset(
             ins={
                 "_": dg.In(dg.Nothing),
                 # Shared config loaded from internal IO manager
-                "shared_config": dg.In(
+                "dga_internal_shared_config": dg.In(
                     input_manager_key=INTERNAL_CONFIG_IO_MANAGER_KEY,
                 ),
                 **op_ins,
@@ -679,22 +574,27 @@ def dynamic_graph_asset(
                 if does_return_value
                 else {"out": dg.Out(dg.Nothing)}
             ),
-            required_resource_keys=list(
-                graph_asset_kwargs.get("resource_defs", {}).keys()
-            )
+            # set resources based on decorated fn signature, explicit decorator param, and internal io manager
+            required_resource_keys=list(required_resource_keys)
+            + list(graph_asset_kwargs.get("resource_defs", {}).keys())
             + [INTERNAL_CONFIG_IO_MANAGER_KEY],
             retry_policy=retry_policy,
             config_schema=config_cls.to_config_schema(),
         )
-        def compute(context, shared_config, **kwargs):
+        def compute(context, dga_internal_shared_config, **kwargs):
             upstream_kwargs = {
                 k: v for k, v in kwargs.items() if k in decorated_fn_kwargs
+            }
+            # Pull each declared resource off context and pass it through to fn
+            resource_kwargs = {
+                name: getattr(context.resources, name)
+                for name in resource_params
             }
             dynamic_context = DynamicGraphAssetExecutionContext.inject(
                 context,
                 graph_dimensions,
             )
-            config = config_cls(**shared_config)
+            config = config_cls(**dga_internal_shared_config)
             log.debug(f"config: '{config}'")
             graph_dimension = dynamic_context.graph_dimension
             log.debug(f"graph_dimension: '{graph_dimension}'")
@@ -706,7 +606,12 @@ def dynamic_graph_asset(
             )
             log.debug(f"is_first_dimension: '{is_first_dimension}'")
 
-            result = fn(dynamic_context, config, **upstream_kwargs)
+            result = fn(
+                dynamic_context,
+                config,
+                **upstream_kwargs,
+                **resource_kwargs,
+            )
             # handle yielded Output
             if isinstance(result, GeneratorType):
                 result = next(result)
@@ -730,17 +635,6 @@ def dynamic_graph_asset(
                 log.debug(f"merged_metadata: '{merged_metadata}'")
 
                 yield dg.Output(value=result, metadata=merged_metadata)
-
-                # yield add_metadata_to_output(
-                #     result=result,
-                #     asset_key=final_asset_key,
-                #     graph_dimensions=list(
-                #         dynamic_context.graph_dimension.values()
-                #     ),
-                #     asset_partition_keys=dynamic_context.partition_keys
-                #     if dynamic_context.has_partition_key
-                #     else [],
-                # )
 
         # -- output op to return results --
         @dg.op(
@@ -803,15 +697,6 @@ def dynamic_graph_asset(
 
                 # Yield a new Output object with merged metadata
                 yield dg.Output(value=result, metadata=merged_metadata)
-                # return add_metadata_to_output(
-                #     result=result if is_annotated_sequence else result[0],
-                #     asset_key=final_asset_key,
-                #     should_return_parent=True,
-                #     graph_dimensions=graph_dimensions,
-                #     asset_partition_keys=context.partition_keys
-                #     if context.has_partition_key
-                #     else [],
-                # )
 
         # -- config mapping --
         @dg.config_mapping(config_schema=config_cls.to_config_schema())
@@ -854,13 +739,15 @@ def dynamic_graph_asset(
                 },
             )
             def _asset(**ins_kwargs):
-                fanout, shared_config = gen_config(**ins_kwargs)
+                dga_internal_fanout, dga_internal_shared_config = gen_config(
+                    **ins_kwargs
+                )
 
                 # Map fanout while passing shared config to every isolated compute worker
-                res = fanout.map(
+                res = dga_internal_fanout.map(
                     lambda nothing: compute(
                         _=nothing,
-                        shared_config=shared_config,
+                        dga_internal_shared_config=dga_internal_shared_config,
                         **ins_kwargs,
                     )
                 )
