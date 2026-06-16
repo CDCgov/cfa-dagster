@@ -11,7 +11,6 @@ from types import GeneratorType
 from typing import (
     AbstractSet,
     Any,
-    Dict,
     List,
     Mapping,
     Optional,
@@ -545,7 +544,9 @@ def dynamic_graph_asset(
             for combo in itertools.product(*axes):
                 mapping_key = _encode_mapping_key(combo)
                 yield dg.DynamicOutput(
-                    value=None, mapping_key=mapping_key, output_name="dga_internal_fanout"
+                    value=None,
+                    mapping_key=mapping_key,
+                    output_name="dga_internal_fanout",
                 )
 
         # -- compute op to run decorated function body --
@@ -606,11 +607,11 @@ def dynamic_graph_asset(
             log.debug(f"is_first_dimension: '{is_first_dimension}'")
 
             result = fn(
-                    dynamic_context,
-                    config,
-                    **upstream_kwargs,
-                    **resource_kwargs,
-                    )
+                dynamic_context,
+                config,
+                **upstream_kwargs,
+                **resource_kwargs,
+            )
             # handle yielded Output
             if isinstance(result, GeneratorType):
                 result = next(result)
@@ -738,7 +739,9 @@ def dynamic_graph_asset(
                 },
             )
             def _asset(**ins_kwargs):
-                dga_internal_fanout, dga_internal_shared_config = gen_config(**ins_kwargs)
+                dga_internal_fanout, dga_internal_shared_config = gen_config(
+                    **ins_kwargs
+                )
 
                 # Map fanout while passing shared config to every isolated compute worker
                 res = dga_internal_fanout.map(
