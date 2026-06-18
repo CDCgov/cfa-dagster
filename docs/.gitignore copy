@@ -1,0 +1,7 @@
+*~
+
+# mkdocs
+site/
+
+# prettier
+node_modules/
