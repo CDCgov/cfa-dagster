@@ -546,6 +546,23 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Concepts
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="concepts.html" class="md-nav__link md-nav__link--active">
         
   
@@ -561,6 +578,114 @@
   
 
       </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#assets" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Assets
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Resources
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#schedules" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Schedules
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#asset-jobs" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Asset Jobs
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#definitions" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Definitions
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ops" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Ops
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sensors" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Sensors
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#partitions" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Partitions
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -777,6 +902,30 @@
                   
 
 <h1 id="concepts">Concepts<a class="headerlink" href="#concepts" title="Permanent link">&para;</a></h1>
+<p>The purpose of this page is to provide a high-level overview of the tools commonly used in <abbr title="Center for Forecasting and Outbreak Analytics">CFA</abbr> Dagster projects. This is not a comprehensive list of all Dagster capabilities. For additional information on Dagster concepts, click on <a href="https://docs.dagster.io/getting-started/concepts">this link</a>.</p>
+<p>Dagster is an <strong>asset-centric workflow orchestration tool</strong> versus a task-centric workflow tool. An asset-centric workflow focuses on outputs and has upstream assets that are used as inputs to create their downstream <a href="https://docs.dagster.io/dagster-basics-tutorial/dependencies">dependencies</a>. A task-centric tool focuses on steps taken in a workflow. For example, if we were baking cookies, a task-centric workflow would include steps like gathering ingredients, combining ingredients, adding chocolate chips, baking in the oven, and eating the cookies. On the other hand, with the cookie example, an asset-centric workflow approach would look like the following: to create cookie dough, combine the wet ingredients with the dry ingredients; to create chocolate chip cookie dough, mix in the chocolate chips into the cookie dough; bake the chocolate chip cookie dough to eat freshly baked chocolate chip cookies. (Cookie example from <a href="https://courses.dagster.io/courses/dagster-essentials">Dagster University Dagster Essentials course</a>) </p>
+<h2 id="assets">Assets<a class="headerlink" href="#assets" title="Permanent link">&para;</a></h2>
+<p>A Dagster <a href="https://docs.dagster.io/dagster-basics-tutorial/assets">asset</a> is a piece of data that your data pipeline creates, updates, or manages. Instead of focusing on what code runs, Dagster focuses on what data exists and how it depends on other data. Dagster treats your data platform as a graph of datasets (assets) and their relationships, then orchestrates the work needed to keep those datasets current.</p>
+<p>Once an asset is created, Dagster does not automatically run the code for the asset, it must be <a href="https://docs.dagster.io/guides/build/assets/configuring-assets">materialized</a> first. When an asset is materialized, Dagster runs the asset’s function and creates the asset. When a materialization begins, it kicks off a run. </p>
+<h2 id="resources">Resources<a class="headerlink" href="#resources" title="Permanent link">&para;</a></h2>
+<p>A <a href="https://docs.dagster.io/dagster-basics-tutorial/resources#step-4-view-the-resource">resource</a> in Dagster is something your assets need to do their work, but not the data you're producing. In the example of baking cookies, resources would be a mixing bowl, spoon, a baking sheet, and the oven. Resources often represent:
+* Database connections 
+* Data warehouse clients 
+* API clients 
+* Cloud storage clients 
+* Credentials and secrets 
+* Logging systems 
+* IO managers
+* Configuration dictionaries</p>
+<h2 id="schedules">Schedules<a class="headerlink" href="#schedules" title="Permanent link">&para;</a></h2>
+<p><a href="https://docs.dagster.io/guides/automate/schedules">Schedules</a> define a fixed time interval to run your pipeline. </p>
+<h2 id="asset-jobs">Asset Jobs<a class="headerlink" href="#asset-jobs" title="Permanent link">&para;</a></h2>
+<p><a href="https://docs.dagster.io/guides/build/jobs/asset-jobs">Asset jobs</a> execute and monitor specified assets. In the example of baking cookies, a job could be made to add the chocolate chips to the cookie dough once you have successfully made the cookie dough.</p>
+<h2 id="definitions">Definitions<a class="headerlink" href="#definitions" title="Permanent link">&para;</a></h2>
+<p>Each workflow (containing assets, resources or schedules) must be part of a <a href="https://docs.dagster.io/api/dagster/definitions#definitions">Definitions</a> object. For <abbr title="Center for Forecasting and Outbreak Analytics">CFA</abbr> specifically, the definitions object is located within the <a href="https://github.com/CDCgov/cfa-dagster/blob/main/examples/dagster_defs.py">dagster_defs.py</a> file. The dagster_defs.py file contains the Dagster-specific configurations, assets, jobs, and/or schedules in addition to the Definitions object. </p>
+<h2 id="ops">Ops<a class="headerlink" href="#ops" title="Permanent link">&para;</a></h2>
+<h2 id="sensors">Sensors<a class="headerlink" href="#sensors" title="Permanent link">&para;</a></h2>
+<h2 id="partitions">Partitions<a class="headerlink" href="#partitions" title="Permanent link">&para;</a></h2>
 
 
 
