@@ -15,6 +15,7 @@ from .docker.executor import docker_executor
 from .dynamic_graph_asset import (
     DynamicGraphAssetExecutionContext,
     dynamic_graph_asset,
+    GraphDimension,
 )
 from .execution import (
     CFAQueuedRunCoordinator,
