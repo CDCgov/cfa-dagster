@@ -4,6 +4,7 @@ site_name = "Dagster Adoption Guide"
 site_description = "An introduction to Dagster with examples from CFA workflows."
 site_author = "Kelly Reagan"
 site_url = "https://kelly-a-reagan.github.io/cfa-dagster/"
+output_dir = "./"
 copyright = """
 Copyright &copy; 2026 The authors
 """
@@ -15,9 +16,7 @@ extra_javascript = [
 nav = [
   { "Getting Started" = [
       "getting-started/overview.md",
-      "getting-started/qs-modeling-pp.md",
-      "getting-started/qs-etl.md",
-      "getting-started/qs-experiments.md",
+      "getting-started/quickstart.md",
       "getting-started/installation.md",
       "getting-started/concepts.md"
     ]
