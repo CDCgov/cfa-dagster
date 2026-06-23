@@ -27,7 +27,7 @@
     
     
       
-        <title>Scenarios Dynode Experiments - Dagster Adoption Guide</title>
+        <title>Scenarios DynODE Experiments - Dagster Adoption Guide</title>
       
     
     
@@ -121,7 +121,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Scenarios Dynode Experiments
+              Scenarios DynODE Experiments
             
           </span>
         </div>
@@ -542,7 +542,7 @@
   <span class="md-ellipsis">
     
   
-  CFA NSSP ETL
+  CFA NSSP ETL Pipeline
 
     
   </span>
@@ -571,6 +571,23 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Scenarios DynODE Experiments
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="scenarios-dynode.html" class="md-nav__link md-nav__link--active">
         
   
@@ -578,7 +595,7 @@
   <span class="md-ellipsis">
     
   
-  Scenarios Dynode Experiments
+  Scenarios DynODE Experiments
 
     
   </span>
@@ -586,6 +603,65 @@
   
 
       </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#dagster-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Dagster implementation
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Dagster implementation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-dagster" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Why Dagster
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dagster-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Dagster details
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -675,8 +751,23 @@
                 
                   
 
-<h1 id="scenarios-dynode-experiments">Scenarios Dynode Experiments<a class="headerlink" href="#scenarios-dynode-experiments" title="Permanent link">&para;</a></h1>
-<p>In progress.</p>
+<h1 id="scenarios-dynode-experiments">Scenarios DynODE Experiments<a class="headerlink" href="#scenarios-dynode-experiments" title="Permanent link">&para;</a></h1>
+<p>The <abbr title="Center for Forecasting and Outbreak Analytics">CFA</abbr> DynODE Experiments builds on the Scenario team's ODE Modeling Framework and can be scoped based on an endpoint (e.g., a report we are producing), or based on an idea or method change (e.g., what happens if we get rid of age structure). This repository is where code for experiments that use DynODE (<a href="https://github.com/cdcgov/DynODE">https://github.com/cdcgov/DynODE</a>) should live.  Whereas DynODE should change infrequently and backward compatibility is a priority, projects that use DynODE often are fluid in design and scope, and have idiosyncratic data requirements. Click <a href="https://github.com/cdcent/DynODE-Experiments/tree/main">here</a> to go to the GitHub repository.</p>
+<h2 id="dagster-implementation">Dagster implementation<a class="headerlink" href="#dagster-implementation" title="Permanent link">&para;</a></h2>
+<p>Click <a href="https://github.com/cdcent/DynODE-Experiments/pull/84/changes?diff=split#diff-72e262b4ba7124917f33b8e31970cf81d8d64f6baa77a9fad759a11b7e074d4c">here</a> to view the pull request for the DynODE Experiments repo to implement Dagster.</p>
+<h3 id="why-dagster">Why Dagster<a class="headerlink" href="#why-dagster" title="Permanent link">&para;</a></h3>
+<ul>
+<li>The workflow runs in parallel over all states.</li>
+<li>The post-processing scripts depend on the outputs from the experiment script and sometimes some of the post-processing scripts depend on previous post-processing scripts. </li>
+</ul>
+<h3 id="dagster-details">Dagster details<a class="headerlink" href="#dagster-details" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Configuration runs launcher to launch each run in an Azure Container App Job and configures an executor to run each workflow steps in a new Azure Batch task for maximum scale. </li>
+<li>Uses dynamic graph assets to run workflow in parallel over all states. </li>
+<li>Assets include running an experiment, post-processing a plot to show the observed cases of Covid-19 versus the fitted cases, a post-processing script to read posterior and prior samples from state folders, and a post-processing script to create median maps.</li>
+<li>Jobs include building a Docker image and set various configuration settings.</li>
+<li>Ops include allowing the user to run the container previously built and explore the filesystem that will be used by Dagster and  sending an autoscale requeue request to Azure batch.</li>
+</ul>
 
 
 
@@ -710,7 +801,7 @@
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="./nssp-etl.html" class="md-footer__link md-footer__link--prev" aria-label="Previous: CFA NSSP ETL">
+          <a href="./nssp-etl.html" class="md-footer__link md-footer__link--prev" aria-label="Previous: CFA NSSP ETL Pipeline">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
@@ -720,7 +811,7 @@
                 Previous
               </span>
               <div class="md-ellipsis">
-                CFA NSSP ETL
+                CFA NSSP ETL Pipeline
               </div>
             </div>
           </a>

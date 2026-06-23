@@ -592,10 +592,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#dagster-details-from-the-github-repo" class="md-nav__link">
+  <a href="#dagster-details" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Dagster details from the GitHub repo
+        Dagster details
       </span>
     </span>
   </a>
@@ -630,7 +630,7 @@
   <span class="md-ellipsis">
     
   
-  CFA NSSP ETL
+  CFA NSSP ETL Pipeline
 
     
   </span>
@@ -657,7 +657,7 @@
   <span class="md-ellipsis">
     
   
-  Scenarios Dynode Experiments
+  Scenarios DynODE Experiments
 
     
   </span>
@@ -754,56 +754,22 @@
                   
 
 <h1 id="cfa-county-rt-sub-state-rt"><abbr title="Center for Forecasting and Outbreak Analytics">CFA</abbr> County Rt (Sub-state Rt)<a class="headerlink" href="#cfa-county-rt-sub-state-rt" title="Permanent link">&para;</a></h1>
-<p>This <abbr title="Center for Forecasting and Outbreak Analytics">CFA</abbr> project implements and evaluates hierarchical generalized additive models (HGAMs) for <span class="arithmatex">\(R_t\)</span> estimation at the county level in the
-United States. Click <a href="https://github.com/cdcent/cfa-county-rt">here</a> to go to the GitHub repository.</p>
+<p>This <abbr title="Center for Forecasting and Outbreak Analytics">CFA</abbr> project implements and evaluates hierarchical generalized additive models (HGAMs) for <span class="arithmatex">\(R_t\)</span> estimation at the county level in the United States. Click <a href="https://github.com/cdcent/cfa-county-rt">here</a> to go to the GitHub repository.</p>
 <h2 id="dagster-implementation">Dagster implementation<a class="headerlink" href="#dagster-implementation" title="Permanent link">&para;</a></h2>
 <h3 id="why-dagster">Why Dagster<a class="headerlink" href="#why-dagster" title="Permanent link">&para;</a></h3>
-<p>For this project, Dagster orchestrates the modeling and post-processing workflow.  </p>
-<h3 id="dagster-details-from-the-github-repo">Dagster details from the GitHub repo<a class="headerlink" href="#dagster-details-from-the-github-repo" title="Permanent link">&para;</a></h3>
-<p>To run the code with <a href="https://docs.dagster.io/">Dagster</a>, run
-<code>uv run dagster_defs.py</code> to start the Dagster
-<a href="http://127.0.0.1:3000/asset-groups">webserver</a>.</p>
-<p>The Dagster webserver will display 4 assets:</p>
-<ol>
-<li>cfa_county_rt_covid_19</li>
-<li>cfa_county_rt_influenza</li>
-<li>cfa_county_rt_rsv</li>
-<li>national_hgam</li>
-</ol>
-<p>Materializing the cfa_county_rt_* assets is the equivalent of
-<code>make run-prod</code> (runs all states and all diseases in Azure Batch production environment). Materializing the national_hgam asset is the equivalent
-of <code>make run-national-prod</code> (runs an R script for all states and all diseases and aggregates at the national-level).</p>
-<p>The county Rt assets are separated by disease to generate one compute
-task per state, report date, and disease.</p>
-<p>From the <a href="http://127.0.0.1:3000/asset-groups">Lineage</a> page, you can
-materialize one or more assets with the Materialize button. For
-partitioned assets (cfa_county_rt_*), a launchpad will open up
-allowing you to specify the report date and state. There is an
-additional Config dropdown to apply additional config. For
-non-partitioned assets (national_hgam), holding Shift + clicking
-Materialize will give you a launchpad with default config applied.</p>
-<p>Before running, choose your runtime environment by modifying the
-<code>Definitions</code> class at the bottom of <code>dagster_defs.py</code>. This example is
-running on Azure Batch in production and on Docker locally:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">defs</span> <span class="o">=</span> <span class="n">dg</span><span class="o">.</span><span class="n">Definitions</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">...</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="o">**</span><span class="p">(</span><span class="n">azure_batch_metadata</span> <span class="k">if</span> <span class="n">is_production</span> <span class="k">else</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>       <span class="c1"># uncomment below to run locally on docker</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>       <span class="n">docker_metadata</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>       <span class="c1"># uncomment below to run on Azure Container App Job</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>       <span class="c1"># azure_caj_metadata</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>       <span class="c1"># uncomment below to run on Azure Batch</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>       <span class="c1"># azure_batch_metadata</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>       <span class="p">)</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">)</span>
-</span></code></pre></div>
-<p>For most runtime environments (docker, Batch, CAJ), you will need to
-build (and potentially push) a Docker image which can be done with the
-build image
-<a href="http://127.0.0.1:3000/locations/dagster_defs.py/jobs/job_build_image/playground">job</a>.</p>
-<p>The weekly production run is scheduled for Wednesdays 6:30 AM EST on the
-<a href="http://127.0.0.1:3000/locations/dagster_defs.py/schedules/job_county_rt_pipeline_schedule">Automation</a>
-page.</p>
+<ul>
+<li>The workflow includes reading in the most recent data from two APIs, running the model over specified states and diseases (Covid-19, RSV, influenza) whenever new data is available, performing post-processing on the model outputs, and updating a GitHub Pages website.</li>
+<li>If any step fails, the rest of the workflow does not continue and detailed logs for the specific disease and state allow the user to debug.</li>
+</ul>
+<h3 id="dagster-details">Dagster details<a class="headerlink" href="#dagster-details" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Implements an Azure Batch configuration if the user wants to run the workflow through production, otherwise, it is run locally through Docker.</li>
+<li>Many of the assets are "eager", meaning that they materialize as soon as the asset upstream successfully materializes.</li>
+<li>Assets include county Rt assets are separated by disease to generate one compute task per state, report date, and disease, and an R script to run the model for all states and all diseases and aggregate the results at the national-level.</li>
+<li>For partitioned assets (cfa_county_rt_*), a launchpad opens up allowing the user to specify the report date and state. There is an
+additional Config dropdown within Dagster to apply additional config.</li>
+<li>Weekly production run is scheduled for Wednesdays 6:30 AM EST </li>
+</ul>
 
 
 
@@ -854,13 +820,13 @@ page.</p>
         
         
           
-          <a href="./nssp-etl.html" class="md-footer__link md-footer__link--next" aria-label="Next: CFA NSSP ETL">
+          <a href="./nssp-etl.html" class="md-footer__link md-footer__link--next" aria-label="Next: CFA NSSP ETL Pipeline">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                CFA NSSP ETL
+                CFA NSSP ETL Pipeline
               </div>
             </div>
             <div class="md-footer__button md-icon">
