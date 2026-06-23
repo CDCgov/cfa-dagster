@@ -6,21 +6,23 @@ import re
 import sys
 import textwrap
 import warnings
-from collections.abc import Sequence
 from dataclasses import dataclass
 from types import GeneratorType
 from typing import (
     AbstractSet,
     Any,
-    cast,
+    Callable,
     Generic,
+    Literal,
     Mapping,
     Optional,
     TypedDict,
     TypeVar,
     Union,
+    cast,
     get_origin,
     get_type_hints,
+    overload,
 )
 from typing import Sequence as TypeSequence
 
@@ -31,12 +33,12 @@ from dagster._core.definitions.events import (
 )
 from dagster._core.definitions.metadata import RawMetadataMapping
 from dagster._utils.warnings import BetaWarning
+from pydantic import PrivateAttr
 from typing_extensions import Unpack
 
 from .azure_adls2.filesystem_metadata import ADLS2FilesystemIOManagerMetadata
 from .azure_adls2.pickle_io_manager import ADLS2PickleIOManager
 from .execution.utils import ExecutionConfig, SelectorConfig
-from pydantic import PrivateAttr
 
 log = logging.getLogger(__name__)
 
@@ -100,36 +102,6 @@ class GraphDimension(dg.Config, Generic[T]):
         return self._current_value
 
 
-def _get_return_info(asset_name, hints, fn) -> tuple[bool, bool]:
-    """ 
-    Returns a tuple to indicate whether the fn returns a value and if it
-    is annotated with a Sequence return type
-    """
-    return_type = hints.get("return")
-    log.debug(f"return_type: '{return_type}'")
-    origin = get_origin(return_type) or return_type
-
-    is_annotated_sequence = (
-        isinstance(origin, type)
-        and issubclass(origin, Sequence)
-        and not issubclass(origin, (str, bytes))
-    )
-    log.debug(f"is_annotated_sequence: '{is_annotated_sequence}'")
-
-    does_return_value = inspect.isgeneratorfunction(
-        fn
-    ) or _has_return_value(fn)
-    log.debug(f"does_return_value: '{does_return_value}'")
-
-    if does_return_value and return_type is None:
-        raise ValueError(
-            f"@dynamic_graph_asset '{asset_name}': decorated function must "
-            "have a return type annotation when returning a value e.g. -> str. Use list[some_type] "
-            "to return the value from each graph_dimension."
-        )
-    return does_return_value, is_annotated_sequence
-
-
 def _get_resource_params(hints) -> dict[str, type]:
     resource_params: dict[str, type] = {
         name: hint
@@ -186,14 +158,18 @@ def _get_config_cls(hints):
         (
             hint
             for hint in hints.values()
-            if inspect.isclass(hint) and issubclass(hint, dg.Config) and not issubclass(hint, dg.ConfigurableResource)
+            if inspect.isclass(hint)
+            and issubclass(hint, dg.Config)
+            and not issubclass(hint, dg.ConfigurableResource)
         ),
         None,
     )
     return config_cls
 
 
-def _get_asset_key(asset_name: str, graph_asset_kwargs: GraphAssetKwargs) -> dg.AssetKey:
+def _get_asset_key(
+    asset_name: str, graph_asset_kwargs: GraphAssetKwargs
+) -> dg.AssetKey:
     base_key = graph_asset_kwargs.get("key") or asset_name
     final_asset_key = base_key
 
@@ -226,10 +202,7 @@ def _is_dimension_annotation(annotation) -> bool:
         None,
     )
 
-    return (
-        metadata is not None
-        and metadata.get("origin") is GraphDimension
-    )
+    return metadata is not None and metadata.get("origin") is GraphDimension
 
 
 def _has_return_value(fn) -> bool:
@@ -352,8 +325,7 @@ def _infer_ins(
     }
     op_ins = {**inferred_ins, **(ins or {})}
     asset_ins = {
-        name: _in_to_asset_in(name, op_in)
-        for name, op_in in op_ins.items()
+        name: _in_to_asset_in(name, op_in) for name, op_in in op_ins.items()
     }
     return op_ins, asset_ins
 
@@ -377,12 +349,30 @@ def _apply_graph_dimensions(
 
 
 # -- Decorator --
+@overload
+def dynamic_graph_asset(
+    fn: Callable[..., Any],
+    /,
+) -> dg.AssetsDefinition: ...
+
+
+@overload
+def dynamic_graph_asset(
+    ins: dict[str, dg.In] | None = None,
+    io_manager_key: str | None = None,
+    retry_policy: dg.RetryPolicy | None = None,
+    output_mode: Literal["first", "all"] = "first",
+    **graph_asset_kwargs: Unpack[GraphAssetKwargs],
+) -> Callable[[Callable[..., Any]], dg.AssetsDefinition]: ...
+
+
 def dynamic_graph_asset(
     ins: dict[str, dg.In] = None,
     io_manager_key: Optional[str] = None,
     retry_policy: Optional[dg.RetryPolicy] = None,
+    output_mode: Literal["first", "all"] = "first",
     **graph_asset_kwargs: Unpack[GraphAssetKwargs],
-):
+) -> dg.AssetsDefinition | Callable[[Callable[..., Any]], dg.AssetsDefinition]:
     """
     Decorator that wires a function into a dynamic graph asset to run steps in parallel based on a provided ConfigurableResource.
     See https://docs.dagster.io/guides/build/ops/dynamic-graphs#using-dynamic-outputs
@@ -396,9 +386,8 @@ def dynamic_graph_asset(
     so original values (including spaces, hyphens, etc.) are recovered exactly in
     the compute op, while safe characters remain human-readable in the Dagster UI.
 
-    Return type annotations are required since they determine the behavior of the output.
-    To return a single Output, use a simple type like str, int, bool.
-    To return an Output from each graph dimension, use a 'list[some_type]'.
+    Return type annotations are required for functions that return a value.
+    Use ``output_mode`` to control whether the output is emitted from a single dimension or collected from all dimensions.
     This is especially powerful with the ADLS2FilesystemIOManager since you can upload a file or directory for each graph dimension and return the parent directory as the final output.
     Downstream assets using the ADLS2FilesystemIOManager will download the structured directory automatically.
 
@@ -455,6 +444,11 @@ def dynamic_graph_asset(
             general, versions should be set only for code that deterministically produces the same
             output when given the same inputs.
         retry_policy (Optional[RetryPolicy]): The retry policy for this asset.
+        output_mode (Literal["first", "all"]): Controls whether the output is emitted from a
+            single dimension (``"first"``, the default) or collected across all dimensions
+            (``"all"``). Use ``"all"`` when each dimension should independently produce an
+            output, e.g. with the ADLS2FilesystemIOManager where each dimension uploads
+            files. Defaults to ``"first"``.
         key (Optional[CoeercibleToAssetKey]): The key for this asset. If provided, cannot specify key_prefix or name.
 
 
@@ -479,7 +473,7 @@ def dynamic_graph_asset(
             partitions_def=daily_partitions,
             ins={"upstream": dg.AssetIn("some_upstream_asset")},
         )
-        def my_dynamic_asset(context: dg.OpExecutionContext, my_config: MyConfig, upstream_asset) -> str:
+        def my_dynamic_asset(context: dg.OpExecutionContext, my_config: MyConfig, upstream_asset):
             my_code_pipeline(my_config.disease.current_value, my_config.state.current_value, upstream_asset)
             return dg.Output(
                 value=f"staging/{context.partition_key}",
@@ -495,7 +489,7 @@ def dynamic_graph_asset(
             io_manager_key="ADLS2PickleIOManager",
             ins={"upstream": dg.AssetIn("some_upstream_asset")},
         )
-        def my_dynamic_asset(context: dg.OpExecutionContext, my_config: MyConfig, upstream_asset) -> list[str]:
+        def my_dynamic_asset(context: dg.OpExecutionContext, my_config: MyConfig, upstream_asset):
             result = my_code_pipeline(my_config.disease.current_value, my_config.state.current_value, upstream_asset)
             return dg.Output(
                 value=result,
@@ -515,7 +509,7 @@ def dynamic_graph_asset(
             io_manager_key="ADLS2FilesystemIOManager",
             ins={"upstream": dg.AssetIn("some_upstream_asset")},
         )
-        def my_dynamic_asset(context: dg.OpExecutionContext, my_config: MyConfig, upstream_asset) -> list[Path]:
+        def my_dynamic_asset(context: dg.OpExecutionContext, my_config: MyConfig, upstream_asset):
             output_path = my_code_pipeline(my_config.disease.current_value, my_config.state.current_value, upstream_asset)
             return dg.Output(
                 value=output_path,
@@ -538,13 +532,24 @@ def dynamic_graph_asset(
 
     """
 
+    if callable(ins):
+        _fn = ins
+        ins = None
+    else:
+        _fn = None
+
     def decorator(fn):
         asset_name = fn.__name__
 
         hints = get_type_hints(fn, globalns=vars(sys.modules[fn.__module__]))
         sig = inspect.signature(fn)
 
-        does_return_value, is_annotated_sequence = _get_return_info(asset_name, hints, fn)
+        does_return_value = inspect.isgeneratorfunction(
+            fn
+        ) or _has_return_value(fn)
+        log.debug(f"does_return_value: '{does_return_value}'")
+
+        should_return_all = output_mode == "all"
 
         # -- Locate the Config parameter --
         config_cls = _get_config_cls(hints)
@@ -572,7 +577,9 @@ def dynamic_graph_asset(
         log.debug(f"required_resource_keys: '{required_resource_keys}'")
 
         # -- Locate resources containing GraphDimension fields --
-        dimension_resource_info = _get_dimension_resource_info(asset_name, resource_params)
+        dimension_resource_info = _get_dimension_resource_info(
+            asset_name, resource_params
+        )
 
         op_ins, asset_ins = _infer_ins(sig, required_resource_keys, ins)
         log.debug(f"op_ins: '{op_ins}'")
@@ -605,7 +612,10 @@ def dynamic_graph_asset(
                     else {}
                 ),
             },
-            required_resource_keys=[INTERNAL_CONFIG_IO_MANAGER_KEY, dimension_resource_info.param_name],
+            required_resource_keys=[
+                INTERNAL_CONFIG_IO_MANAGER_KEY,
+                dimension_resource_info.param_name,
+            ],
             tags=in_process_config.to_run_tags(),
         )
         def gen_config(context, **kwargs):
@@ -638,10 +648,10 @@ def dynamic_graph_asset(
                 mapping_key = _encode_mapping_key(combo)
 
                 yield dg.DynamicOutput(
-                        value=None,
-                        mapping_key=mapping_key,
-                        output_name="dga_internal_fanout",
-                        )
+                    value=None,
+                    mapping_key=mapping_key,
+                    output_name="dga_internal_fanout",
+                )
 
         # -- compute op to run decorated function body --
         @dg.op(
@@ -679,12 +689,14 @@ def dynamic_graph_asset(
             + list(graph_asset_kwargs.get("resource_defs", {}).keys())
             + [INTERNAL_CONFIG_IO_MANAGER_KEY],
             retry_policy=retry_policy,
-            config_schema=config_cls.to_config_schema() if config_cls else None,
+            config_schema=config_cls.to_config_schema()
+            if config_cls
+            else None,
         )
         def compute(
-                context: dg.OpExecutionContext,
-                **kwargs,
-                ):
+            context: dg.OpExecutionContext,
+            **kwargs,
+        ):
             upstream_kwargs = {
                 k: v for k, v in kwargs.items() if k in decorated_fn_kwargs
             }
@@ -699,20 +711,27 @@ def dynamic_graph_asset(
             # decode graph_dimensions from mapping_key
             mapping_key = cast(str, context.get_mapping_key())
             decoded = _decode_mapping_key(mapping_key)
-            graph_dimensions = dict(zip(dimension_resource_info.dimension_fields, decoded))
+            graph_dimensions = dict(
+                zip(dimension_resource_info.dimension_fields, decoded)
+            )
             log.debug(f"graph_dimensions: '{graph_dimensions}'")
 
-            dimension_resource = _apply_graph_dimensions(context, dimension_resource_info, graph_dimensions)
+            dimension_resource = _apply_graph_dimensions(
+                context, dimension_resource_info, graph_dimensions
+            )
 
             is_first_dimension = all(
-                graph_dimensions[field] == getattr(dimension_resource, field).values[0]
+                graph_dimensions[field]
+                == getattr(dimension_resource, field).values[0]
                 for field in dimension_resource_info.dimension_fields
             )
 
             log.debug(f"is_first_dimension: '{is_first_dimension}'")
 
             if config_cls is not None:
-                dga_internal_shared_config = kwargs.get("dga_internal_shared_config")
+                dga_internal_shared_config = kwargs.get(
+                    "dga_internal_shared_config"
+                )
                 config = config_cls(**dga_internal_shared_config)
                 log.debug(f"config: '{config}'")
                 result = fn(
@@ -731,7 +750,7 @@ def dynamic_graph_asset(
             if isinstance(result, GeneratorType):
                 result = next(result)
             log.debug(f"compute result: '{result}'")
-            if is_annotated_sequence or is_first_dimension:
+            if should_return_all or is_first_dimension:
                 result, metadata = unpack_output(result)
 
                 # Merge our graph_dimensions metadata
@@ -772,7 +791,9 @@ def dynamic_graph_asset(
                     else dg.In(dg.Nothing)
                 ),
             },
-            config_schema=config_cls.to_config_schema() if config_cls else None,
+            config_schema=config_cls.to_config_schema()
+            if config_cls
+            else None,
             **(
                 {
                     "out": dg.Out(
@@ -797,7 +818,7 @@ def dynamic_graph_asset(
                     result = next(result)
 
                 # handle sequences
-                result = (result if is_annotated_sequence else result[0],)
+                result = (result if should_return_all else result[0],)
 
                 result, metadata = unpack_output(result)
 
@@ -815,6 +836,7 @@ def dynamic_graph_asset(
 
         # -- config mapping --
         if config_cls is not None:
+
             @dg.config_mapping(config_schema=config_cls.to_config_schema())
             def _config_mapping(config):
                 # initialize the config class to ensure any default_factories run
@@ -858,14 +880,17 @@ def dynamic_graph_asset(
                 gen_result = gen_config(**ins_kwargs)
 
                 if config_cls is not None:
-                    dga_internal_fanout, dga_internal_shared_config = gen_result
+                    dga_internal_fanout, dga_internal_shared_config = (
+                        gen_result
+                    )
                 else:
                     dga_internal_fanout = gen_result
                     dga_internal_shared_config = None
 
                 # Map fanout while passing shared config to every isolated compute worker
                 res = dga_internal_fanout.map(
-                    lambda nothing, _shared=dga_internal_shared_config: compute(
+                    lambda nothing,
+                    _shared=dga_internal_shared_config: compute(
                         _=nothing,
                         **(
                             {"dga_internal_shared_config": _shared}
@@ -879,4 +904,6 @@ def dynamic_graph_asset(
 
             return _asset
 
+    if _fn is not None:
+        return decorator(_fn)
     return decorator

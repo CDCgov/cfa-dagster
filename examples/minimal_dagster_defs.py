@@ -7,15 +7,11 @@
 # ]
 # ///
 
-# from time import sleep
-from typing import List
-
 import dagster as dg
 
-# ruff: noqa: F401
 from cfa_dagster import (
-    DynamicGraphAssetExecutionContext,
     collect_definitions,
+    GraphDimension,
     dynamic_graph_asset,
     start_dev_env,
 )
@@ -24,21 +20,24 @@ from cfa_dagster import (
 start_dev_env(__name__)
 
 
-class MyAssetConfig(dg.Config):
-    disease: List[str] = ["covid", "flu", "rsv"]
+class MyAssetConfig(dg.ConfigurableResource):
+    disease: GraphDimension[str] = GraphDimension(["covid", "flu", "rsv"])
 
 
-@dynamic_graph_asset(
-    graph_dimensions=["disease"],
-)
+@dynamic_graph_asset
 def my_asset(
-    context: DynamicGraphAssetExecutionContext, config: MyAssetConfig
+    context: dg.OpExecutionContext, my_asset_config: MyAssetConfig
 ):
-    disease = context.graph_dimension["disease"]
+    disease = my_asset_config.disease.current_value
     context.log.info(f"Watch out for: '{disease}'")
 
 
 collected_defs = collect_definitions(globals())
 
 # Create Definitions object
-defs = dg.Definitions(**collected_defs)
+defs = dg.Definitions(
+        **collected_defs,
+        resources={
+            "my_asset_config": MyAssetConfig()
+            }
+        )
