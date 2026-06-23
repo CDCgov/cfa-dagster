@@ -16,7 +16,7 @@
       
       
       
-        <link rel="next" href="./qs-modeling-pp.html">
+        <link rel="next" href="./quickstart.html">
       
       
         
@@ -201,10 +201,6 @@
       
         
       
-        
-      
-        
-      
     
     
     
@@ -341,10 +337,6 @@
       
         
       
-        
-      
-        
-      
     
     
     
@@ -409,6 +401,23 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Overview
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="overview.html" class="md-nav__link md-nav__link--active">
         
   
@@ -425,6 +434,48 @@
 
       </a>
       
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why-use-dagster" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Why use Dagster
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#helpful-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Helpful resources
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -437,68 +488,14 @@
   
   
     <li class="md-nav__item">
-      <a href="./qs-modeling-pp.html" class="md-nav__link">
+      <a href="./quickstart.html" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-  Quickstart (Dagster + Modeling/ Post-Processing)
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="./qs-etl.html" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Quickstart (Dagster + ETL)
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="./qs-experiments.html" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Quickstart (Dagster + Experiments)
+  Quickstart (Dagster Example)
 
     
   </span>
@@ -744,10 +741,6 @@
       
         
       
-        
-      
-        
-      
     
     
     
@@ -775,6 +768,28 @@
                   
 
 <h1 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h1>
+<p>Dagster is an <em>asset-centric</em> workflow <em>orchestrator</em>.</p>
+<ul>
+<li><em>Orchestrator</em>: Tools that allow you to automatically execute steps in a specified order and track the outcomes.</li>
+<li><em>Asset-centric</em>: Focused on how outputs interact with other outputs. With Dagster, you declare functions in Python that you want to run and the data assets that those functions produce or update (<a href="https://master.dagster.dagster-docs.io/getting-started/what-why-dagster">Source</a>). </li>
+</ul>
+<h2 id="why-use-dagster">Why use Dagster<a class="headerlink" href="#why-use-dagster" title="Permanent link">&para;</a></h2>
+<p>Dagster makes it easy to:</p>
+<ol>
+<li>Understand how an asset is produced.</li>
+<li>Determine if an asset is up to date.</li>
+<li>Diagnose data quality issues by building data quality checks into your pipelines.</li>
+<li>Debug with live logs as the pipeline runs. </li>
+<li>View the outputs and configurations for historical runs.</li>
+</ol>
+<p>Plus, Dagster is <strong>open-source</strong> and integrates easily with Azure and Docker. </p>
+<h2 id="helpful-resources">Helpful resources<a class="headerlink" href="#helpful-resources" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="https://docs.dagster.io/">Official Dagster documentation</a></li>
+<li><a href="https://github.com/dagster-io/dagster">Official Dagster GitHub</a> </li>
+<li><a href="https://courses.dagster.io/?_gl=1*1umsyi7*_gcl_au*MTYwODgxNDc3My4xNzgxMTEzMzA2">Dagster University</a> (The Dagster Essentials course is VERY helpful)</li>
+<li><a href="https://github.com/CDCgov/cfa-dagster/tree/main"><abbr title="Centers for Disease Control and Prevention">CDC</abbr> <abbr title="Center for Forecasting and Outbreak Analytics">CFA</abbr> Dagster GitHub repository</a> </li>
+</ul>
 
 
 
@@ -809,13 +824,13 @@
         
         
           
-          <a href="./qs-modeling-pp.html" class="md-footer__link md-footer__link--next" aria-label="Next: Quickstart (Dagster + Modeling&#x2f; Post-Processing)">
+          <a href="./quickstart.html" class="md-footer__link md-footer__link--next" aria-label="Next: Quickstart (Dagster Example)">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Quickstart (Dagster + Modeling/ Post-Processing)
+                Quickstart (Dagster Example)
               </div>
             </div>
             <div class="md-footer__button md-icon">

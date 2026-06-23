@@ -12,13 +12,13 @@
         <meta name="author" content="Kelly Reagan">
       
       
-        <link rel="canonical" href="https://kelly-a-reagan.github.io/cfa-dagster/getting-started/qs-modeling-pp.html">
+        <link rel="canonical" href="https://kelly-a-reagan.github.io/cfa-dagster/getting-started/quickstart.html">
       
       
         <link rel="prev" href="./overview.html">
       
       
-        <link rel="next" href="./qs-etl.html">
+        <link rel="next" href="./installation.html">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>Quickstart (Dagster + Modeling/ Post-Processing) - Dagster Adoption Guide</title>
+        <title>Quickstart (Dagster Example) - Dagster Adoption Guide</title>
       
     
     
@@ -87,7 +87,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#quickstart-dagster-modeling-post-processing" class="md-skip">
+        <a href="#quickstart-dagster-example" class="md-skip">
           Skip to content
         </a>
       
@@ -123,7 +123,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Quickstart (Dagster + Modeling/ Post-Processing)
+              Quickstart (Dagster Example)
             
           </span>
         </div>
@@ -194,10 +194,6 @@
   
     
       
-      
-        
-      
-        
       
         
       
@@ -343,10 +339,6 @@
       
         
       
-        
-      
-        
-      
     
     
     
@@ -438,14 +430,31 @@
         
       
       
-      <a href="qs-modeling-pp.html" class="md-nav__link md-nav__link--active">
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Quickstart (Dagster Example)
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="quickstart.html" class="md-nav__link md-nav__link--active">
         
   
   
   <span class="md-ellipsis">
     
   
-  Quickstart (Dagster + Modeling/ Post-Processing)
+  Quickstart (Dagster Example)
 
     
   </span>
@@ -454,60 +463,59 @@
 
       </a>
       
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="./qs-etl.html" class="md-nav__link">
         
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
   
   
-  <span class="md-ellipsis">
+  
     
   
-  Quickstart (Dagster + ETL)
-
-    
-  </span>
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#first-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        First steps
+      </span>
+    </span>
+  </a>
   
-
-      </a>
-    </li>
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-the-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Running the example
+      </span>
+    </span>
+  </a>
   
-
-              
-            
-              
-                
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Next steps
+      </span>
+    </span>
+  </a>
   
+</li>
+      
+    </ul>
   
-  
-  
-    <li class="md-nav__item">
-      <a href="./qs-experiments.html" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Quickstart (Dagster + Experiments)
-
-    
-  </span>
-  
-  
-
-      </a>
+</nav>
+      
     </li>
   
 
@@ -746,10 +754,6 @@
       
         
       
-        
-      
-        
-      
     
     
     
@@ -776,7 +780,38 @@
                 
                   
 
-<h1 id="quickstart-dagster-modeling-post-processing">Quickstart (Dagster + Modeling/ Post-Processing)<a class="headerlink" href="#quickstart-dagster-modeling-post-processing" title="Permanent link">&para;</a></h1>
+<h1 id="quickstart-dagster-example">Quickstart (Dagster Example)<a class="headerlink" href="#quickstart-dagster-example" title="Permanent link">&para;</a></h1>
+<p>This basic example should help you get up and running with local Dagster development and serve as a blueprint for integration with existing repos. It is highly recommended that you complete the Dagster quickstart <a href="https://docs.dagster.io/getting-started/quickstart">tutorial</a> (~10 mins) before following these steps to familiarize yourself with basic Dagster concepts and the UI.</p>
+<h2 id="first-steps">First steps<a class="headerlink" href="#first-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li>To get started with local Dagster development, clone this repo and check out the <a href="examples/">examples</a></li>
+</ul>
+<ul>
+<li>To use this repo as a python library, add the dependency to your <code>pyproject.toml</code> or inline PEP 723 script comment:
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="w"> </span><span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span><span class="s2">&quot;cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git&quot;</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w"> </span><span class="p">]</span>
+</span></code></pre></div></li>
+</ul>
+<h2 id="running-the-example">Running the example<a class="headerlink" href="#running-the-example" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Start the Dagster UI by running <code>uv run dagster_defs.py</code> and clicking the link in your terminal (usually http://127.0.0.1:4000/)</li>
+<li>Build your image by navigating to the <a href="http://127.0.0.1:4000/locations/dagster_defs.py/jobs/build_image_job/playground">build_image_job</a> and clicking <code>Launch Run</code> in the bottom right</li>
+<li>Materialize an asset!<p>- In the Dagster UI, navigate to the Lineage page and click <code>basic_blob_asset</code>. (<a href="http://127.0.0.1:4000/asset-groups/basic_blob_asset?open-nodes%5B0%5D=dagster_defs.py&amp;open-nodes%5B1%5D=dagster_defs.py%3Adefault">Here</a> if you are on the default port 4000)<br />
+  - Click <code>Materialize selected</code> and watch for your run to start on the Asset sidebar<br />
+  - Click <code>View Logs</code> on the Asset sidebar to monitor progress (stdout &amp; stderr available!)</p>
+</li>
+</ol>
+<h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Try materializing partitioned_r_asset</li>
+<li>Try materializing multiple assets at once</li>
+<li>Try materializing your Asset on Azure Container App Jobs<p>1. Push your updated image to <abbr title="Azure Container Registry">ACR</abbr> by running the <code>build_image_job</code> from above with <code>should_push: true</code> in the Launchpad<br />
+  2. Modify the <code>dynamic_executor</code> in the <code>Definitions</code> of the dagster_defs.py file to use the <code>azure_caj_config</code> instead of the <code>docker_config</code><br />
+  3. Reload your Definitions from the Lineage or Deployment page<br />
+  4. Materialize your Asset again! (See <code>Running the example</code>)</p>
+</li>
+</ul>
 
 
 
@@ -827,13 +862,13 @@
         
         
           
-          <a href="./qs-etl.html" class="md-footer__link md-footer__link--next" aria-label="Next: Quickstart (Dagster + ETL)">
+          <a href="./installation.html" class="md-footer__link md-footer__link--next" aria-label="Next: Installation">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Quickstart (Dagster + ETL)
+                Installation
               </div>
             </div>
             <div class="md-footer__button md-icon">

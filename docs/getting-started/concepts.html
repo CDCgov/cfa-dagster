@@ -203,10 +203,6 @@
       
         
       
-        
-      
-        
-      
     
     
     
@@ -343,10 +339,6 @@
       
         
       
-        
-      
-        
-      
     
     
     
@@ -429,68 +421,14 @@
   
   
     <li class="md-nav__item">
-      <a href="./qs-modeling-pp.html" class="md-nav__link">
+      <a href="./quickstart.html" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-  Quickstart (Dagster + Modeling/ Post-Processing)
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="./qs-etl.html" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Quickstart (Dagster + ETL)
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="./qs-experiments.html" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Quickstart (Dagster + Experiments)
+  Quickstart (Dagster Example)
 
     
   </span>
@@ -871,10 +809,6 @@
       
         
       
-        
-      
-        
-      
     
     
     
@@ -908,24 +842,30 @@
 <p>A Dagster <a href="https://docs.dagster.io/dagster-basics-tutorial/assets">asset</a> is a piece of data that your data pipeline creates, updates, or manages. Instead of focusing on what code runs, Dagster focuses on what data exists and how it depends on other data. Dagster treats your data platform as a graph of datasets (assets) and their relationships, then orchestrates the work needed to keep those datasets current.</p>
 <p>Once an asset is created, Dagster does not automatically run the code for the asset, it must be <a href="https://docs.dagster.io/guides/build/assets/configuring-assets">materialized</a> first. When an asset is materialized, Dagster runs the asset’s function and creates the asset. When a materialization begins, it kicks off a run. </p>
 <h2 id="resources">Resources<a class="headerlink" href="#resources" title="Permanent link">&para;</a></h2>
-<p>A <a href="https://docs.dagster.io/dagster-basics-tutorial/resources#step-4-view-the-resource">resource</a> in Dagster is something your assets need to do their work, but not the data you're producing. In the example of baking cookies, resources would be a mixing bowl, spoon, a baking sheet, and the oven. Resources often represent:
-* Database connections 
-* Data warehouse clients 
-* API clients 
-* Cloud storage clients 
-* Credentials and secrets 
-* Logging systems 
-* IO managers
-* Configuration dictionaries</p>
+<p>A <a href="https://docs.dagster.io/dagster-basics-tutorial/resources#step-4-view-the-resource">resource</a> in Dagster is something your assets need to do their work, but not the data you're producing. In the example of baking cookies, resources would be a mixing bowl, spoon, a baking sheet, and the oven.<br />
+Resources often represent:  </p>
+<ul>
+<li>Database connections</li>
+<li>Data warehouse clients</li>
+<li>API clients</li>
+<li>Cloud storage clients</li>
+<li>Credentials and secrets</li>
+<li>Logging systems</li>
+<li>IO managers</li>
+<li>Configuration dictionaries</li>
+</ul>
 <h2 id="schedules">Schedules<a class="headerlink" href="#schedules" title="Permanent link">&para;</a></h2>
-<p><a href="https://docs.dagster.io/guides/automate/schedules">Schedules</a> define a fixed time interval to run your pipeline. </p>
+<p><a href="https://docs.dagster.io/guides/automate/schedules">Schedules</a> define a fixed time interval to run your pipeline. In the example of the cookies, this could be planning to bake the cookies at 1 pm. </p>
 <h2 id="asset-jobs">Asset Jobs<a class="headerlink" href="#asset-jobs" title="Permanent link">&para;</a></h2>
 <p><a href="https://docs.dagster.io/guides/build/jobs/asset-jobs">Asset jobs</a> execute and monitor specified assets. In the example of baking cookies, a job could be made to add the chocolate chips to the cookie dough once you have successfully made the cookie dough.</p>
 <h2 id="definitions">Definitions<a class="headerlink" href="#definitions" title="Permanent link">&para;</a></h2>
-<p>Each workflow (containing assets, resources or schedules) must be part of a <a href="https://docs.dagster.io/api/dagster/definitions#definitions">Definitions</a> object. For <abbr title="Center for Forecasting and Outbreak Analytics">CFA</abbr> specifically, the definitions object is located within the <a href="https://github.com/CDCgov/cfa-dagster/blob/main/examples/dagster_defs.py">dagster_defs.py</a> file. The dagster_defs.py file contains the Dagster-specific configurations, assets, jobs, and/or schedules in addition to the Definitions object. </p>
+<p>Each workflow (containing assets, resources or schedules) must be part of a <a href="https://docs.dagster.io/api/dagster/definitions#definitions">Definitions</a> object. For <abbr title="Center for Forecasting and Outbreak Analytics">CFA</abbr> specifically, the definitions object is located within the <a href="https://github.com/CDCgov/cfa-dagster/blob/main/examples/dagster_defs.py">dagster_defs.py</a> file. The <code>dagster_defs.py</code> file contains the Dagster-specific configurations, assets, jobs, and/or schedules in addition to the Definitions object. </p>
 <h2 id="ops">Ops<a class="headerlink" href="#ops" title="Permanent link">&para;</a></h2>
+<p><a href="https://docs.dagster.io/guides/build/ops">Ops</a> are single units of work in the pipeline. In the cookie example, an op could be getting the mixing bowl out, getting the flour from the pantry, or picking up the whisk before mixing the ingredients together. Dagster treats each op as a managed step, which allows the user to track whether the step succeeded or failed, record logs and metadata, retry failed steps, and visualize the pipeline in the Dagster UI. </p>
 <h2 id="sensors">Sensors<a class="headerlink" href="#sensors" title="Permanent link">&para;</a></h2>
+<p><a href="https://docs.dagster.io/guides/automate/sensors#cursors-and-high-volume-events">Sensors</a> check for events at regular time intervals, and if triggered, will start a job or other action. Sensors allow the workflow to run automatically without someone needing to manually start the pipeline. In the baking cookies example, this would be like having an assistant take the cookies out of the oven when the timer goes off. </p>
 <h2 id="partitions">Partitions<a class="headerlink" href="#partitions" title="Permanent link">&para;</a></h2>
+<p><a href="https://docs.dagster.io/guides/build/partitions-and-backfills/partitioning-ops#non-partitioned-job-with-date-config">Partitions</a> divide the workflow into smaller pieces, which could speed up computation by using parallel processing. Users can test on an individual partition before trying to run larger ranges of data. In the cookie example, this could be scaling the recipe back to make 8 cookies instead of making the cookie dough for 80 cookies. </p>
 
 
 
