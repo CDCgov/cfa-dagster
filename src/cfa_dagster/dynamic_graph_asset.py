@@ -14,7 +14,6 @@ from typing import (
     Any,
     cast,
     Generic,
-    List,
     Mapping,
     Optional,
     TypedDict,
@@ -101,7 +100,49 @@ class GraphDimension(dg.Config, Generic[T]):
         return self._current_value
 
 
-def _get_dimension_resources(
+def _get_return_info(asset_name, hints, fn) -> tuple[bool, bool]:
+    """ 
+    Returns a tuple to indicate whether the fn returns a value and if it
+    is annotated with a Sequence return type
+    """
+    return_type = hints.get("return")
+    log.debug(f"return_type: '{return_type}'")
+    origin = get_origin(return_type) or return_type
+
+    is_annotated_sequence = (
+        isinstance(origin, type)
+        and issubclass(origin, Sequence)
+        and not issubclass(origin, (str, bytes))
+    )
+    log.debug(f"is_annotated_sequence: '{is_annotated_sequence}'")
+
+    does_return_value = inspect.isgeneratorfunction(
+        fn
+    ) or _has_return_value(fn)
+    log.debug(f"does_return_value: '{does_return_value}'")
+
+    if does_return_value and return_type is None:
+        raise ValueError(
+            f"@dynamic_graph_asset '{asset_name}': decorated function must "
+            "have a return type annotation when returning a value e.g. -> str. Use list[some_type] "
+            "to return the value from each graph_dimension."
+        )
+    return does_return_value, is_annotated_sequence
+
+
+def _get_resource_params(hints) -> dict[str, type]:
+    resource_params: dict[str, type] = {
+        name: hint
+        for name, hint in hints.items()
+        if name != "return"
+        and inspect.isclass(hint)
+        and issubclass(hint, dg.ConfigurableResource)
+    }
+    log.debug(f"resource_params: '{resource_params}'")
+    return resource_params
+
+
+def _get_dimension_resource_info(
     asset_name: str, resource_params: dict[str, type]
 ) -> DimensionResourceInfo:
     dimension_info: DimensionResourceInfo | None = None
@@ -138,6 +179,18 @@ def _get_dimension_resources(
 
     log.debug(f"dimension_resource_info: {dimension_info}")
     return dimension_info
+
+
+def _get_config_cls(hints):
+    config_cls = next(
+        (
+            hint
+            for hint in hints.values()
+            if inspect.isclass(hint) and issubclass(hint, dg.Config) and not issubclass(hint, dg.ConfigurableResource)
+        ),
+        None,
+    )
+    return config_cls
 
 
 def _get_asset_key(asset_name: str, graph_asset_kwargs: GraphAssetKwargs) -> dg.AssetKey:
@@ -277,45 +330,6 @@ def _in_to_asset_in(name: str, op_in: dg.In) -> dg.AssetIn:
     )
 
 
-class DynamicGraphAssetExecutionContext(dg.OpExecutionContext):
-    """
-    OpExecutionContext subclass that exposes the current graph dimension as a dictionary.
-
-        @dynamic_graph_asset(graph_dimensions=["state", "disease"], ...)
-        def my_asset(context: DynamicGraphAssetExecutionContext, config: MyConfig):
-            context.graph_dimension["state"]    # "AK"
-            context.graph_dimension["disease"]  # "COVID-19"
-
-    """
-
-    _mapping_key: dict | None = None
-    _mapping_key_names: list[str] = []
-
-    @property
-    def graph_dimension(self) -> dict[str, str]:
-        if self._mapping_key is None:
-            values = _decode_mapping_key(self.get_mapping_key())
-            self._mapping_key = dict(zip(self._mapping_key_names, values))
-        return self._mapping_key
-
-    @staticmethod
-    def inject(
-        context: dg.OpExecutionContext,
-        mapping_key_names: list[str],
-    ) -> "DynamicGraphAssetExecutionContext":
-        """
-        Patch an existing OpExecutionContext instance into a DynamicGraphAssetExecutionContext
-        by reassigning its __class__ and injecting the mapping key names.
-        This works because DynamicGraphAssetExecutionContext adds no new __init__ parameters.
-        """
-        context.__class__ = DynamicGraphAssetExecutionContext
-        # casting is not enough: AttributeError: 'OpExecutionContext' object has no attribute 'register_output'
-        # context = cast(DynamicGraphAssetExecutionContext, context)
-        context._mapping_key_names = mapping_key_names
-        context._mapping_key = None
-        return context  # type: ignore[return-value]
-
-
 def unpack_output(output) -> tuple[Any, dict]:
     if isinstance(output, dg.Output):
         user_value = output.value
@@ -326,21 +340,56 @@ def unpack_output(output) -> tuple[Any, dict]:
     return user_value, user_metadata
 
 
+def _infer_ins(
+    sig: inspect.Signature,
+    required_resource_keys: set[str],
+    ins: dict[str, dg.In] | None,
+) -> tuple[dict[str, dg.In], dict[str, dg.AssetIn]]:
+    inferred_ins = {
+        name: dg.In()
+        for name in sig.parameters
+        if name not in ["config", "context", *required_resource_keys]
+    }
+    op_ins = {**inferred_ins, **(ins or {})}
+    asset_ins = {
+        name: _in_to_asset_in(name, op_in)
+        for name, op_in in op_ins.items()
+    }
+    return op_ins, asset_ins
+
+
+def _apply_graph_dimensions(
+    context: dg.OpExecutionContext,
+    dimension_resource_info: DimensionResourceInfo,
+    graph_dimensions: dict[str, str],
+) -> Any:
+    dimension_resource = getattr(
+        context.resources,
+        dimension_resource_info.param_name,
+    )
+    for field_name, value in graph_dimensions.items():
+        graph_dim_obj = cast(
+            GraphDimension,
+            getattr(dimension_resource, field_name),
+        )
+        graph_dim_obj.set_current_value(value)
+    return dimension_resource
+
+
 # -- Decorator --
 def dynamic_graph_asset(
-    graph_dimensions: List[str],
     ins: dict[str, dg.In] = None,
     io_manager_key: Optional[str] = None,
     retry_policy: Optional[dg.RetryPolicy] = None,
     **graph_asset_kwargs: Unpack[GraphAssetKwargs],
 ):
     """
-    Decorator that wires a function into a dynamic graph asset to run steps in parallel based on provided Config.
+    Decorator that wires a function into a dynamic graph asset to run steps in parallel based on a provided ConfigurableResource.
     See https://docs.dagster.io/guides/build/ops/dynamic-graphs#using-dynamic-outputs
     and https://docs.dagster.io/guides/build/assets/graph-backed-assets
 
     The decorated function becomes the compute op, called once per combination
-    of graph_dimensions field values. Config fields listed in `graph_dimensions` are unpacked to
+    of graph_dimensions field values. ConfigurableResource fields types as `GraphDimension`s  are unpacked to
     single scalar values inside the function body.
 
     graph_dimensions values are encoded into the internal op mapping key using _XX_ hex escaping
@@ -354,10 +403,6 @@ def dynamic_graph_asset(
     Downstream assets using the ADLS2FilesystemIOManager will download the structured directory automatically.
 
     Args:
-        graph_dimensions: List of config field names to fan out over. Must be iterable
-                fields on the Config class (e.g. List[str]). The cartesian
-                product of all fields becomes the set of dynamic mapping keys.
-
         name (Optional[str]): The name of the asset.  If not provided, defaults to the name of the
             decorated function. The asset's name must be a valid name in Dagster (ie only contains
             letters, numbers, and underscores) and may not contain Python reserved keywords.
@@ -414,20 +459,28 @@ def dynamic_graph_asset(
 
 
     Example:
-        Single value for all graph dimensions:
+        Define ConfigurableResource with GraphDimensions:
 
-        class MyAssetConfig(dg.Config):
-            disease: List[str]
-            state: List[str]
+        class MyConfig(dg.ConfigurableResource):
+            disease: Dimension[str] = Dimension(["covid", "flu", "rsv"])
+            state: Dimension[str] = Dimension(["CA", "TX", "NY"])
             container: str
 
+        defs = dg.Definitions(
+            ...
+            resources = {
+                "my_config": MyConfig()
+            }
+        )
+
+        Single value for all graph dimensions:
+
         @dynamic_graph_asset(
-            graph_dimensions=["disease", "state"],
             partitions_def=daily_partitions,
             ins={"upstream": dg.AssetIn("some_upstream_asset")},
         )
-        def my_dynamic_asset(context: dg.OpExecutionContext, config: MyAssetConfig, upstream_asset) -> str:
-            my_code_pipeline(context.graph_dimension["disease"], context.graph_dimension["state"], upstream_asset)
+        def my_dynamic_asset(context: dg.OpExecutionContext, my_config: MyConfig, upstream_asset) -> str:
+            my_code_pipeline(my_config.disease.current_value, my_config.state.current_value, upstream_asset)
             return dg.Output(
                 value=f"staging/{context.partition_key}",
                 metadata={"container": config.base_output_prefix},
@@ -436,19 +489,14 @@ def dynamic_graph_asset(
 
         Aggregated value from each graph dimension:
 
-        class MyAssetConfig(dg.Config):
-            disease: List[str]
-            state: List[str]
-            container: str
 
         @dynamic_graph_asset(
-            graph_dimensions=["disease", "state"],
             partitions_def=daily_partitions,
             io_manager_key="ADLS2PickleIOManager",
             ins={"upstream": dg.AssetIn("some_upstream_asset")},
         )
-        def my_dynamic_asset(context: dg.OpExecutionContext, config: MyAssetConfig, upstream_asset) -> list[str]:
-            result = my_code_pipeline(context.graph_dimension["disease"], context.graph_dimension["state"], upstream_asset)
+        def my_dynamic_asset(context: dg.OpExecutionContext, my_config: MyConfig, upstream_asset) -> list[str]:
+            result = my_code_pipeline(my_config.disease.current_value, my_config.state.current_value, upstream_asset)
             return dg.Output(
                 value=result,
                 metadata={"container": config.base_output_prefix},
@@ -463,13 +511,12 @@ def dynamic_graph_asset(
             container: str
 
         @dynamic_graph_asset(
-            graph_dimensions=["disease", "state"],
             partitions_def=daily_partitions,
             io_manager_key="ADLS2FilesystemIOManager",
             ins={"upstream": dg.AssetIn("some_upstream_asset")},
         )
-        def my_dynamic_asset(context: dg.OpExecutionContext, config: MyAssetConfig, upstream_asset) -> list[Path]:
-            output_path = my_code_pipeline(context.graph_dimension["disease"], context.graph_dimension["state"], upstream_asset)
+        def my_dynamic_asset(context: dg.OpExecutionContext, my_config: MyConfig, upstream_asset) -> list[Path]:
+            output_path = my_code_pipeline(my_config.disease.current_value, my_config.state.current_value, upstream_asset)
             return dg.Output(
                 value=output_path,
                 metadata={"container": config.base_output_prefix},
@@ -494,42 +541,13 @@ def dynamic_graph_asset(
     def decorator(fn):
         asset_name = fn.__name__
 
-        hints = get_type_hints(fn)
-        return_type = hints.get("return")
-        log.debug(f"return_type: '{return_type}'")
-        origin = get_origin(return_type) or return_type
-
-        is_annotated_sequence = (
-            isinstance(origin, type)
-            and issubclass(origin, Sequence)
-            and not issubclass(origin, (str, bytes))
-        )
-        log.debug(f"is_annotated_sequence: '{is_annotated_sequence}'")
-
+        hints = get_type_hints(fn, globalns=vars(sys.modules[fn.__module__]))
         sig = inspect.signature(fn)
 
-        does_return_value = inspect.isgeneratorfunction(
-            fn
-        ) or _has_return_value(fn)
-        log.debug(f"does_return_value: '{does_return_value}'")
-
-        if does_return_value and return_type is None:
-            raise ValueError(
-                f"@dynamic_graph_asset '{asset_name}': decorated function must "
-                "have a return type annotation when returning a value e.g. -> str. Use list[some_type] "
-                "to return the value from each graph_dimension."
-            )
+        does_return_value, is_annotated_sequence = _get_return_info(asset_name, hints, fn)
 
         # -- Locate the Config parameter --
-        hints = get_type_hints(fn, globalns=vars(sys.modules[fn.__module__]))
-        config_cls = next(
-            (
-                hint
-                for hint in hints.values()
-                if inspect.isclass(hint) and issubclass(hint, dg.Config) and not issubclass(hint, dg.ConfigurableResource)
-            ),
-            None,
-        )
+        config_cls = _get_config_cls(hints)
 
         # capture kwargs from decorated function to be later used in compute op
         decorated_fn_kwargs = {
@@ -545,20 +563,8 @@ def dynamic_graph_asset(
 
         final_asset_key = _get_asset_key(asset_name, graph_asset_kwargs)
 
-        # check for partitions
-        has_partitions = graph_asset_kwargs.get("partitions_def") is not None
-        log.debug(f"has_partitions: '{has_partitions}'")
-
         # -- Locate Resource parameters --
-        # Maps parameter name -> resource class for all ConfigurableResource-annotated params
-        resource_params: dict[str, type] = {
-            name: hint
-            for name, hint in hints.items()
-            if name != "return"
-            and inspect.isclass(hint)
-            and issubclass(hint, dg.ConfigurableResource)
-        }
-        log.debug(f"resource_params: '{resource_params}'")
+        resource_params = _get_resource_params(hints)
 
         # Build the required_resource_keys set so @graph_asset and inner @op
         # declarations both declare the resources they need
@@ -566,25 +572,9 @@ def dynamic_graph_asset(
         log.debug(f"required_resource_keys: '{required_resource_keys}'")
 
         # -- Locate resources containing GraphDimension fields --
-        dimension_resource_info = _get_dimension_resources(asset_name, resource_params)
+        dimension_resource_info = _get_dimension_resource_info(asset_name, resource_params)
 
-        # Infer upstream op ins from all parameters that aren't context or config
-        inferred_ins = {
-            name: dg.In()
-            for name in sig.parameters
-            if name not in ["config", "context", *required_resource_keys]
-        }
-
-        # User overrides at op level
-        op_ins = {**inferred_ins, **(ins or {})}
-
-        # Asset-level ins for @graph_asset
-        asset_ins: dict[str, dg.AssetIn] = {
-            name: _in_to_asset_in(name, op_in)
-            for name, op_in in op_ins.items()
-        }
-
-        log.debug(f"inferred_ins: '{inferred_ins}'")
+        op_ins, asset_ins = _infer_ins(sig, required_resource_keys, ins)
         log.debug(f"op_ins: '{op_ins}'")
         log.debug(f"asset_ins: '{asset_ins}'")
 
@@ -706,46 +696,16 @@ def dynamic_graph_asset(
             }
             log.debug(f"resource_kwargs: {resource_kwargs}")
 
-            # Current mapping key (Dagster provides this via dynamic mapping context)
+            # decode graph_dimensions from mapping_key
             mapping_key = cast(str, context.get_mapping_key())
-            log.debug(f"mapping_key: '{mapping_key}'")
-
-            # Decode mapping key back into tuple of values
-            # (assumes your _encode_mapping_key is reversible)
-            decoded_mapping_key = _decode_mapping_key(mapping_key)
-
-            graph_dimensions = {
-                    field: value
-                    for field, value in zip(
-                        dimension_resource_info.dimension_fields,
-                        decoded_mapping_key
-                        )
-                    }
-
+            decoded = _decode_mapping_key(mapping_key)
+            graph_dimensions = dict(zip(dimension_resource_info.dimension_fields, decoded))
             log.debug(f"graph_dimensions: '{graph_dimensions}'")
 
-            # Apply to resource instance for THIS op only
-            dimension_resource = getattr(
-                context.resources,
-                dimension_resource_info.param_name,
-            )
-
-            for field_name, value in graph_dimensions.items():
-                graph_dim_obj = cast(
-                        GraphDimension,
-                        getattr(dimension_resource, field_name)
-                        )
-
-                graph_dim_obj.set_current_value(value)
-
-            # ----------------------------
-            # Optional: "first dimension" check (now simpler + correct)
-            # ----------------------------
+            dimension_resource = _apply_graph_dimensions(context, dimension_resource_info, graph_dimensions)
 
             is_first_dimension = all(
-                graph_dimensions[field] == getattr(
-                    dimension_resource, field
-                ).values[0]
+                graph_dimensions[field] == getattr(dimension_resource, field).values[0]
                 for field in dimension_resource_info.dimension_fields
             )
 
