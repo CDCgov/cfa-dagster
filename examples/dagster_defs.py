@@ -20,8 +20,8 @@ from dagster_azure.blob import (
 # ruff: noqa: F401
 from cfa_dagster import (
     ADLS2PickleIOManager,
-    GraphDimension,
     ExecutionConfig,
+    GraphDimension,
     SelectorConfig,
     azure_batch_executor,
     azure_container_app_job_executor,
@@ -187,6 +187,7 @@ def parallel_r_asset(
 
 # only expose this job when running locally
 if not is_production():
+
     @dg.op
     def build_image(context: dg.OpExecutionContext, should_push: bool):
         cmd = f"docker build -t {image} ."

@@ -22,7 +22,6 @@ from typing import (
     cast,
     get_origin,
     get_type_hints,
-    overload,
 )
 from typing import Sequence as TypeSequence
 
@@ -43,17 +42,6 @@ from .execution.utils import ExecutionConfig, SelectorConfig
 log = logging.getLogger(__name__)
 
 INTERNAL_CONFIG_IO_MANAGER = ADLS2PickleIOManager().get_resource_definition()
-
-# NOTE: Goals for graph_dimension
-# - single-definition of graph_dimension
-# - type-safe access e.g. resource.graph_dimension_property instead of context.graph_dimensions["graph_dimension_property"] so users get an error when accessing an invalid graph_dimension
-# - a 'strict' graph_dimension option using automatically-generated enums e.g. user provides state: list[str] = ["CA", "TX", "NY"] and Launchpad prevents state.WY
-
-# NOTE: Requirements:
-# - GraphDimension type for IDE-level autocomplete
-# - class decorator or subclass for auto-enum behavior UPDATE: not feasible with decorator. Subclass might be overkill
-
-# NOTE: Tradeoffs:
 
 
 class GraphAssetKwargs(TypedDict, total=False):
@@ -349,27 +337,12 @@ def _apply_graph_dimensions(
 
 
 # -- Decorator --
-@overload
 def dynamic_graph_asset(
-    fn: Callable[..., Any],
-    /,
-) -> dg.AssetsDefinition: ...
-
-
-@overload
-def dynamic_graph_asset(
+    fn: Callable[..., Any] | None = None,
+    *,
     ins: dict[str, dg.In] | None = None,
     io_manager_key: str | None = None,
     retry_policy: dg.RetryPolicy | None = None,
-    output_mode: Literal["first", "all"] = "first",
-    **graph_asset_kwargs: Unpack[GraphAssetKwargs],
-) -> Callable[[Callable[..., Any]], dg.AssetsDefinition]: ...
-
-
-def dynamic_graph_asset(
-    ins: dict[str, dg.In] = None,
-    io_manager_key: Optional[str] = None,
-    retry_policy: Optional[dg.RetryPolicy] = None,
     output_mode: Literal["first", "all"] = "first",
     **graph_asset_kwargs: Unpack[GraphAssetKwargs],
 ) -> dg.AssetsDefinition | Callable[[Callable[..., Any]], dg.AssetsDefinition]:
@@ -386,7 +359,6 @@ def dynamic_graph_asset(
     so original values (including spaces, hyphens, etc.) are recovered exactly in
     the compute op, while safe characters remain human-readable in the Dagster UI.
 
-    Return type annotations are required for functions that return a value.
     Use ``output_mode`` to control whether the output is emitted from a single dimension or collected from all dimensions.
     This is especially powerful with the ADLS2FilesystemIOManager since you can upload a file or directory for each graph dimension and return the parent directory as the final output.
     Downstream assets using the ADLS2FilesystemIOManager will download the structured directory automatically.
@@ -472,6 +444,7 @@ def dynamic_graph_asset(
         @dynamic_graph_asset(
             partitions_def=daily_partitions,
             ins={"upstream": dg.AssetIn("some_upstream_asset")},
+            output_mode="first",
         )
         def my_dynamic_asset(context: dg.OpExecutionContext, my_config: MyConfig, upstream_asset):
             my_code_pipeline(my_config.disease.current_value, my_config.state.current_value, upstream_asset)
@@ -483,11 +456,11 @@ def dynamic_graph_asset(
 
         Aggregated value from each graph dimension:
 
-
         @dynamic_graph_asset(
             partitions_def=daily_partitions,
             io_manager_key="ADLS2PickleIOManager",
             ins={"upstream": dg.AssetIn("some_upstream_asset")},
+            output_mode="all",
         )
         def my_dynamic_asset(context: dg.OpExecutionContext, my_config: MyConfig, upstream_asset):
             result = my_code_pipeline(my_config.disease.current_value, my_config.state.current_value, upstream_asset)
@@ -499,15 +472,11 @@ def dynamic_graph_asset(
 
         File from each graph dimension:
 
-        class MyAssetConfig(dg.Config):
-            disease: List[str]
-            state: List[str]
-            container: str
-
         @dynamic_graph_asset(
             partitions_def=daily_partitions,
             io_manager_key="ADLS2FilesystemIOManager",
             ins={"upstream": dg.AssetIn("some_upstream_asset")},
+            output_mode="all",
         )
         def my_dynamic_asset(context: dg.OpExecutionContext, my_config: MyConfig, upstream_asset):
             output_path = my_code_pipeline(my_config.disease.current_value, my_config.state.current_value, upstream_asset)
@@ -531,12 +500,6 @@ def dynamic_graph_asset(
                     └── FLU_NY.txt
 
     """
-
-    if callable(ins):
-        _fn = ins
-        ins = None
-    else:
-        _fn = None
 
     def decorator(fn):
         asset_name = fn.__name__
@@ -904,6 +867,6 @@ def dynamic_graph_asset(
 
             return _asset
 
-    if _fn is not None:
-        return decorator(_fn)
+    if fn is not None:
+        return decorator(fn)
     return decorator

@@ -10,8 +10,8 @@
 import dagster as dg
 
 from cfa_dagster import (
-    collect_definitions,
     GraphDimension,
+    collect_definitions,
     dynamic_graph_asset,
     start_dev_env,
 )
@@ -25,9 +25,7 @@ class MyAssetConfig(dg.ConfigurableResource):
 
 
 @dynamic_graph_asset
-def my_asset(
-    context: dg.OpExecutionContext, my_asset_config: MyAssetConfig
-):
+def my_asset(context: dg.OpExecutionContext, my_asset_config: MyAssetConfig):
     disease = my_asset_config.disease.current_value
     context.log.info(f"Watch out for: '{disease}'")
 
@@ -36,8 +34,5 @@ collected_defs = collect_definitions(globals())
 
 # Create Definitions object
 defs = dg.Definitions(
-        **collected_defs,
-        resources={
-            "my_asset_config": MyAssetConfig()
-            }
-        )
+    **collected_defs, resources={"my_asset_config": MyAssetConfig()}
+)
