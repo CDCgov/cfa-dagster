@@ -303,13 +303,13 @@ def unpack_output(output) -> tuple[Any, dict]:
 
 def _infer_ins(
     sig: inspect.Signature,
-    required_resource_keys: set[str],
+    resource_params_keys: set[str],
     ins: dict[str, dg.In] | None,
 ) -> tuple[dict[str, dg.In], dict[str, dg.AssetIn]]:
     inferred_ins = {
         name: dg.In()
         for name in sig.parameters
-        if name not in ["config", "context", *required_resource_keys]
+        if name not in ["config", "context", *resource_params_keys]
     }
     op_ins = {**inferred_ins, **(ins or {})}
     asset_ins = {
@@ -534,17 +534,17 @@ def dynamic_graph_asset(
         # -- Locate Resource parameters --
         resource_params = _get_resource_params(hints)
 
-        # Build the required_resource_keys set so @graph_asset and inner @op
+        # Build the resource_params_keys set so @graph_asset and inner @op
         # declarations both declare the resources they need
-        required_resource_keys: set[str] = set(resource_params.keys())
-        log.debug(f"required_resource_keys: '{required_resource_keys}'")
+        resource_params_keys: set[str] = set(resource_params.keys())
+        log.debug(f"resource_params_keys: '{resource_params_keys}'")
 
         # -- Locate resources containing GraphDimension fields --
         dimension_resource_info = _get_dimension_resource_info(
             asset_name, resource_params
         )
 
-        op_ins, asset_ins = _infer_ins(sig, required_resource_keys, ins)
+        op_ins, asset_ins = _infer_ins(sig, resource_params_keys, ins)
         log.debug(f"op_ins: '{op_ins}'")
         log.debug(f"asset_ins: '{asset_ins}'")
 
@@ -552,6 +552,12 @@ def dynamic_graph_asset(
         # between isolated mapped compute steps.
         INTERNAL_CONFIG_IO_MANAGER_KEY = (
             "internal_dynamic_graph_asset_io_manager"
+        )
+
+        required_resource_keys = (
+            list(resource_params_keys)
+            + list(graph_asset_kwargs.get("resource_defs", {}).keys())
+            + [INTERNAL_CONFIG_IO_MANAGER_KEY]
         )
 
         # -- config op to create DynamicOutputs for fanout --
@@ -575,10 +581,7 @@ def dynamic_graph_asset(
                     else {}
                 ),
             },
-            required_resource_keys=[
-                INTERNAL_CONFIG_IO_MANAGER_KEY,
-                dimension_resource_info.param_name,
-            ],
+            required_resource_keys=required_resource_keys,
             tags=in_process_config.to_run_tags(),
         )
         def gen_config(context, **kwargs):
@@ -648,9 +651,7 @@ def dynamic_graph_asset(
                 else {"out": dg.Out(dg.Nothing)}
             ),
             # set resources based on decorated fn signature, explicit decorator param, and internal io manager
-            required_resource_keys=list(required_resource_keys)
-            + list(graph_asset_kwargs.get("resource_defs", {}).keys())
-            + [INTERNAL_CONFIG_IO_MANAGER_KEY],
+            required_resource_keys=required_resource_keys,
             retry_policy=retry_policy,
             config_schema=config_cls.to_config_schema()
             if config_cls
