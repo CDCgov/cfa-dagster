@@ -14,6 +14,7 @@ from .azure_keyvault import AzureKeyVaultResource
 from .docker.executor import docker_executor
 from .dynamic_graph_asset import (
     GraphDimension,
+    GraphDimensionExclusion,
     dynamic_graph_asset,
 )
 from .execution import (

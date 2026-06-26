@@ -90,6 +90,20 @@ class GraphDimension(dg.Config, Generic[T]):
         return self._current_value
 
 
+class GraphDimensionExclusion(dg.Config, Generic[T]):
+    values: list[T] = []
+
+    def __init__(self, values: list[str]):
+        super().__init__(values=values)
+
+
+@dataclass
+class ExclusionResourceInfo:
+    param_name: str
+    resource_cls: type
+    exclusion_fields: list[str]
+
+
 def _get_resource_params(hints) -> dict[str, type]:
     resource_params: dict[str, type] = {
         name: hint
@@ -139,6 +153,48 @@ def _get_dimension_resource_info(
 
     log.debug(f"dimension_resource_info: {dimension_info}")
     return dimension_info
+
+
+def _get_exclusion_resource_info(
+    asset_name: str,
+    resource_params: dict[str, type],
+    dimension_fields: list[str],
+) -> list[ExclusionResourceInfo]:
+    exclusion_infos: list[ExclusionResourceInfo] = []
+
+    for param_name, resource_cls in resource_params.items():
+        resource_hints = get_type_hints(resource_cls)
+
+        exclusion_fields = [
+            field_name
+            for field_name, annotation in resource_hints.items()
+            if _is_exclusion_annotation(annotation)
+        ]
+
+        if not exclusion_fields:
+            continue
+
+        # Validate that all exclusion field names match dimension field names
+        for field in exclusion_fields:
+            if field not in dimension_fields:
+                raise ValueError(
+                    f"@dynamic_graph_asset '{asset_name}': "
+                    f"GraphDimensionExclusion field '{field}' in resource "
+                    f"'{param_name}' does not match any GraphDimension field. "
+                    f"Available dimension fields: {dimension_fields}"
+                )
+
+        exclusion_infos.append(
+            ExclusionResourceInfo(
+                param_name=param_name,
+                resource_cls=resource_cls,
+                exclusion_fields=exclusion_fields,
+            )
+        )
+
+    if exclusion_infos:
+        log.debug(f"exclusion_resource_infos: {exclusion_infos}")
+    return exclusion_infos
 
 
 def _get_config_cls(hints):
@@ -191,6 +247,22 @@ def _is_dimension_annotation(annotation) -> bool:
     )
 
     return metadata is not None and metadata.get("origin") is GraphDimension
+
+
+def _is_exclusion_annotation(annotation) -> bool:
+    if get_origin(annotation) is GraphDimensionExclusion:
+        return True
+
+    metadata = getattr(
+        annotation,
+        "__pydantic_generic_metadata__",
+        None,
+    )
+
+    return (
+        metadata is not None
+        and metadata.get("origin") is GraphDimensionExclusion
+    )
 
 
 def _has_return_value(fn) -> bool:
@@ -544,6 +616,13 @@ def dynamic_graph_asset(
             asset_name, resource_params
         )
 
+        # -- Locate resources containing GraphDimensionExclusion fields --
+        exclusion_resources_info = _get_exclusion_resource_info(
+            asset_name,
+            resource_params,
+            dimension_resource_info.dimension_fields,
+        )
+
         op_ins, asset_ins = _infer_ins(sig, resource_params_keys, ins)
         log.debug(f"op_ins: '{op_ins}'")
         log.debug(f"asset_ins: '{asset_ins}'")
@@ -608,7 +687,26 @@ def dynamic_graph_asset(
                     dimension_field,
                 )
 
-                axes.append(graph_dimension.values)
+                values = graph_dimension.values
+
+                # filter out excluded dimension values across all exclusion resources
+                if exclusion_resources_info:
+                    excluded_values: set = set()
+                    for excl_info in exclusion_resources_info:
+                        excl_resource = getattr(
+                            context.resources, excl_info.param_name
+                        )
+                        exclusion_obj = getattr(
+                            excl_resource, dimension_field, None
+                        )
+                        if exclusion_obj is not None and exclusion_obj.values:
+                            excluded_values.update(set(exclusion_obj.values))
+                    if excluded_values:
+                        values = [
+                            v for v in values if v not in excluded_values
+                        ]
+
+                axes.append(values)
 
             for combo in itertools.product(*axes):
                 mapping_key = _encode_mapping_key(combo)
