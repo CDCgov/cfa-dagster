@@ -208,7 +208,14 @@ def _run_cli(
 
     has_subcommand = any(not arg.startswith("-") for arg in raw_args[1:])
 
+    first_subcommand = next(
+        (arg for arg in raw_args[1:] if not arg.startswith("-")),
+        None,
+    )
+
     def should_retry():
+        if first_subcommand == "check":
+            return False
         return has_subcommand or retry_without_subcommand
 
     def retry_with_defs_file():

@@ -13,7 +13,8 @@ from .azure_container_app_job.launcher import AzureContainerAppJobRunLauncher
 from .azure_keyvault import AzureKeyVaultResource
 from .docker.executor import docker_executor
 from .dynamic_graph_asset import (
-    DynamicGraphAssetExecutionContext,
+    GraphDimension,
+    GraphDimensionExclusion,
     dynamic_graph_asset,
 )
 from .execution import (
