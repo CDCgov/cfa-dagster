@@ -1,19 +1,13 @@
 # Quickstart (Dagster Example)
 
 This basic example should help you get up and running with local Dagster development and serve as a blueprint for integration with existing repos. It is highly recommended that you complete the Dagster quickstart [tutorial](https://docs.dagster.io/getting-started/quickstart) (~10 mins) before following these steps to familiarize yourself with basic Dagster concepts and the UI.
-## First steps
-- To get started with local Dagster development, clone this repo and check out the [examples](examples/)
 
-- To use this repo as a python library, add the dependency to your `pyproject.toml` or inline PEP 723 script comment:
-```toml
- dependencies = [
-    "cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git",
- ]
 
-```
+## Running an example
 
-## Running the example
-1. Start the Dagster UI by running `uv run dagster_defs.py` and clicking the link in your terminal (usually http://127.0.0.1:4000/)
+To get started with local Dagster development, clone the [`cfa-dagster` repository](https://github.com/CDCgov/cfa-dagster/tree/main) and check out the [examples](examples/). Running the example will automatically install the necessary dependencies into a virtual environment and activate it. 
+
+1. Now that you've cloned the repo and have entered the `examples/` directory, start the Dagster UI by running `uv run dagster_defs.py` and clicking the link in your terminal (usually http://127.0.0.1:4000/)
 2. Build your image by navigating to the [build_image_job](http://127.0.0.1:4000/locations/dagster_defs.py/jobs/build_image_job/playground) and clicking `Launch Run` in the bottom right
 3. Materialize an asset!
 

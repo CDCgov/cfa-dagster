@@ -478,21 +478,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#first-steps" class="md-nav__link">
+  <a href="#running-an-example" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        First steps
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#running-the-example" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Running the example
+        Running an example
       </span>
     </span>
   </a>
@@ -533,7 +522,7 @@
   <span class="md-ellipsis">
     
   
-  Installation
+  Using Dagster in a Project
 
     
   </span>
@@ -778,20 +767,10 @@
 
 <h1 id="quickstart-dagster-example">Quickstart (Dagster Example)<a class="headerlink" href="#quickstart-dagster-example" title="Permanent link">&para;</a></h1>
 <p>This basic example should help you get up and running with local Dagster development and serve as a blueprint for integration with existing repos. It is highly recommended that you complete the Dagster quickstart <a href="https://docs.dagster.io/getting-started/quickstart">tutorial</a> (~10 mins) before following these steps to familiarize yourself with basic Dagster concepts and the UI.</p>
-<h2 id="first-steps">First steps<a class="headerlink" href="#first-steps" title="Permanent link">&para;</a></h2>
-<ul>
-<li>To get started with local Dagster development, clone this repo and check out the <a href="examples/">examples</a></li>
-</ul>
-<ul>
-<li>To use this repo as a python library, add the dependency to your <code>pyproject.toml</code> or inline PEP 723 script comment:
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="w"> </span><span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span><span class="s2">&quot;cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git&quot;</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w"> </span><span class="p">]</span>
-</span></code></pre></div></li>
-</ul>
-<h2 id="running-the-example">Running the example<a class="headerlink" href="#running-the-example" title="Permanent link">&para;</a></h2>
+<h2 id="running-an-example">Running an example<a class="headerlink" href="#running-an-example" title="Permanent link">&para;</a></h2>
+<p>To get started with local Dagster development, clone the <a href="https://github.com/CDCgov/cfa-dagster/tree/main"><code>cfa-dagster</code> repository</a> and check out the <a href="examples/">examples</a>. Running the example will automatically install the necessary dependencies into a virtual environment and activate it. </p>
 <ol>
-<li>Start the Dagster UI by running <code>uv run dagster_defs.py</code> and clicking the link in your terminal (usually http://127.0.0.1:4000/)</li>
+<li>Now that you've cloned the repo and have entered the <code>examples/</code> directory, start the Dagster UI by running <code>uv run dagster_defs.py</code> and clicking the link in your terminal (usually http://127.0.0.1:4000/)</li>
 <li>Build your image by navigating to the <a href="http://127.0.0.1:4000/locations/dagster_defs.py/jobs/build_image_job/playground">build_image_job</a> and clicking <code>Launch Run</code> in the bottom right</li>
 <li>Materialize an asset!<p>- In the Dagster UI, navigate to the Lineage page and click <code>basic_blob_asset</code>. (<a href="http://127.0.0.1:4000/asset-groups/basic_blob_asset?open-nodes%5B0%5D=dagster_defs.py&amp;open-nodes%5B1%5D=dagster_defs.py%3Adefault">Here</a> if you are on the default port 4000)<br />
   - Click <code>Materialize selected</code> and watch for your run to start on the Asset sidebar<br />
@@ -858,13 +837,13 @@
         
         
           
-          <a href="./installation.html" class="md-footer__link md-footer__link--next" aria-label="Next: Installation">
+          <a href="./installation.html" class="md-footer__link md-footer__link--next" aria-label="Next: Using Dagster in a Project">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Installation
+                Using Dagster in a Project
               </div>
             </div>
             <div class="md-footer__button md-icon">

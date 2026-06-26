@@ -29,7 +29,7 @@
     
     
       
-        <title>Installation - Dagster Adoption Guide</title>
+        <title>Using Dagster in a Project - Dagster Adoption Guide</title>
       
     
     
@@ -87,7 +87,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#installation" class="md-skip">
+        <a href="#using-dagster-in-a-project" class="md-skip">
           Skip to content
         </a>
       
@@ -123,7 +123,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Installation
+              Using Dagster in a Project
             
           </span>
         </div>
@@ -462,7 +462,7 @@
   <span class="md-ellipsis">
     
   
-  Installation
+  Using Dagster in a Project
 
     
   </span>
@@ -479,7 +479,7 @@
   <span class="md-ellipsis">
     
   
-  Installation
+  Using Dagster in a Project
 
     
   </span>
@@ -509,6 +509,45 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         Install Dagster
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#using-the-dagster-command-line-interface-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Using the Dagster Command-Line Interface (CLI)
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Using the Dagster Command-Line Interface (CLI)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#running-the-cfa-dagster-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Running the <code>cfa-dagster</code> CLI
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#update-your-dockerfile" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Update your Dockerfile
       </span>
     </span>
   </a>
@@ -754,7 +793,7 @@
                 
                   
 
-<h1 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h1>
+<h1 id="using-dagster-in-a-project">Using Dagster in a Project<a class="headerlink" href="#using-dagster-in-a-project" title="Permanent link">&para;</a></h1>
 <ul>
 <li><strong>Python:</strong> Dagster supports Python 3.10 - 3.13 (3.12 recommended).</li>
 <li><strong>Package manager:</strong> To manage the python packages, we recommend <a href="https://docs.astral.sh/uv/">uv</a> which Dagster uses internally.</li>
@@ -772,6 +811,29 @@ Or install with pip:<br />
 Or<br />
 <code>gh repo clone cdcgov/cfa-dagster</code> </li>
 </ol>
+<h2 id="using-the-dagster-command-line-interface-cli">Using the Dagster Command-Line Interface (CLI)<a class="headerlink" href="#using-the-dagster-command-line-interface-cli" title="Permanent link">&para;</a></h2>
+<p>The <a href="https://docs.dagster.io/api/clis/dg-cli/dg-cli-reference">Dagster CLI</a> is a set of commands you can run directly in your terminal or shell to interact with the Dagster platform without using a web browser. A command-line interface is a text-based interface where users type commands to perform tasks. In Dagster’s case, the CLI allows you to:</p>
+<ul>
+<li>Manage and run jobs — start, stop, or list runs, view logs, and check run status.</li>
+<li>Work with assets — list assets, materialize them, or check their health.</li>
+<li>Debug issues — export or import run artifacts for troubleshooting.</li>
+<li>Validate definitions — check your Dagster code for errors before running.</li>
+<li>Manage deployments — list deployments, filter runs by deployment, and view branch-specific logs.</li>
+<li>Authenticate and configure — log in to your Dagster+ deployment, switch profiles, and store credentials securely</li>
+</ul>
+<p>Instructions for installing and configuring the Dagster CLI from the Dagster official documentation can be found <a href="https://docs.dagster.io/api/clis/dg-cli/dg-cli-configuration">here</a>. </p>
+<h3 id="running-the-cfa-dagster-cli">Running the <code>cfa-dagster</code> CLI<a class="headerlink" href="#running-the-cfa-dagster-cli" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Activate your virtual environment (<code>venv</code>)</li>
+<li>Add <code>cfa-dagster</code> to <code>pyproject.toml</code>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="w"> </span><span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span><span class="s2">&quot;cfa-dagster @ git+https://github.com/cdcgov/cfa-dagster.git&quot;</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w"> </span><span class="p">]</span>
+</span></code></pre></div></li>
+<li><code>uv sync</code></li>
+<li>Run <code>cfa-dg dev</code></li>
+</ol>
+<h2 id="update-your-dockerfile">Update your Dockerfile<a class="headerlink" href="#update-your-dockerfile" title="Permanent link">&para;</a></h2>
 
 
 
