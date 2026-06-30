@@ -5,6 +5,12 @@
 * Make sure your website files (.html) are in one folder or else your app will not be deployed because the server will be trying to read ALL of your files.
 * This implementation assumes you already have your website files and they are in a GitHub repository.
 
+## Helpful Resources
+
+* [About Azure SWAs](https://learn.microsoft.com/en-us/azure/static-web-apps/overview)
+* [Tutorial: Build your first SWA](https://learn.microsoft.com/en-us/azure/static-web-apps/get-started-portal?tabs=vanilla-javascript&pivots=github)
+* [Authenticate and authorize SWA](https://learn.microsoft.com/en-us/azure/static-web-apps/authentication-authorization)
+
 ## Steps
 
 ### Creating the SWA
