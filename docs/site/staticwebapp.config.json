@@ -1,20 +1,17 @@
 {
-  "auth": {
-    "rolesSource": "/api/GetRoles",
-    "identityProviders": {
-      "azureActiveDirectory": {
-        "userDetailsClaim": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name",
-        "registration": {
-          "openIdIssuer": "https://login.microsoftonline.com/48aa478c-32b6-4e41-babc-cc13a9c9b986",
-          "clientIdSettingName": "ENTRA_CLIENT_ID",
-          "clientSecretSettingName": "ENTRA_CLIENT_SECRET"
-        },
-        "login": {
-          "loginParameters": [
-            "resource=https://graph.microsoft.com"
-          ]
-        }
-      }
+  "navigationFallback": {
+    "rewrite": "/index.html"
+  },
+  "routes": [
+    {
+      "route": "/*",
+      "allowedRoles": ["authenticated"]
+    }
+  ],
+  "responseOverrides": {
+    "401": {
+      "statusCode": 302,
+      "redirect": "/.auth/login/aad"
     }
   }
 }
