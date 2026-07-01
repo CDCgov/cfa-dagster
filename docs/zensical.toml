@@ -1,0 +1,105 @@
+
+[project]
+site_name = "Dagster Adoption Guide"
+site_description = "An introduction to Dagster with examples from CFA workflows."
+site_author = "Kelly Reagan"
+site_url = "https://kelly-a-reagan.github.io/cfa-dagster/"
+output_dir = "./"
+copyright = """
+Copyright &copy; 2026 The authors
+"""
+extra_javascript = [
+    "javascripts/mathjax.js",
+    "https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"
+]
+
+nav = [
+  { "Getting Started" = [
+      "getting-started/overview.md",
+      "getting-started/quickstart.md",
+      "getting-started/installation.md",
+      "getting-started/concepts.md"
+    ]
+  },
+
+  { "Tutorials" = [
+      "tutorial/azure.md",
+      "tutorial/docker.md"
+    ]
+  },
+
+  { "Examples" = [
+      "examples/county-rt.md",
+      "examples/nssp-etl.md",
+      "examples/scenarios-dynode.md"
+    ]
+  }
+]
+
+
+watch = [ "includes" ]
+
+[project.theme]
+
+language = "en"
+
+features = [
+    "announce.dismiss",
+    "content.tooltips",
+    "content.code.annotate",
+    "content.code.copy",
+    "content.code.select",
+    "content.footnote.tooltips",
+    "content.tabs.link",
+    "navigation.tabs",
+    "navigation.tabs.sticky",
+    "navigation.footer",
+    "navigation.indexes",
+    "navigation.instant",
+    "navigation.instant.prefetch",
+    "navigation.path",
+    "navigation.prune",
+    "navigation.sections",
+    "navigation.tracking",
+    "search.highlight",
+    "toc.follow",
+    "toc.integrate",
+]
+
+[project.markdown_extensions.toc]
+permalink = true
+
+[project.plugins.offline]
+
+[[project.theme.palette]]
+scheme = "slate"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+scheme = "default"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to dark mode"
+
+# together, these three extensions create tooltips
+# for command abbreviations via definitions in
+# `includes/abbreviations.md`
+[project.markdown_extensions.abbr]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.pymdownx.snippets]
+auto_append = [ "includes/abbreviations.md" ]
+
+[project.markdown_extensions.pymdownx.arithmatex]
+generic = true
+
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.pymdownx.details]
+[project.markdown_extensions.pymdownx.superfences]
+[project.markdown_extensions.pymdownx.tasklist]
+custom_checkbox = true
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+line_spans = "__span"
+pygments_lang_class = true
+
+[project.markdown_extensions.mdx_truly_sane_lists]
