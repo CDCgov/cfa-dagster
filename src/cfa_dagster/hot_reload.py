@@ -272,6 +272,7 @@ class HotReloader:
             self._server_ready = wait_for_server(self._host, self._port)
             if not self._server_ready:
                 return
+        log.info("Hot-reloading: Change detected, reloading workspace...")
         reload_via_graphql(host=self._host, port=self._port)
 
 
