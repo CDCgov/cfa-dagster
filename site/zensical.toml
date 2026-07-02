@@ -3,7 +3,7 @@
 site_name = "Dagster Adoption Guide"
 site_description = "An introduction to Dagster with examples from CFA workflows."
 site_author = "Kelly Reagan"
-site_url = "https://kelly-a-reagan.github.io/cfa-dagster/"
+site_url = "https://cdcgov.github.io/cfa-dagster"
 output_dir = "./"
 copyright = """
 Copyright &copy; 2026 The authors
