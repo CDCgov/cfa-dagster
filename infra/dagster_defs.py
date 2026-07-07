@@ -6,18 +6,12 @@ from typing import List
 import dagster as dg
 import requests
 import yaml
-from azure.batch import BatchServiceClient
-from azure.batch.models import (
-    BatchErrorException,
-    JobListOptions,
-    TaskListOptions,
-)
-from azure.core.credentials import TokenCredential
+from azure.batch import BatchClient
+from azure.core.exceptions import HttpResponseError
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.mgmt.msi import ManagedServiceIdentityClient
 from azure.mgmt.subscription import SubscriptionClient
-from msrest.authentication import BasicTokenAuthentication
 
 from cfa_dagster import (
     ADLS2PickleIOManager,
@@ -43,16 +37,14 @@ GRAPHQL_URL = "http://dagster.apps.edav.ext.cdc.gov/graphql"
 
 
 def find_stale_dagster_jobs(
-    batch_client: BatchServiceClient,
+    batch_client: BatchClient,
     idle_threshold: timedelta,
 ) -> List[str]:
     stale_job_ids: List[str] = []
 
-    jobs = batch_client.job.list(
-        job_list_options=JobListOptions(
-            filter="startswith(id,'dagster-') and state eq 'active'",
-            select="id",
-        ),
+    jobs = batch_client.list_jobs(
+        filter="startswith(id,'dagster-') and state eq 'active'",
+        select="id",
     )
 
     cutoff = (datetime.now(timezone.utc) - idle_threshold).isoformat()
@@ -61,17 +53,15 @@ def find_stale_dagster_jobs(
         job_id = job.id
 
         # 1️⃣ Any active tasks? → skip
-        active_tasks = batch_client.task.list(
-            job_id,
-            task_list_options=TaskListOptions(
-                filter=(
-                    "state eq 'active' or "
-                    "state eq 'running' or "
-                    "state eq 'preparing'"
-                ),
-                max_results=1,
-                select="id",
+        active_tasks = batch_client.list_tasks(
+            job_id=job_id,
+            filter=(
+                "state eq 'active' or "
+                "state eq 'running' or "
+                "state eq 'preparing'"
             ),
+            max_results=1,
+            select="id",
         )
 
         if any(True for _ in active_tasks):
@@ -79,13 +69,11 @@ def find_stale_dagster_jobs(
             continue
 
         # 2️⃣ Any recently-created tasks? → skip
-        recent_tasks = batch_client.task.list(
-            job_id,
-            task_list_options=TaskListOptions(
-                filter=f"creationTime ge {cutoff}",
-                max_results=1,
-                select="id",
-            ),
+        recent_tasks = batch_client.list_tasks(
+            job_id=job_id,
+            filter=f"creationTime ge {cutoff}",
+            max_results=1,
+            select="id",
         )
 
         if any(True for _ in recent_tasks):
@@ -117,38 +105,21 @@ def cleanup_stale_batch_jobs(
     for job_id in stale_jobs:
         try:
             context.log.info(f"Terminating idle Batch job: {job_id}")
-            batch_client.job.terminate(job_id)
-        except BatchErrorException as err:
+            batch_client.begin_terminate_job(job_id=job_id).result()
+        except HttpResponseError as err:
             context.log.warning(
                 f"Failed to terminate job {job_id}: "
                 f"{err.error.code if err.error else err}"
             )
 
 
-class AzureIdentityCredentialAdapter(BasicTokenAuthentication):
-    def __init__(self, credential: TokenCredential, scope: str):
-        super().__init__(None)
-        self._credential = credential
-        self._scope = scope
-
-    def signed_session(self, session):
-        token = self._credential.get_token(self._scope)
-        session.headers["Authorization"] = f"Bearer {token.token}"
-        return session
-
-
 @dg.resource
 def batch_client_resource():
     credential = DefaultAzureCredential()
 
-    adapter = AzureIdentityCredentialAdapter(
+    return BatchClient(
+        endpoint="https://cfaprdba.eastus.batch.azure.com",
         credential=credential,
-        scope="https://batch.core.windows.net/.default",
-    )
-
-    return BatchServiceClient(
-        credentials=adapter,
-        batch_url="https://cfaprdba.eastus.batch.azure.com",
     )
 
 

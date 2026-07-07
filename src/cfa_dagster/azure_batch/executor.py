@@ -7,20 +7,9 @@ from collections.abc import Iterator
 from typing import TYPE_CHECKING, Optional, cast
 
 import dagster._check as check
-from azure.batch import BatchServiceClient
-from azure.batch.models import (
-    AutoUserScope,
-    AutoUserSpecification,
-    BatchErrorException,
-    ComputeNodeIdentityReference,
-    ContainerRegistry,
-    ElevationLevel,
-    JobAddParameter,
-    PoolInformation,
-    TaskAddParameter,
-    TaskContainerSettings,
-    UserIdentity,
-)
+from azure.batch import BatchClient
+from azure.batch import models as batch_models
+from azure.core.exceptions import HttpResponseError
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.subscription import SubscriptionClient
 from dagster import Field, Permissive, StringSource, executor
@@ -45,7 +34,6 @@ from dagster_docker.utils import (
     validate_docker_config,
     validate_docker_image,
 )
-from msrest.authentication import BasicTokenAuthentication
 
 from ..utils import get_run_timestamp
 
@@ -181,25 +169,19 @@ class AzureBatchStepHandler(StepHandler):
         # self._pool_id = "cfa-dagster"
         self._pool_id = pool_name
         log.debug(f"Launching a new {self.name}")
-        credential_v2 = DefaultAzureCredential()
-        token = {
-            "access_token": credential_v2.get_token(
-                "https://batch.core.windows.net/.default"
-            ).token
-        }
-        credential_v1 = BasicTokenAuthentication(token)
+        credential = DefaultAzureCredential()
 
         batch_url = "https://cfaprdba.eastus.batch.azure.com"
 
         self._subscription_id = (
-            SubscriptionClient(credential_v2)
+            SubscriptionClient(credential)
             .subscriptions.list()
             .next()
             .subscription_id
         )
 
-        self._batch_client = BatchServiceClient(
-            credentials=credential_v1, batch_url=batch_url
+        self._batch_client = BatchClient(
+            endpoint=batch_url, credential=credential
         )
 
         self._image = check.opt_str_param(image, "image")
@@ -370,26 +352,26 @@ class AzureBatchStepHandler(StepHandler):
             return f"{PREFIX}{step_key}-{short_run_id}-{retry_str}"
 
     def _get_or_create_job(self, batch_client, job_id: str, pool_id: str):
-        pool_info = PoolInformation(pool_id=pool_id)
+        pool_info = batch_models.BatchPoolInfo(pool_id=pool_id)
 
-        job = JobAddParameter(
+        job = batch_models.BatchJobCreateOptions(
             id=job_id,
             pool_info=pool_info,
         )
 
         try:
-            batch_client.job.add(job)
+            batch_client.create_job(job=job)
             log.info(f"Created Batch job {job_id}")
-            return batch_client.job.get(job_id)
+            return batch_client.get_job(job_id=job_id)
 
-        except BatchErrorException as err:
+        except HttpResponseError as err:
             if err.error.code != "JobExists":
                 raise
 
             # Job was created by another thread/process
             log.debug(f"Batch job {job_id} already exists")
 
-            existing_job = batch_client.job.get(job_id)
+            existing_job = batch_client.get_job(job_id=job_id)
 
             # Should never happen since pool_id is factored into job_id hash
             if existing_job.pool_info.pool_id != pool_id:
@@ -429,9 +411,9 @@ class AzureBatchStepHandler(StepHandler):
         user_assigned_identity_name = "ext-edav-cfa-batch-account"
         resource_id = f"/subscriptions/{self._subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{user_assigned_identity_name}"
 
-        container_registry = ContainerRegistry(
+        container_registry = batch_models.ContainerRegistryReference(
             registry_server="cfaprdbatchcr.azurecr.io",
-            identity_reference=ComputeNodeIdentityReference(
+            identity_reference=batch_models.BatchNodeIdentityReference(
                 resource_id=resource_id
             ),
         )
@@ -446,22 +428,22 @@ class AzureBatchStepHandler(StepHandler):
             "working_dir", "/app"
         )  # TODO: validate this
 
-        container_settings = TaskContainerSettings(
+        container_settings = batch_models.BatchTaskContainerSettings(
             image_name=step_image,
             container_run_options=f"--rm --workdir {workdir} {mount_options}",
             registry=container_registry,
         )
 
         # Run task as admin to be able to read/write to mounted drives
-        user_identity = UserIdentity(
-            auto_user=AutoUserSpecification(
-                scope=AutoUserScope.pool,
-                elevation_level=ElevationLevel.admin,
+        user_identity = batch_models.UserIdentity(
+            auto_user=batch_models.AutoUserSpecification(
+                scope=batch_models.AutoUserScope.pool,
+                elevation_level=batch_models.ElevationLevel.admin,
             )
         )
         task_id = self._get_task_id(step_handler_context)
 
-        task = TaskAddParameter(
+        task = batch_models.BatchTaskCreateOptions(
             id=task_id,
             command_line=" ".join(command),
             container_settings=container_settings,
@@ -471,7 +453,7 @@ class AzureBatchStepHandler(StepHandler):
             user_identity=user_identity,
         )
 
-        self._batch_client.task.add(job_id=job_id, task=task)
+        self._batch_client.create_task(job_id=job_id, task=task)
 
         yield DagsterEvent.step_worker_starting(
             step_handler_context.get_step_context(step_key),
@@ -491,7 +473,7 @@ class AzureBatchStepHandler(StepHandler):
         task_id = self._get_task_id(step_handler_context)
 
         try:
-            task = self._batch_client.task.get(job_id, task_id)
+            task = self._batch_client.get_task(job_id=job_id, task_id=task_id)
 
             # --- Check for explicit task failure info ---
             failure_details = None
@@ -532,7 +514,7 @@ class AzureBatchStepHandler(StepHandler):
                     )
                 )
 
-        except BatchErrorException as err:
+        except HttpResponseError as err:
             return CheckStepHealthResult.unhealthy(
                 reason=f"Error checking Azure Batch task status: {err}"
             )
@@ -544,7 +526,7 @@ class AzureBatchStepHandler(StepHandler):
         task_id = self._get_task_id(step_handler_context)
 
         try:
-            task = self._batch_client.task.get(job_id, task_id)
+            task = self._batch_client.get_task(job_id=job_id, task_id=task_id)
             if task.state in ("active", "preparing", "running"):
                 return CheckStepHealthResult.healthy()
             elif task.state == "completed":
@@ -558,7 +540,7 @@ class AzureBatchStepHandler(StepHandler):
                 return CheckStepHealthResult.unhealthy(
                     reason=f"Azure Batch task {task_id} in job {job_id} has unexpected state {task.state}."
                 )
-        except BatchErrorException as err:
+        except HttpResponseError as err:
             return CheckStepHealthResult.unhealthy(
                 reason=f"Error checking Azure Batch task status: {err}"
             )
@@ -575,4 +557,4 @@ class AzureBatchStepHandler(StepHandler):
             message=f"Terminating Azure Batch task {task_id} in job {job_id} for step {step_key}.",
             event_specific_data=EngineEventData(),
         )
-        self._batch_client.task.terminate(job_id=job_id, task_id=task_id)
+        self._batch_client.terminate_task(job_id=job_id, task_id=task_id)
