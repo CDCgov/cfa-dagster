@@ -3,7 +3,7 @@ on:
   pull_request:
   push:
     branches:
-      - main
+      - kelly-docs
 
 env:
   GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
