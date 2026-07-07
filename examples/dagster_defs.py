@@ -193,11 +193,11 @@ if not is_production():
         cmd = f"docker build -t {image} ."
 
         if should_push:
-            # subprocess.run(
-            #     f"az login --identity && az acr login -n {IMAGE_REGISTRY}",
-            #     check=True,
-            #     shell=True,
-            # )
+            subprocess.run(
+                f"az login --identity && az acr login -n {IMAGE_REGISTRY}",
+                check=True,
+                shell=True,
+            )
             cmd += " --push"
 
         context.log.debug(f"Running {cmd}")
