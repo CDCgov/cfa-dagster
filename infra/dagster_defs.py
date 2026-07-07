@@ -44,7 +44,7 @@ def find_stale_dagster_jobs(
 
     jobs = batch_client.list_jobs(
         filter="startswith(id,'dagster-') and state eq 'active'",
-        select="id",
+        select=["id"],
     )
 
     cutoff = (datetime.now(timezone.utc) - idle_threshold).isoformat()
@@ -61,7 +61,7 @@ def find_stale_dagster_jobs(
                 "state eq 'preparing'"
             ),
             max_results=1,
-            select="id",
+            select=["id"],
         )
 
         if any(True for _ in active_tasks):
@@ -73,7 +73,7 @@ def find_stale_dagster_jobs(
             job_id=job_id,
             filter=f"creationTime ge {cutoff}",
             max_results=1,
-            select="id",
+            select=["id"],
         )
 
         if any(True for _ in recent_tasks):
