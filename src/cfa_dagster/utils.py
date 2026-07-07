@@ -236,8 +236,8 @@ def _run_cli(
 
         fallback = check_needs_fallback_file(defs_file)
         if fallback and "-f" not in args and "--python-file" not in args:
-            log.info(f"No dagster project found, using -f {fallback}")
-            args = [*args, "-f", fallback]
+            log.info(f"No dagster project found, using -f {defs_file}")
+            args = [*args, "-f", defs_file]
 
         try:
             start_hot_reloader_for_dev(
