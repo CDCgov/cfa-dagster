@@ -34,9 +34,9 @@ jobs:
           python-version-file: ".python-version"
 
       - name: Build website
-        run:
-        cd ./docs
-        uv run zensical build --clean
+        run: |
+          cd ./docs
+          uv run zensical build --clean
 
       - name: Deploy to GitHub Pages 
         uses: actions/upload-pages-artifact@v5
