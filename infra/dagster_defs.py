@@ -107,7 +107,8 @@ def cleanup_stale_batch_jobs(
         try:
             context.log.info(f"Terminating idle Batch job: {job_id}")
             batch_client.begin_terminate_job(
-                job_id=job_id, options=BatchJobTerminateOptions()
+                job_id=job_id,
+                options=BatchJobTerminateOptions(termination_reason="cleanup"),
             ).result()
         except HttpResponseError as err:
             context.log.warning(
