@@ -7,6 +7,7 @@ import dagster as dg
 import requests
 import yaml
 from azure.batch import BatchClient
+from azure.batch.models._models import BatchJobTerminateOptions
 from azure.core.exceptions import HttpResponseError
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
@@ -105,7 +106,9 @@ def cleanup_stale_batch_jobs(
     for job_id in stale_jobs:
         try:
             context.log.info(f"Terminating idle Batch job: {job_id}")
-            batch_client.begin_terminate_job(job_id=job_id).result()
+            batch_client.begin_terminate_job(
+                job_id=job_id, options=BatchJobTerminateOptions()
+            ).result()
         except HttpResponseError as err:
             context.log.warning(
                 f"Failed to terminate job {job_id}: "
