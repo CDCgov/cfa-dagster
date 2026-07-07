@@ -36,7 +36,9 @@ run_launcher:
 
 run_monitoring:
   enabled: true
-  max_resume_run_attempts: 1
+  # setting max_resume_run_attempts to > 0 will prevent compute cleanup on user termination
+  # https://github.com/dagster-io/dagster/issues/33923
+  max_resume_run_attempts: 0
 
 concurrency:
   default_op_concurrency_limit: 1000

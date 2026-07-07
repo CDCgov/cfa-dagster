@@ -3,7 +3,7 @@
 # /// script
 # requires-python = ">=3.13,<3.14"
 # dependencies = [
-#    "cfa-dagster[dev] @ git+https://github.com/cdcgov/cfa-dagster.git@gio-batch-upgrade",
+#    "cfa-dagster[dev] @ git+https://github.com/cdcgov/cfa-dagster.git",
 # ]
 # ///
 
@@ -17,7 +17,6 @@ from dagster_azure.blob import (
     AzureBlobStorageResource,
 )
 
-from time import sleep
 # ruff: noqa: F401
 from cfa_dagster import (
     ADLS2PickleIOManager,
@@ -42,7 +41,6 @@ user = os.getenv("DAGSTER_USER")
 IMAGE_REGISTRY = "cfaprdbatchcr"
 image_tag = "latest" if is_production() else user
 image = f"{IMAGE_REGISTRY}.azurecr.io/cfa-dagster:{image_tag}"
-image = "ghcr.io/giomrella/cfa_dagster:latest"
 
 # ----------------
 # Execution Config - defines where your workflows run
@@ -144,7 +142,6 @@ def basic_blob_asset(azure_blob_storage: AzureBlobStorageResource):
         )
     downloader = container_client.download_blob("test-files/test_config.json")
     print("Downloaded file from blob!")
-    sleep(600)
     return downloader.readall().decode("utf-8")
 
 
