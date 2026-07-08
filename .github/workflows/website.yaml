@@ -39,7 +39,6 @@ jobs:
           uv run zensical build --clean
 
       - name: Commit and push built site
-        if: ${{ github.event_name == 'push' }}
         run: |
           git add docs/site
           git commit -m "Build website" || echo "No changes to commit"
