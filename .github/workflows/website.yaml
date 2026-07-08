@@ -40,7 +40,7 @@ jobs:
           cp -r site/* ./ &&
           git add docs/ &&
           git commit -m "Copy site files to /docs for GitHub Pages" &&
-          git push &&
+          git push 
         
       - uses: actions/upload-pages-artifact@v5
         with:
