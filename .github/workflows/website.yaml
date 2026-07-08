@@ -37,16 +37,16 @@ jobs:
         run: |
           cd docs &&
           uv run zensical build --clean &&
-          mv site/index.html ./ &&
-          mv site/404.html ./ &&
-          mv site/objects.inv ./ &&
-          mv site/sitemap.xml ./ &&
-          mv site/search.js ./ &&
-          mv site/search.json ./ &&
-          mv site/assets/* ./assets &&
-          mv site/examples/* ./ &&
-          mv site/getting-started/* ./ &&
-          mv site/tutorial/* ./ 
+          mv -f site/index.html ./ &&
+          mv -f site/404.html ./ &&
+          mv -f site/objects.inv ./ &&
+          mv -f site/sitemap.xml ./ &&
+          mv -f site/search.js ./ &&
+          mv -f site/search.json ./ &&
+          mv -f site/assets/* ./assets &&
+          mv -f site/examples/* ./ &&
+          mv -f site/getting-started/* ./ &&
+          mv -f site/tutorial/* ./ 
         
       - uses: actions/upload-pages-artifact@v5
         with:
