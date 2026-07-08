@@ -41,6 +41,7 @@ jobs:
         with:
           name: github-pages
           path: docs/site
+          path: docs/site
           retention-days: "3"
 
   post-page-artifact:
@@ -63,6 +64,7 @@ jobs:
           gh-token: ${{ secrets.GITHUB_TOKEN }}
 
   deploy:
+    if: ${{ github.event_name == 'push' && github.ref_name == 'kelly-docs' }}
     if: ${{ github.event_name == 'push' && github.ref_name == 'kelly-docs' }}
 
     runs-on: ubuntu-latest
