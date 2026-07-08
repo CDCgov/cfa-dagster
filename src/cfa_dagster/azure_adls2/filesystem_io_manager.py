@@ -1,12 +1,11 @@
 import logging
 import os
+import tempfile
 from pathlib import Path
-from typing import Any, Union
+from typing import Any, Union, cast
 
 from azure.core.exceptions import ResourceNotFoundError
-from azure.storage.filedatalake import (
-    DataLakeServiceClient,
-)
+from azure.storage.filedatalake import DataLakeServiceClient
 from dagster import (
     AssetKey,
     ConfigurableIOManager,
@@ -14,14 +13,23 @@ from dagster import (
     OutputContext,
     ResourceDependency,
 )
+from dagster._core.definitions.partitions.utils import MultiPartitionKey
+from dagster._core.definitions.partitions.utils.multi import (
+    MULTIPARTITION_KEY_DELIMITER,
+)
 from dagster._core.storage.upath_io_manager import UPathIOManager
 from dagster._utils.cached_method import cached_method
 from dagster_azure.adls2 import ADLS2DefaultAzureCredential, ADLS2Resource
 from pydantic import Field
 from upath import UPath
 
-from ..dynamic_graph_asset import DynamicGraphAssetMetadata
 from ..utils import is_production
+from .filesystem_metadata import (
+    ADLS2FilesystemIOManagerMetadata,
+    InputMode,
+    OnInputConflict,
+)
+from .filesystem_path import ADLS2Path
 
 log = logging.getLogger(__name__)
 
@@ -93,8 +101,11 @@ class FilesystemADLS2IOManager(UPathIOManager):
         self,
         file_system: str,
         adls2_client: DataLakeServiceClient,
+        input_mode: InputMode,
+        on_input_conflict: OnInputConflict = "overwrite",
         prefix: str = "dagster",
         max_concurrency: int = 4,
+        delete_after_upload: bool = False,
     ):
         self._file_system = file_system
         self._adls2_client = adls2_client
@@ -103,6 +114,9 @@ class FilesystemADLS2IOManager(UPathIOManager):
         )
         self._prefix = prefix
         self._max_concurrency = max_concurrency
+        self._input_mode = input_mode
+        self._on_input_conflict = on_input_conflict
+        self._delete_after_upload = delete_after_upload
 
         # Verify the file system exists and we have access
         self._file_system_client.get_file_system_properties()
@@ -112,98 +126,116 @@ class FilesystemADLS2IOManager(UPathIOManager):
         # and load_from_path to use the Azure SDK directly)
         super().__init__(base_path=UPath(self._prefix))
 
-    def handle_output(self, context: OutputContext, obj: Any):
-        output_metadata = context.output_metadata
-        log.debug(f"output_metadata: '{output_metadata}'")
-        dga_metadata = DynamicGraphAssetMetadata.from_metadata(output_metadata)
-        if dga_metadata:
-            log.debug(
-                "@dynamic_graph_asset, modifying context to mimic an asset"
+    @staticmethod
+    def _expand_and_combine(
+        real_keys: list[str | MultiPartitionKey],
+        synthetic_partition_keys: list[str],
+    ) -> list[str]:
+        """
+        Normalize partition keys to slash-separated path segments and append
+        graph dimensions.
+
+        MultiPartitionKey already sorts dimensions by name in its __new__,
+        so the pipe-separated string is already in the correct order — we
+        just replace the delimiter.
+        """
+
+        def normalize(key: str) -> str:
+            return key.replace(MULTIPARTITION_KEY_DELIMITER, "/")
+
+        expanded = [normalize(k) for k in real_keys]
+        dim_suffix = "/".join(synthetic_partition_keys)
+
+        if expanded and dim_suffix:
+            return [f"{key}/{dim_suffix}" for key in expanded]
+        elif dim_suffix:
+            return [dim_suffix]
+        else:
+            return expanded
+
+    @staticmethod
+    def _patch_context(
+        context: InputContext | OutputContext,
+        meta: ADLS2FilesystemIOManagerMetadata,
+    ):
+        """
+        Monkey-patch context class properties so the parent UPathIOManager
+        sees the synthetic keys as if they were real Dagster partition keys.
+
+        Patching at the class level is required because Dagster context
+        properties are defined as class-level descriptors.
+        """
+        if meta.synthetic_partition_keys:
+            real_keys = (
+                context.asset_partition_keys
+                if context.has_asset_partitions
+                else meta.asset_partition_keys or []
             )
-            has_asset_partitions = not not dga_metadata.asset_partition_keys
+            synthetic_keys = FilesystemADLS2IOManager._expand_and_combine(
+                real_keys=real_keys,
+                synthetic_partition_keys=meta.synthetic_partition_keys,
+            )
+            has_partitions = bool(synthetic_keys)
+
             context.__class__.asset_partition_keys = property(
-                lambda self: dga_metadata.asset_partition_keys
+                lambda self: synthetic_keys
             )
             context.__class__.has_asset_partitions = property(
-                lambda self: has_asset_partitions
-            )
-            context.__class__.asset_key = property(
-                lambda self: AssetKey(dga_metadata.asset_key)
-            )
-            context.__class__.has_asset_key = property(
-                lambda self: not not dga_metadata.asset_key
+                lambda self: has_partitions
             )
             log.debug(
-                f"context.has_asset_partitions: '{context.has_asset_partitions}'"
+                f"Patched context: synthetic_partition_keys={synthetic_keys}"
             )
+
+        if meta.asset_key_path:
+            context.__class__.asset_key = property(
+                lambda self: AssetKey(meta.asset_key_path)
+            )
+            context.__class__.has_asset_key = property(lambda self: True)
+            log.debug(f"Patched context: asset_key={meta.asset_key_path}")
+
+    def handle_output(self, context: OutputContext, obj: Any):
+        meta = ADLS2FilesystemIOManagerMetadata.from_metadata(
+            context.output_metadata or {}
+        )
+
+        output_metadata = context.output_metadata
+        log.debug(f"output_metadata: '{output_metadata}'")
+        meta = ADLS2FilesystemIOManagerMetadata.from_metadata(output_metadata)
+
+        if meta and meta.skip_output:
+            log.info("dump_to_path: skip_output=True, skipping upload")
+            return
+
+        if meta:
+            if meta.skip_output:
+                log.debug(
+                    f"handle_output found output metadata, patching context: {meta}"
+                )
+
+            log.debug(
+                f"handle_output found output metadata, patching context: {meta}"
+            )
+            self._patch_context(context, meta)
+        else:
+            log.debug("handle_output no metadata found.")
+
         super().handle_output(context, obj)
-
-    def _get_paths_for_partitions(
-        self, context: Union[InputContext, OutputContext]
-    ) -> dict[str, "UPath"]:
-        paths = super()._get_paths_for_partitions(context)
-        # 2026-04-07 14:40:55,994 - cfa_dagster.azure_adls2.filesystem_io_manager - DEBUG - _get_paths_for_partitions: '{'2026-04-06': PosixUPath('dagster-files/gio/cfa_county_rt/2026-04-06')}'
-        log.debug(f"_get_paths_for_partitions: '{paths}'")
-        if isinstance(context, InputContext):
-            io_metadata = context.definition_metadata
-            log.debug(f"input_metadata: '{io_metadata}'")
-        else:
-            io_metadata = context.output_metadata
-            log.debug(f"output_metadata: '{io_metadata}'")
-        dga_metadata = DynamicGraphAssetMetadata.from_metadata(io_metadata)
-
-        if not dga_metadata or dga_metadata.should_return_parent:
-            return paths
-
-        # Build a new dict of paths with graph_dimensions appended
-        new_paths = {}
-        for partition_key, base_path in paths.items():
-            # Append the graph dimensions to the UPath
-            final_path = base_path
-            for dim in dga_metadata.graph_dimensions:
-                final_path = final_path / dim
-            new_paths[partition_key] = final_path
-        log.debug(
-            f"_get_paths_for_partitions (with graph_dimensions): '{new_paths}'"
-        )
-        return new_paths
-
-    def _get_path_without_extension(
-        self, context: Union[InputContext, OutputContext]
-    ) -> "UPath":
-        path = super()._get_path_without_extension(context)
-        log.debug(f"_get_path_without_extension: '{path}'")
-
-        if isinstance(context, InputContext):
-            io_metadata = context.definition_metadata
-            log.debug(f"input_metadata: '{io_metadata}'")
-        else:
-            io_metadata = context.output_metadata
-            log.debug(f"output_metadata: '{io_metadata}'")
-        dga_metadata = DynamicGraphAssetMetadata.from_metadata(io_metadata)
-
-        if (
-            not dga_metadata
-            or dga_metadata.asset_partition_keys
-            or dga_metadata.should_return_parent
-        ):
-            return path
-        # Append graph_dimensions to the path
-        for dim in dga_metadata.graph_dimensions:
-            path = path / dim
-
-        log.debug(
-            f"_get_path_without_extension (with graph_dimensions): '{path}'"
-        )
-        return path
 
     def load_input(self, context: InputContext) -> Union[Any, dict[str, Any]]:
         input_metadata = context.definition_metadata
         log.debug(f"input_metadata: '{input_metadata}'")
-        dga_metadata = DynamicGraphAssetMetadata.from_metadata(input_metadata)
-        if dga_metadata:
-            log.debug("@dynamic_graph_asset, returning dummy abfss://")
-            return
+        meta = ADLS2FilesystemIOManagerMetadata.from_metadata(input_metadata)
+
+        if meta:
+            if meta.skip_input:
+                log.debug("load_input: skip_input=True, returning None")
+                return
+
+            # TODO: is this needed?
+            # if meta.synthetic_partition_keys:
+            #     self._patch_context(context, meta)
+
         return super().load_input(context)
 
     # -------------------------------------------------------------------------
@@ -226,14 +258,6 @@ class FilesystemADLS2IOManager(UPathIOManager):
         ``obj`` should be a ``pathlib.Path`` pointing to a local file or directory.
         ``path`` is the ADLS2 destination path as constructed by UPathIOManager.
         """
-        output_metadata = context.output_metadata
-        log.debug(f"output_metadata: '{output_metadata}'")
-        dga_metadata = DynamicGraphAssetMetadata.from_metadata(output_metadata)
-        if dga_metadata and dga_metadata.should_return_parent:
-            log.info(
-                "@dynamic_graph_asset.should_return_parent==True, ignoring dump_to_path"
-            )
-            return
 
         if not isinstance(obj, Path):
             raise TypeError(
@@ -269,9 +293,32 @@ class FilesystemADLS2IOManager(UPathIOManager):
             f"{self._uri_for_prefix(adls2_prefix)}"
         )
 
+        if self._delete_after_upload:
+            try:
+                if obj.is_file():
+                    obj.unlink()
+                    context.log.debug(f"Deleted local file: {obj}")
+                else:
+                    # remove directory tree
+                    for p in sorted(obj.rglob("*"), reverse=True):
+                        if p.is_file():
+                            p.unlink()
+                        elif p.is_dir():
+                            try:
+                                p.rmdir()
+                            except OSError:
+                                pass
+                    obj.rmdir()
+                    context.log.debug(f"Deleted local directory: {obj}")
+
+            except Exception as e:
+                context.log.warning(
+                    f"Failed to delete local path {obj} after upload: {e}"
+                )
+
     def load_from_path(
         self, context: InputContext, path: UPath
-    ) -> Union[Path, str]:
+    ) -> Union[ADLS2Path, Path, str]:
         """Download a directory from ADLS2 to the local filesystem.
 
         If the downstream asset's type annotation is ``str``, returns the ADLS2
@@ -280,13 +327,10 @@ class FilesystemADLS2IOManager(UPathIOManager):
         """
         adls2_prefix = str(path)
 
-        input_metadata = context.definition_metadata
-        log.debug(f"input_metadata: '{input_metadata}'")
-        dga_metadata = DynamicGraphAssetMetadata.from_metadata(input_metadata)
         # If the downstream asset wants a string, return the ADLS2 URI directly
         # so the asset can use the SDK to selectively download files itself
-        if context.dagster_type.typing_type is str or dga_metadata:
-            return self._uri_for_prefix(adls2_prefix)
+        ttype = context.dagster_type.typing_type
+        log.debug(f"ttype: {ttype}")
 
         # Use the input name (as declared in `ins`) as the local folder name so that
         # the downloaded directory matches what the asset code expects, e.g.:
@@ -306,6 +350,62 @@ class FilesystemADLS2IOManager(UPathIOManager):
             local_dir = Path(input_name) / Path(*asset_relative_parts[1:])
         else:
             local_dir = Path(input_name)
+
+        # Extract per-asset metadata override for on_input_conflict
+        meta = ADLS2FilesystemIOManagerMetadata.from_metadata(
+            context.definition_metadata
+        )
+        effective_conflict = cast(
+            OnInputConflict,
+            meta.on_input_conflict if meta and meta.on_input_conflict
+            else self._on_input_conflict
+        )
+        log.debug(f"effective_conflict: {effective_conflict}")
+
+        # ------------------------------------------------------------
+        # MODE 1: return raw abfss path (no download)
+        # ------------------------------------------------------------
+        if (
+            # DEPRECATED, using the annotated type is not reliable
+            # maintaining for backwards compatibility until replaced
+            ttype is str or self._input_mode == "path"
+        ):
+            return self._uri_for_prefix(adls2_prefix)
+
+        # ------------------------------------------------------------
+        # MODE 2: return rich ADLS2 handle
+        # ------------------------------------------------------------
+        if self._input_mode == "reference":
+            return ADLS2Path(
+                _io_manager=self,
+                _path=adls2_prefix,
+                local_dir=local_dir,
+            )
+
+        # ------------------------------------------------------------
+        # MODE 3 (default): download locally
+        # ------------------------------------------------------------
+        log.debug(f"local_dir: {local_dir}")
+
+        # Check for local conflicts before downloading
+        if local_dir.exists() and any(local_dir.iterdir()):
+            if effective_conflict == "fail":
+                raise FileExistsError(
+                    f"Local directory already exists and is non-empty: {local_dir}. "
+                    f"Set on_input_conflict='overwrite' to overwrite existing files."
+                )
+            elif effective_conflict == "warn":
+                context.log.warning(
+                    f"Local directory already exists and is non-empty: {local_dir}. "
+                    f"Downloaded files may overwrite existing content."
+                )
+            elif effective_conflict == "skip":
+                context.log.warning(
+                    f"Local directory already exists and is non-empty: {local_dir}. "
+                    f"Skipping download and returning existing directory."
+                )
+                return local_dir
+
         local_dir.mkdir(parents=True, exist_ok=True)
 
         file_count = self._download_directory(
@@ -431,6 +531,41 @@ class FilesystemADLS2IOManager(UPathIOManager):
         file_client = self._file_system_client.get_file_client(str(path))
         file_client.delete_file()
 
+    def download_prefix(
+        self,
+        adls2_prefix: str,
+        local_dir: Path | None = None,
+    ) -> Path:
+        """
+        Download an ADLS prefix to a local directory.
+
+        Parameters
+        ----------
+        adls2_prefix:
+            ADLS path relative to the filesystem root.
+
+        local_dir:
+            Destination directory. If omitted, a temporary
+            directory is created.
+
+        Returns
+        -------
+        Path
+            Local directory containing downloaded files.
+        """
+
+        if local_dir is None:
+            local_dir = Path(tempfile.mkdtemp())
+
+        local_dir.mkdir(parents=True, exist_ok=True)
+
+        self._download_directory(
+            adls2_prefix=adls2_prefix,
+            local_dir=local_dir,
+        )
+
+        return local_dir
+
 
 class ADLS2FilesystemIOManager(ConfigurableIOManager):
     """An IOManager that stores directories and files on ADLS2.
@@ -505,6 +640,32 @@ class ADLS2FilesystemIOManager(ConfigurableIOManager):
             "which gives a good balance for files in the hundreds of MB to GB range."
         ),
     )
+    input_mode: InputMode = Field(
+        default="download",
+        description=(
+            "Mode to determine behavior on loading inputs from upstream. "
+            "'download': Download the file(s) from upstream, "
+            "'path': return an abfss:// formatted path, "
+            "'reference': return an ADLS2Path which includes an authenticated ADLS2 client."
+        ),
+    )
+    on_input_conflict: OnInputConflict = Field(
+        default="overwrite",
+        description=(
+            "Behavior when the local download target already exists. "
+            "'overwrite': Overwrite existing files (default), "
+            "'fail': Raise an error if the local directory exists and is non-empty, "
+            "'warn': Log a warning and proceed with the download, "
+            "'skip': Log a warning and return the existing directory without downloading."
+        ),
+    )
+    delete_after_upload: bool = Field(
+        default=False,
+        description=(
+            "Whether files/directories should be deleted after upload."
+            "Default: False"
+        ),
+    )
 
     @property
     @cached_method
@@ -516,10 +677,14 @@ class ADLS2FilesystemIOManager(ConfigurableIOManager):
             credential=ADLS2DefaultAzureCredential(kwargs={}),
         )
         user = "prod" if self.use_production else os.getenv("DAGSTER_USER")
+        log.debug(f"self.on_input_conflict: {self.on_input_conflict}")
 
         return FilesystemADLS2IOManager(
             file_system=adls2.storage_account,
             adls2_client=adls2.adls2_client,
+            input_mode=self.input_mode,
+            on_input_conflict=self.on_input_conflict,
+            delete_after_upload=self.delete_after_upload,
             prefix=f"dagster-files/{user}",
             max_concurrency=self.max_concurrency,
         )

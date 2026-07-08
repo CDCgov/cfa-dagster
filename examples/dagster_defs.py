@@ -20,8 +20,8 @@ from dagster_azure.blob import (
 # ruff: noqa: F401
 from cfa_dagster import (
     ADLS2PickleIOManager,
-    DynamicGraphAssetExecutionContext,
     ExecutionConfig,
+    GraphDimension,
     SelectorConfig,
     azure_batch_executor,
     azure_container_app_job_executor,
@@ -52,7 +52,6 @@ workdir = "/app"
 # this is the default run config that launches the job in your local shell
 # and executes each step in a separate system process
 default_config = ExecutionConfig(
-    launcher=SelectorConfig(class_name=dg.DefaultRunLauncher.__name__),
     executor=SelectorConfig(class_name=dg.multiprocess_executor.__name__),
 )
 
@@ -96,8 +95,7 @@ azure_caj_config = ExecutionConfig(
     )
 )
 
-# configuring a run launcher to launch each run in an Azure Container App Job
-# and configuring an executor to run each workflow steps in a new Azure Batch
+# configuring an executor to run each workflow steps in a new Azure Batch
 # task for maximum scale
 # add this to a job or the Definitions class to use it
 azure_batch_config = ExecutionConfig(
@@ -167,53 +165,54 @@ def basic_r_asset(basic_blob_asset):
     )
 
 
-class ParallelRAssetConfig(dg.Config):
-    disease: list[str] = ["COVID", "FLU", "RSV"]
+class ParallelRAssetConfig(dg.ConfigurableResource):
+    disease: GraphDimension[str] = GraphDimension(["COVID", "FLU", "RSV"])
 
 
 @dynamic_graph_asset(
-    graph_dimensions=["disease"],
     description="A parallel asset that runs R code for different diseases",
 )
 def parallel_r_asset(
-    context: DynamicGraphAssetExecutionContext,
-    config: ParallelRAssetConfig,
+    context: dg.OpExecutionContext,
+    parallel_r_asset_config: ParallelRAssetConfig,
 ):
-    disease = context.graph_dimension["disease"]
-    subprocess.run(f"Rscript hello.R {disease}", shell=True, check=True)
+    disease = parallel_r_asset_config.disease.current_value
+    context.log.info(f"Running for disease: {disease}")
+    subprocess.run(["Rscript", "hello.R", disease], check=True)
 
 
 # ------------------------------------------------
 # Jobs - tasks that don't produce tracked artifacts
 # ------------------------------------------------
 
+# only expose this job when running locally
+if not is_production():
 
-@dg.op
-def build_image(context: dg.OpExecutionContext, should_push: bool):
-    cmd = f"docker build -t {image} ."
+    @dg.op
+    def build_image(context: dg.OpExecutionContext, should_push: bool):
+        cmd = f"docker build -t {image} ."
 
-    if should_push:
-        subprocess.run(
-            f"az login --identity && az acr login -n {IMAGE_REGISTRY}",
-            check=True,
-            shell=True,
-        )
-        cmd += " --push"
+        if should_push:
+            subprocess.run(
+                f"az login --identity && az acr login -n {IMAGE_REGISTRY}",
+                check=True,
+                shell=True,
+            )
+            cmd += " --push"
 
-    context.log.debug(f"Running {cmd}")
-    subprocess.run(cmd, check=True, shell=True)
+        context.log.debug(f"Running {cmd}")
+        subprocess.run(cmd, check=True, shell=True)
 
-
-@dg.job(
-    config=dg.RunConfig(
-        ops={"build_image": {"inputs": {"should_push": False}}},
-        # configure this job to run on your computer
-        execution=default_config.to_run_config(),
-    ),
-    executor_def=dynamic_executor(),
-)
-def build_image_job():
-    build_image()
+    @dg.job(
+        config=dg.RunConfig(
+            ops={"build_image": {"inputs": {"should_push": False}}},
+            # configure this job to run on your computer
+            execution=default_config.to_run_config(),
+        ),
+        executor_def=dynamic_executor(),
+    )
+    def build_image_job():
+        build_image()
 
 
 # --------------------------------------------
@@ -244,6 +243,7 @@ defs = dg.Definitions(
             account_url=f"{storage_account}.blob.core.windows.net",
             credential=AzureBlobStorageDefaultCredential(),
         ),
+        "parallel_r_asset_config": ParallelRAssetConfig(),
     },
     executor=dynamic_executor(
         # try switching to Azure compute after pushing your image
