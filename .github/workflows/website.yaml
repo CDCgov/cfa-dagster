@@ -38,6 +38,15 @@ jobs:
           cd ./docs
           uv run zensical build --clean
 
+      - name: Commit and push built site
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          git add docs/site
+          git commit -m "Build website" || echo "No changes to commit"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Deploy to GitHub Pages 
         uses: actions/upload-pages-artifact@v5
         with:
