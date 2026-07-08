@@ -35,19 +35,14 @@ jobs:
 
       - name: Build website
         run: |
-          cd ./docs
+          cd docs
           uv run zensical build --clean
-          git add ./site
-          git commit -m "Build website" || echo "No changes to commit"
-          git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Deploy to GitHub Pages 
         uses: actions/upload-pages-artifact@v5
         with:
           name: github-pages
-          path: ./docs/site
+          path: docs/site
           retention-days: "3"
 
   post-page-artifact:
