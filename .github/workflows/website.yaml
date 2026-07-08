@@ -34,15 +34,13 @@ jobs:
           python-version-file: ".python-version"
 
       - name: Build website
-        run:
-        cd ./docs
-        uv run zensical build --clean
-
-      - name: Deploy to GitHub Pages 
+        run: |
+          cd docs
+          uv run zensical build --clean
         uses: actions/upload-pages-artifact@v5
         with:
           name: github-pages
-          path: .docs/site
+          path: docs/site
           retention-days: "3"
 
   post-page-artifact:
@@ -65,7 +63,7 @@ jobs:
           gh-token: ${{ secrets.GITHUB_TOKEN }}
 
   deploy:
-    if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
+    if: ${{ github.event_name == 'push' && github.ref_name == 'kelly-docs' }}
 
     runs-on: ubuntu-latest
     needs: build
