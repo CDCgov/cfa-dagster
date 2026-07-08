@@ -4,6 +4,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 from urllib.parse import quote
 
 import dagster as dg
@@ -20,10 +21,16 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from .azure_keyvault import KEY_VAULT_URL_CFA_PREDICT
 
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib  # type: ignore[no-redef]
+
 log = logging.getLogger(__name__)
 
 LOCAL_HOSTNAME = "127.0.0.1"
 LOCAL_PORT = 4000
+DEFS_FILE = "dagster_defs.py"
 PROD_HOSTNAME = os.getenv(
     "DAGSTER_WEBSERVER_URL", "dagster.apps.edav.ext.cdc.gov"
 )
@@ -143,7 +150,7 @@ def configure_dev_db():
             conn.close()
 
 
-def set_env_vars(script: str = None):
+def set_env_vars():
     dagster_home = str(importlib.resources.files("cfa_dagster"))
     # used by cfa-dagster for database and blob storage locations
     if not os.getenv("DAGSTER_USER"):
@@ -151,6 +158,35 @@ def set_env_vars(script: str = None):
     # used by dagster
     if not os.getenv("DAGSTER_HOME"):
         os.environ["DAGSTER_HOME"] = dagster_home
+
+
+def find_pyproject_toml(start_dir: Path) -> Optional[Path]:
+    for parent in [start_dir, *start_dir.parents]:
+        candidate = parent / "pyproject.toml"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def check_needs_fallback_file(defs_file: str) -> Optional[str]:
+    pyproj = find_pyproject_toml(Path.cwd())
+    if pyproj:
+        try:
+            data = tomllib.loads(pyproj.read_text())
+            dg = data.get("tool", {}).get("dg", {})
+            if dg.get("directory_type") in ("project", "workspace"):
+                return None
+        except Exception:
+            pass
+    fp = Path(defs_file)
+    return str(fp.resolve()) if fp.is_file() else None
+
+
+def _get_flag_value(args: list[str], *flags: str) -> str | None:
+    for i, arg in enumerate(args):
+        if arg in flags and i + 1 < len(args):
+            return args[i + 1]
+    return None
 
 
 def _add_host_port(args: list[str]) -> list[str]:
@@ -163,74 +199,61 @@ def _add_host_port(args: list[str]) -> list[str]:
     return [*args, *extra]
 
 
-def add_default_args(sys_argv) -> list[str]:
-    """
-    Strips the first element of sys.argv and adds default host and port args
-    when the subcommand is 'dev' or 'code-server'.
-    """
-    if not sys_argv:
-        return []
-
-    args = sys_argv[1:]
-
-    subcommand = next(
-        (arg for arg in args if not arg.startswith("-")),
-        None,
-    )
-
-    if subcommand not in {"dev", "code-server"}:
-        return args
-
-    return _add_host_port(args)
-
-
 def _run_cli(
     cli,
     env_prefix: str,
-    tool_name: str,
     argv: list[str] | None = None,
-    defs_file: str = "dagster_defs.py",
+    defs_file: str = DEFS_FILE,
     always_add_host_port: bool = False,
-    retry_without_subcommand: bool = False,
 ):
     """
-    Runs a cli tool that can fall back to the default dagster_defs.py file on error
+    Runs a cli tool, automatically falling back to ``-f defs_file`` when
+    running ``dev`` outside a dagster project directory.
     """
     set_env_vars()
     configure_dev_db()
     raw_args = argv if argv is not None else sys.argv
     log.debug(f"raw_args: {raw_args}")
-    if always_add_host_port:
-        args = _add_host_port(raw_args[1:])
+
+    rest = raw_args[1:] if len(raw_args) > 1 else []
+    first_subcommand = next(
+        (arg for arg in rest if not arg.startswith("-")),
+        None,
+    )
+
+    if always_add_host_port or first_subcommand in {"dev", "code-server"}:
+        args = _add_host_port(rest)
+        host = _get_flag_value(rest, "-h", "--host") or LOCAL_HOSTNAME
+        port = int(_get_flag_value(rest, "-p", "--port") or str(LOCAL_PORT))
     else:
-        args = add_default_args(raw_args)
+        args = list(rest)
+        host = LOCAL_HOSTNAME
+        port = LOCAL_PORT
     log.debug(f"args: {args}")
 
-    has_subcommand = any(not arg.startswith("-") for arg in raw_args[1:])
+    if first_subcommand == "dev":
+        from .hot_reload import start_hot_reloader_for_dev
 
-    def should_retry():
-        return has_subcommand or retry_without_subcommand
+        fallback = check_needs_fallback_file(defs_file)
+        if fallback and "-f" not in args and "--python-file" not in args:
+            log.info(f"No dagster project found, using -f {defs_file}")
+            args = [*args, "-f", defs_file]
 
-    def retry_with_defs_file():
-        if Path(defs_file).exists():
-            log.info(f"{tool_name} failed, retrying with -f {defs_file}")
-            sys.exit(
-                cli(
-                    args=[*args, "-f", defs_file],
-                    auto_envvar_prefix=env_prefix,
-                    standalone_mode=False,
-                )
+        try:
+            start_hot_reloader_for_dev(
+                args=args,
+                defs_file=defs_file,
+                host=host,
+                port=port,
             )
+        except Exception:
+            log.warning("Failed to start hot-reloader", exc_info=True)
 
     try:
         cli(args=args, auto_envvar_prefix=env_prefix, standalone_mode=False)
     except SystemExit as e:
-        if e.code != 0 and should_retry():
-            retry_with_defs_file()
         sys.exit(e.code)
     except CheckError:
-        if should_retry():
-            retry_with_defs_file()
         sys.exit(1)
     except NoArgsIsHelpError:
         cli(
@@ -240,8 +263,6 @@ def _run_cli(
         )
         sys.exit(0)
     except UsageError:
-        if should_retry():
-            retry_with_defs_file()
         sys.exit(1)
     else:
         sys.exit(0)
@@ -256,9 +277,7 @@ def run_dagster_webserver():
     _run_cli(
         cli,
         "DAGSTER_WEBSERVER",
-        "dagster-webserver",
         always_add_host_port=True,
-        retry_without_subcommand=True,
     )
 
 
@@ -268,7 +287,7 @@ def run_dagster():
     """
     from dagster._cli import ENV_PREFIX, cli
 
-    _run_cli(cli, ENV_PREFIX, "dagster")
+    _run_cli(cli, ENV_PREFIX)
 
 
 def run_dg(argv: list[str] | None = None, defs_file: str = "dagster_defs.py"):
@@ -277,7 +296,7 @@ def run_dg(argv: list[str] | None = None, defs_file: str = "dagster_defs.py"):
     """
     from dagster_dg_cli.cli import ENV_PREFIX, cli
 
-    _run_cli(cli, ENV_PREFIX, "dg", argv=argv, defs_file=defs_file)
+    _run_cli(cli, ENV_PREFIX, argv=argv, defs_file=defs_file)
 
 
 def start_dev_env(caller_name: str):

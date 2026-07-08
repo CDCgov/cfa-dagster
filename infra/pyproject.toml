@@ -32,3 +32,4 @@ directory_type = "project"
 root_module = "dagster_defs"
 defs_module = "dagster_defs"
 code_location_target_module = "dagster_defs"
+# registry_modules = [ "dagster_defs" ]
