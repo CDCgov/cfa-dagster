@@ -38,6 +38,8 @@ jobs:
           cd docs &&
           uv run zensical build --clean &&
           cp -r site/* ./ &&
+          git config --global user.email "tsw6@cdc.gov"
+          git config --global user.name "kelly-a-reagan"
           git add docs/ &&
           git commit -m "Copy site files to /docs for GitHub Pages" &&
           git push 
