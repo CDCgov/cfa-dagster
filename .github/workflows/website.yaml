@@ -43,10 +43,10 @@ jobs:
           mv site/sitemap.xml ./ &&
           mv site/search.js ./ &&
           mv site/search.json ./ &&
-          mv site/assets/* ./ &&
+          mv site/assets/* ./assets &&
           mv site/examples/* ./ &&
           mv site/getting-started/* ./ &&
-          mv site/tutorial/* ./ &&
+          mv site/tutorial/* ./ 
         
       - uses: actions/upload-pages-artifact@v5
         with:
