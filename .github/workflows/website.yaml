@@ -35,18 +35,18 @@ jobs:
 
       - name: Build website
         run: |
-          cd docs
-          uv run zensical build --clean
-          mv site/index.html ./
-          mv site/404.html ./
-          mv site/objects.inv ./
-          mv site/sitemap.xml ./
-          mv site/search.js ./
-          mv site/search.json ./
-          mv site/assets/* ./
-          mv site/examples/* ./
-          mv site/getting-started/* ./
-          mv site/tutorial/* ./
+          cd docs &&
+          uv run zensical build --clean &&
+          mv site/index.html ./ &&
+          mv site/404.html ./ &&
+          mv site/objects.inv ./ &&
+          mv site/sitemap.xml ./ &&
+          mv site/search.js ./ &&
+          mv site/search.json ./ &&
+          mv site/assets/* ./ &&
+          mv site/examples/* ./ &&
+          mv site/getting-started/* ./ &&
+          mv site/tutorial/* ./ &&
         
       - uses: actions/upload-pages-artifact@v5
         with:
