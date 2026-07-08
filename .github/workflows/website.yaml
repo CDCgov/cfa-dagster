@@ -37,10 +37,10 @@ jobs:
         run: |
           cd docs
           uv run zensical build --clean
-        uses: actions/upload-pages-artifact@v5
+        
+      - uses: actions/upload-pages-artifact@v5
         with:
           name: github-pages
-          path: docs/site
           path: docs/site
           retention-days: "3"
 
@@ -64,7 +64,6 @@ jobs:
           gh-token: ${{ secrets.GITHUB_TOKEN }}
 
   deploy:
-    if: ${{ github.event_name == 'push' && github.ref_name == 'kelly-docs' }}
     if: ${{ github.event_name == 'push' && github.ref_name == 'kelly-docs' }}
 
     runs-on: ubuntu-latest
