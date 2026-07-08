@@ -43,7 +43,6 @@ jobs:
           mv -f site/sitemap.xml ./ &&
           mv -f site/search.js ./ &&
           mv -f site/search.json ./ &&
-          mv -f site/assets/* ./assets &&
           mv -f site/examples/* ./ &&
           mv -f site/getting-started/* ./ &&
           mv -f site/tutorial/* ./ 
