@@ -2,7 +2,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Union
+from typing import Any, Union, cast
 
 from azure.core.exceptions import ResourceNotFoundError
 from azure.storage.filedatalake import DataLakeServiceClient
@@ -27,6 +27,7 @@ from ..utils import is_production
 from .filesystem_metadata import (
     ADLS2FilesystemIOManagerMetadata,
     InputMode,
+    OnInputConflict,
 )
 from .filesystem_path import ADLS2Path
 
@@ -101,6 +102,7 @@ class FilesystemADLS2IOManager(UPathIOManager):
         file_system: str,
         adls2_client: DataLakeServiceClient,
         input_mode: InputMode,
+        on_input_conflict: OnInputConflict = "overwrite",
         prefix: str = "dagster",
         max_concurrency: int = 4,
         delete_after_upload: bool = False,
@@ -113,6 +115,7 @@ class FilesystemADLS2IOManager(UPathIOManager):
         self._prefix = prefix
         self._max_concurrency = max_concurrency
         self._input_mode = input_mode
+        self._on_input_conflict = on_input_conflict
         self._delete_after_upload = delete_after_upload
 
         # Verify the file system exists and we have access
@@ -315,7 +318,7 @@ class FilesystemADLS2IOManager(UPathIOManager):
 
     def load_from_path(
         self, context: InputContext, path: UPath
-    ) -> Union[Path, str]:
+    ) -> Union[ADLS2Path, Path, str]:
         """Download a directory from ADLS2 to the local filesystem.
 
         If the downstream asset's type annotation is ``str``, returns the ADLS2
@@ -348,6 +351,17 @@ class FilesystemADLS2IOManager(UPathIOManager):
         else:
             local_dir = Path(input_name)
 
+        # Extract per-asset metadata override for on_input_conflict
+        meta = ADLS2FilesystemIOManagerMetadata.from_metadata(
+            context.definition_metadata
+        )
+        effective_conflict = cast(
+            OnInputConflict,
+            meta.on_input_conflict if meta and meta.on_input_conflict
+            else self._on_input_conflict
+        )
+        log.debug(f"effective_conflict: {effective_conflict}")
+
         # ------------------------------------------------------------
         # MODE 1: return raw abfss path (no download)
         # ------------------------------------------------------------
@@ -371,6 +385,26 @@ class FilesystemADLS2IOManager(UPathIOManager):
         # ------------------------------------------------------------
         # MODE 3 (default): download locally
         # ------------------------------------------------------------
+        log.debug(f"local_dir: {local_dir}")
+
+        # Check for local conflicts before downloading
+        if local_dir.exists() and any(local_dir.iterdir()):
+            if effective_conflict == "fail":
+                raise FileExistsError(
+                    f"Local directory already exists and is non-empty: {local_dir}. "
+                    f"Set on_input_conflict='overwrite' to overwrite existing files."
+                )
+            elif effective_conflict == "warn":
+                context.log.warning(
+                    f"Local directory already exists and is non-empty: {local_dir}. "
+                    f"Downloaded files may overwrite existing content."
+                )
+            elif effective_conflict == "skip":
+                context.log.warning(
+                    f"Local directory already exists and is non-empty: {local_dir}. "
+                    f"Skipping download and returning existing directory."
+                )
+                return local_dir
 
         local_dir.mkdir(parents=True, exist_ok=True)
 
@@ -615,6 +649,16 @@ class ADLS2FilesystemIOManager(ConfigurableIOManager):
             "'reference': return an ADLS2Path which includes an authenticated ADLS2 client."
         ),
     )
+    on_input_conflict: OnInputConflict = Field(
+        default="overwrite",
+        description=(
+            "Behavior when the local download target already exists. "
+            "'overwrite': Overwrite existing files (default), "
+            "'fail': Raise an error if the local directory exists and is non-empty, "
+            "'warn': Log a warning and proceed with the download, "
+            "'skip': Log a warning and return the existing directory without downloading."
+        ),
+    )
     delete_after_upload: bool = Field(
         default=False,
         description=(
@@ -633,11 +677,13 @@ class ADLS2FilesystemIOManager(ConfigurableIOManager):
             credential=ADLS2DefaultAzureCredential(kwargs={}),
         )
         user = "prod" if self.use_production else os.getenv("DAGSTER_USER")
+        log.debug(f"self.on_input_conflict: {self.on_input_conflict}")
 
         return FilesystemADLS2IOManager(
             file_system=adls2.storage_account,
             adls2_client=adls2.adls2_client,
             input_mode=self.input_mode,
+            on_input_conflict=self.on_input_conflict,
             delete_after_upload=self.delete_after_upload,
             prefix=f"dagster-files/{user}",
             max_concurrency=self.max_concurrency,

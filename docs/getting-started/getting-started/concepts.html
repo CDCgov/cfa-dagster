@@ -619,6 +619,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#dynamic-graph-assets" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Dynamic Graph Assets
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -862,6 +873,8 @@ Resources often represent:  </p>
 <p><a href="https://docs.dagster.io/guides/automate/sensors#cursors-and-high-volume-events">Sensors</a> check for events at regular time intervals, and if triggered, will start a job or other action. Sensors allow the workflow to run automatically without someone needing to manually start the pipeline. In the baking cookies example, this would be like having an assistant take the cookies out of the oven when the timer goes off. </p>
 <h2 id="partitions">Partitions<a class="headerlink" href="#partitions" title="Permanent link">&para;</a></h2>
 <p><a href="https://docs.dagster.io/guides/build/partitions-and-backfills/partitioning-ops#non-partitioned-job-with-date-config">Partitions</a> divide the workflow into smaller pieces, which could speed up computation by using parallel processing. Users can test on an individual partition before trying to run larger ranges of data. In the cookie example, this could be scaling the recipe back to make 8 cookies instead of making the cookie dough for 80 cookies. </p>
+<h2 id="dynamic-graph-assets">Dynamic Graph Assets<a class="headerlink" href="#dynamic-graph-assets" title="Permanent link">&para;</a></h2>
+<p><a href="https://github.com/CDCgov/cfa-dagster/blob/main/src/cfa_dagster/dynamic_graph_asset.py">Dynamic graph assets</a> were developed specifically for <abbr title="Center for Forecasting and Outbreak Analytics">CFA</abbr> Dagster workflows and were built on existing Dagster concepts. In standard Dagster, if you want an asset to run multiple times with different configurations, you typically use partitions. <code>@dynamic_graph_asset</code> allows you to run the same logic across multiple independent dimensions in parallel.</p>
 
 
 

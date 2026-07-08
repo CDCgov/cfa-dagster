@@ -1,6 +1,6 @@
 [project]
 name = "cfa-dagster"
-version = "1.3.0"
+version = "1.3.2"
 description = "CFA libraries for Dagster"
 readme = "README.md"
 authors = [
@@ -39,6 +39,7 @@ test = [
 dev = [
     "dagster-webserver>=1.12.2,<1.14",
     "dagster-dg-cli~=1.13.3",
+    "watchdog>=6.0.0",
 ]
 
 [build-system]

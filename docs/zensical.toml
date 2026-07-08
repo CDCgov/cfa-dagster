@@ -103,3 +103,6 @@ line_spans = "__span"
 pygments_lang_class = true
 
 [project.markdown_extensions.mdx_truly_sane_lists]
+
+[build]
+site_dir = "/docs"

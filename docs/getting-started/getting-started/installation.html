@@ -554,6 +554,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#logging-in-with-azure" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Logging in with Azure
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -803,9 +814,7 @@
 <ol>
 <li>Activate your Python <a href="https://docs.python.org/3/library/venv.html">virtual environment</a>  </li>
 <li><a href="https://docs.dagster.io/getting-started/installation#installation-requirements-for-manually-creating-or-updating-a-project">Install Dagster with uv:</a><br />
-<code>uv add dagster dagster-webserver dagster-dg-cli</code>.<br />
-Or install with pip:<br />
-<code>pip install dagster dagster-webserver dagster-dg-cli</code>.  </li>
+<code>uv add dagster dagster-webserver dagster-dg-cli</code>.   </li>
 <li>Clone the <a href="https://github.com/CDCgov/cfa-dagster/tree/main"><code>cfa-dagster</code> repository</a>:<br />
 <code>git clone https://github.com/CDCgov/cfa-dagster.git</code><br />
 Or<br />
@@ -834,6 +843,15 @@ Or<br />
 <li>Run <code>cfa-dg dev</code></li>
 </ol>
 <h2 id="update-your-dockerfile">Update your Dockerfile<a class="headerlink" href="#update-your-dockerfile" title="Permanent link">&para;</a></h2>
+<p>After your virtual environment is activated in your Dockerfile, add the following code:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a># add Dagster workflow file
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>COPY ./dagster_defs.py .
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a># install the dagster workflow dependencies
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>RUN uv sync --script dagster_defs.py --active
+</span></code></pre></div>
+<h2 id="logging-in-with-azure">Logging in with Azure<a class="headerlink" href="#logging-in-with-azure" title="Permanent link">&para;</a></h2>
+<p>You will need to log in with Azure, so check out the <a href="https://potential-adventure-637em36.pages.github.io/azure/AzureBasics-login_methods.html#primary-login-methods">Predict Handbook Site</a> for details on how to do so. </p>
 
 
 
