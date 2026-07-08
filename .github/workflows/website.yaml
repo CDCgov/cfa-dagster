@@ -37,10 +37,7 @@ jobs:
         run: |
           cd ./docs
           uv run zensical build --clean
-
-      - name: Commit and push built site
-        run: |
-          git add docs/site
+          git add ./site
           git commit -m "Build website" || echo "No changes to commit"
           git push
         env:
