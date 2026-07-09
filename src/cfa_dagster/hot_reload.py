@@ -66,7 +66,10 @@ def _resolve_module_path(
         if candidate_file.is_file():
             return candidate_file.resolve()
         candidate_pkg = base / module_name
-        if candidate_pkg.is_dir() and (candidate_pkg / "__init__.py").is_file():
+        if (
+            candidate_pkg.is_dir()
+            and (candidate_pkg / "__init__.py").is_file()
+        ):
             return candidate_pkg.resolve()
 
     return None
@@ -105,9 +108,7 @@ def resolve_target_paths(
             elif module_path.is_file():
                 targets.add(module_path.resolve())
         else:
-            log.warning(
-                "Could not resolve root_module '%s'", root_module
-            )
+            log.warning("Could not resolve root_module '%s'", root_module)
 
     if not targets and entry_point:
         ep = Path(entry_point)
@@ -228,9 +229,7 @@ class HotReloader:
                 with self._lock:
                     if self._timer and self._timer.is_alive():
                         self._timer.cancel()
-                    self._timer = threading.Timer(
-                        debounce, callback
-                    )
+                    self._timer = threading.Timer(debounce, callback)
                     self._timer.daemon = True
                     self._timer.start()
 
@@ -241,24 +240,21 @@ class HotReloader:
                     _Handler(), str(path.parent), recursive=False
                 )
             else:
-                self._observer.schedule(
-                    _Handler(), str(path), recursive=True
-                )
+                self._observer.schedule(_Handler(), str(path), recursive=True)
 
         self._observer.daemon = True
         self._observer.start()
         if len(resolved) == 1 and resolved[0].is_file():
-            log.info(f"Hot-reloading: watching {resolved[0]}")
+            log.info(f"Hot-reloader: watching {resolved[0]}")
         elif all(p.is_file() for p in resolved):
             for p in resolved:
-                log.info(f"Hot-reloading: watching {p}")
+                log.info(f"Hot-reloader: watching {p}")
         else:
             dirs = sorted(
                 {str(p.parent if p.is_file() else p) for p in resolved}
             )
             log.info(
-                f"Hot-reloading: watching python files under "
-                f"{', '.join(dirs)}"
+                f"Hot-reloader: watching python files under {', '.join(dirs)}"
             )
 
     def stop(self):
@@ -272,7 +268,7 @@ class HotReloader:
             self._server_ready = wait_for_server(self._host, self._port)
             if not self._server_ready:
                 return
-        log.info("Hot-reloading: Change detected, reloading workspace...")
+        log.info("Hot-reloader: Change detected, reloading workspace...")
         reload_via_graphql(host=self._host, port=self._port)
 
 

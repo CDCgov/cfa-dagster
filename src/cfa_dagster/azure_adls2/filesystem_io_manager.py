@@ -357,8 +357,9 @@ class FilesystemADLS2IOManager(UPathIOManager):
         )
         effective_conflict = cast(
             OnInputConflict,
-            meta.on_input_conflict if meta and meta.on_input_conflict
-            else self._on_input_conflict
+            meta.on_input_conflict
+            if meta and meta.on_input_conflict
+            else self._on_input_conflict,
         )
         log.debug(f"effective_conflict: {effective_conflict}")
 
