@@ -22,6 +22,13 @@ jobs:
         with:
           submodules: true
           lfs: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: ".python-version"
       - name: Install OIDC Client from Core Package
         run: npm install @actions/core@1.6.0 @actions/http-client
       - name: Get Id Token
@@ -32,6 +39,10 @@ jobs:
                const coredemo = require('@actions/core')
                return await coredemo.getIDToken()
            result-encoding: string
+      - name: Build Website
+        run: |
+          cd docs &&
+          uv run zensical build --clean
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
@@ -40,10 +51,11 @@ jobs:
           action: "upload"
           ###### Repository/Build Configurations - These values can be configured to match your app requirements. ######
           # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
-          app_location: "./docs" # App source code path
+          app_location: "./docs/site" # App source code path
           api_location: "" # Api source code path - optional
           output_location: "" # Built app content directory - optional
           github_id_token: ${{ steps.idtoken.outputs.result }}
+          config_file_location: "./docs"
           ###### End of Repository/Build Configurations ######
 
   close_pull_request_job:
