@@ -80,9 +80,24 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+ 
       - name: deploy to gh pages
         uses: actions/deploy-pages@v5
         with:
           artifact_name: github-pages
           preview: false
           publish_dir: ./docs
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: build-artifact
+
+      - name: Deploy to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_KIND_SKY_09294A00F }}
+          app_location: "./docs" # Path to the folder containing the built site
+          output_location: "" # Leave empty if the output is in the app_location
