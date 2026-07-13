@@ -91,7 +91,7 @@ jobs:
           publish_dir: ./docs
 
       - name: Download build artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: build-artifact
 
