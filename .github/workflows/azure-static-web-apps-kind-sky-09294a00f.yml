@@ -24,6 +24,15 @@ jobs:
           submodules: true
           lfs: false
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: ".python-version"
+
       - name: Install OIDC Client from Core Package
         run: npm install @actions/core@1.6.0 @actions/http-client
 
