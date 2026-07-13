@@ -90,10 +90,6 @@ jobs:
           preview: false
           publish_dir: ./docs
 
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifact
 
       - name: Deploy to Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@v1
