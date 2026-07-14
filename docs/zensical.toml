@@ -29,7 +29,6 @@ nav = [
   }
 ]
 
-
 watch = [ "includes" ]
 
 [project.theme]
