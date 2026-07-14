@@ -55,7 +55,7 @@ defs = dg.Definitions(
 
 ## Azure Batch
 1. Run container in Azure Batch
-2. Modify the defs object at the bottom of the `dagster_defs.py` file by uncommenting the Azure Batch configuration. 
+2. Modify the defs object at the bottom of the `dagster_defs.py` file by uncommenting the Azure Batch configuration.
 ```
 defs = dg.Definitions(
     **collected_defs,

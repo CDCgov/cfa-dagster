@@ -43,7 +43,7 @@ jobs:
           git add docs/ &&
           git diff --cached --quiet || git commit -m "Copy site files to /docs for GitHub Pages" &&
           git push || true
-        
+
       - uses: actions/upload-pages-artifact@v5
         with:
           name: github-pages
@@ -82,11 +82,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
- 
+
       - name: deploy to gh pages
         uses: actions/deploy-pages@v5
         with:
           artifact_name: github-pages
           preview: false
           publish_dir: ./docs
-

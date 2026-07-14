@@ -14,7 +14,7 @@ Once an asset is created, Dagster does not automatically run the code for the as
 
 A [resource](https://docs.dagster.io/dagster-basics-tutorial/resources#step-4-view-the-resource) in Dagster is something your assets need to do their work, but not the data you're producing. In the example of baking cookies, resources would be a mixing bowl, spoon, a baking sheet, and the oven.
 
-Resources often represent:  
+Resources often represent:
 
 * Database connections
 * Data warehouse clients
@@ -25,7 +25,7 @@ Resources often represent:
 * I/O managers
 * Configuration dictionaries
 
-## Schedules 
+## Schedules
 
 [Schedules](https://docs.dagster.io/guides/automate/schedules) define a fixed time interval to run your pipeline. In the example of the cookies, this could be planning to bake the cookies at 1 pm.
 
