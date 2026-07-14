@@ -17,13 +17,11 @@ nav = [
       "getting-started/concepts.md"
     ]
   },
-
   { "Tutorials" = [
       "tutorial/azure.md",
       "tutorial/docker.md"
     ]
   },
-
   { "Examples" = [
       "examples/county-rt.md",
       "examples/nssp-etl.md"

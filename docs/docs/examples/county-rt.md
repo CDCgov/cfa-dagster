@@ -16,4 +16,4 @@ This CFA project implements and evaluates hierarchical generalized additive mode
 * Assets include county Rt assets are separated by disease to generate one compute task per state, report date, and disease, and an R script to run the model for all states and all diseases and aggregate the results at the national-level.
 * For partitioned assets (cfa_county_rt\_\*), a launchpad opens up allowing the user to specify the report date and state. There is an
 additional Config dropdown within Dagster to apply additional config.
-* Weekly production run is scheduled for Wednesdays 6:30 AM EST 
+* Weekly production run is scheduled for Wednesdays 6:30 AM EST.

@@ -22,9 +22,9 @@ The [Dagster CLI](https://docs.dagster.io/api/clis/dg-cli/dg-cli-reference) is a
 * Debug issues — export or import run artifacts for troubleshooting.
 * Validate definitions — check your Dagster code for errors before running.
 * Manage deployments — list deployments, filter runs by deployment, and view branch-specific logs.
-* Authenticate and configure — log in to your Dagster+ deployment, switch profiles, and store credentials securely
+* Authenticate and configure — log in to your Dagster+ deployment, switch profiles, and store credentials securely.
 
-Instructions for installing and configuring the Dagster CLI from the Dagster official documentation can be found [here](https://docs.dagster.io/api/clis/dg-cli/dg-cli-configuration). 
+Instructions for installing and configuring the Dagster CLI from the Dagster official documentation can be found [here](https://docs.dagster.io/api/clis/dg-cli/dg-cli-configuration).
 
 ### Running the `cfa-dagster` CLI
 1. Activate your virtual environment (`venv`)
@@ -52,4 +52,4 @@ RUN uv sync --script dagster_defs.py --active
 
 ## Logging in with Azure
 
-You will need to log in with Azure, so check out the [Predict Handbook Site](https://potential-adventure-637em36.pages.github.io/azure/AzureBasics-login_methods.html#primary-login-methods) for details on how to do so. 
+You will need to log in with Azure, so check out the [Predict Handbook Site](https://potential-adventure-637em36.pages.github.io/azure/AzureBasics-login_methods.html#primary-login-methods) for details on how to do so.
