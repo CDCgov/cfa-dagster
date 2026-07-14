@@ -1,4 +1,3 @@
-
 [project]
 site_name = "Dagster Adoption Guide"
 site_description = "An introduction to Dagster with examples from CFA workflows."
