@@ -26,8 +26,7 @@ nav = [
 
   { "Examples" = [
       "examples/county-rt.md",
-      "examples/nssp-etl.md",
-      "examples/scenarios-dynode.md"
+      "examples/nssp-etl.md"
     ]
   }
 ]
