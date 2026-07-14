@@ -21,7 +21,7 @@ Resources often represent:
 * Cloud storage clients
 * Credentials and secrets
 * Logging systems
-* IO managers
+* I/O managers
 * Configuration dictionaries
 
 

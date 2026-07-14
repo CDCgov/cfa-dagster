@@ -1,6 +1,6 @@
 # CFA NSSP ETL Pipeline
 
-The CFA National Syndromic Surveillance Program (NSSP) Extract, Transform, Load (ETL) pipeline pulls in respiratory viruses data daily from the NSSP API made available for CFA. Click [here](https://github.com/cdcent/cfa-nssp-etl) to go to the GitHub repository. 
+The CFA NSSp ETL pipeline pulls in respiratory viruses data daily from the NSSP API made available for CFA. Click [here](https://github.com/cdcent/cfa-nssp-etl) to go to the GitHub repository. 
 
 ## Dagster implementation
 
@@ -12,7 +12,7 @@ The CFA National Syndromic Surveillance Program (NSSP) Extract, Transform, Load 
 
 ### Dagster details
 
-* Implements the Azure Container App Jobs configuration, which uses the Azure Data Lake Storage Gen2 File System I/O Manager.
+* Implements the Azure CAJ configuration, which uses the Azure Data Lake Storage Gen2 File System I/O Manager.
 * Daily partitions allow for the process to pull the most recent daily data rather than all of the data available.
 * Assets include NSSP Gold Data for the v1 API and NSSP Gold Data for the v2 API. 
 * Outputs are the file paths to the data stored in Azure.

@@ -14,8 +14,8 @@ Click [here](https://github.com/cdcent/DynODE-Experiments/pull/84/changes?diff=s
 
 ### Dagster details
 
-* Configuration runs launcher to launch each run in an Azure Container App Job and configures an executor to run each workflow steps in a new Azure Batch task for maximum scale. 
+* Configuration runs launcher to launch each run in an Azure CAJ and configures an executor to run each workflow steps in a new Azure Batch task for maximum scale. 
 * Uses dynamic graph assets to run workflow in parallel over all states. 
 * Assets include running an experiment, post-processing a plot to show the observed cases of Covid-19 versus the fitted cases, a post-processing script to read posterior and prior samples from state folders, and a post-processing script to create median maps.
 * Jobs include building a Docker image and set various configuration settings.
-* Ops include allowing the user to run the container previously built and explore the filesystem that will be used by Dagster and  sending an autoscale requeue request to Azure batch.
+* Ops include allowing the user to run the container previously built and explore the filesystem that will be used by Dagster and sending an autoscale requeue request to Azure Batch.

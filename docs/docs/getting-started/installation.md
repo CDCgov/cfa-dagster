@@ -14,7 +14,7 @@
 Or  
 `gh repo clone cdcgov/cfa-dagster` 
 
-## Using the Dagster Command-Line Interface (CLI)
+## Using the Dagster CLI
 The [Dagster CLI](https://docs.dagster.io/api/clis/dg-cli/dg-cli-reference) is a set of commands you can run directly in your terminal or shell to interact with the Dagster platform without using a web browser. A command-line interface is a text-based interface where users type commands to perform tasks. In Dagster’s case, the CLI allows you to:
 
 * Manage and run jobs — start, stop, or list runs, view logs, and check run status.

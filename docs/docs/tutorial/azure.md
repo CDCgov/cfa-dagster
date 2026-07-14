@@ -21,7 +21,7 @@ docker build -t $(REGISTRY)$(IMAGE_NAME):$(TAG) \
 docker push $(REGISTRY)$(IMAGE_NAME):$(TAG)
 ```
 
-## Azure Container App Jobs (CAJ)
+## Azure CAJ
 1. Run container in Azure Container App Jobs
 2. Modify the defs object at the bottom of the `dagster_defs.py` file by uncommenting the Azure CAJ configuration. 
 ```
