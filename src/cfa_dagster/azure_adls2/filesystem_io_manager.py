@@ -103,6 +103,7 @@ class FilesystemADLS2IOManager(UPathIOManager):
         adls2_client: DataLakeServiceClient,
         input_mode: InputMode,
         on_input_conflict: OnInputConflict = "overwrite",
+        dry_run: bool = False,
         prefix: str = "dagster",
         max_concurrency: int = 4,
         delete_after_upload: bool = False,
@@ -116,6 +117,7 @@ class FilesystemADLS2IOManager(UPathIOManager):
         self._max_concurrency = max_concurrency
         self._input_mode = input_mode
         self._on_input_conflict = on_input_conflict
+        self._dry_run = dry_run
         self._delete_after_upload = delete_after_upload
 
         # Verify the file system exists and we have access
@@ -273,6 +275,12 @@ class FilesystemADLS2IOManager(UPathIOManager):
         # We use it as the ADLS2 directory prefix
         adls2_prefix = str(path)
 
+        if self._dry_run:
+            context.log.info(
+                f"DRY RUN: would upload {obj} to {self._uri_for_prefix(adls2_prefix)}"
+            )
+            return
+
         # Clean up any existing blobs at this prefix to ensure a clean overwrite
         self._delete_directory(adls2_prefix)
 
@@ -407,11 +415,18 @@ class FilesystemADLS2IOManager(UPathIOManager):
                 )
                 return local_dir
 
+        if self._dry_run:
+            context.log.info(
+                f"DRY RUN: would download {self._uri_for_prefix(adls2_prefix)} to {local_dir}"
+            )
+            return local_dir
+
         local_dir.mkdir(parents=True, exist_ok=True)
 
         file_count = self._download_directory(
             adls2_prefix=adls2_prefix,
             local_dir=local_dir,
+            on_conflict=effective_conflict,
         )
 
         context.log.debug(
@@ -463,7 +478,12 @@ class FilesystemADLS2IOManager(UPathIOManager):
     # Download helpers
     # -------------------------------------------------------------------------
 
-    def _download_directory(self, adls2_prefix: str, local_dir: Path) -> int:
+    def _download_directory(
+        self,
+        adls2_prefix: str,
+        local_dir: Path,
+        on_conflict: OnInputConflict = "overwrite",
+    ) -> int:
         """Download all files under an ADLS2 prefix to a local directory.
 
         Returns:
@@ -483,6 +503,11 @@ class FilesystemADLS2IOManager(UPathIOManager):
             relative_path = adls2_path[len(adls2_prefix) :].lstrip("/")
 
             local_file = local_dir / relative_path
+
+            if on_conflict == "merge" and local_file.exists():
+                log.debug(f"Skipping existing file: {local_file}")
+                continue
+
             local_file.parent.mkdir(parents=True, exist_ok=True)
 
             file_client = self._file_system_client.get_file_client(adls2_path)
@@ -536,6 +561,7 @@ class FilesystemADLS2IOManager(UPathIOManager):
         self,
         adls2_prefix: str,
         local_dir: Path | None = None,
+        on_conflict: OnInputConflict = "overwrite",
     ) -> Path:
         """
         Download an ADLS prefix to a local directory.
@@ -549,6 +575,9 @@ class FilesystemADLS2IOManager(UPathIOManager):
             Destination directory. If omitted, a temporary
             directory is created.
 
+        on_conflict:
+            Behavior when local files already exist during download.
+
         Returns
         -------
         Path
@@ -558,11 +587,16 @@ class FilesystemADLS2IOManager(UPathIOManager):
         if local_dir is None:
             local_dir = Path(tempfile.mkdtemp())
 
+        if self._dry_run:
+            log.info(f"DRY RUN: would download {adls2_prefix} to {local_dir}")
+            return local_dir
+
         local_dir.mkdir(parents=True, exist_ok=True)
 
         self._download_directory(
             adls2_prefix=adls2_prefix,
             local_dir=local_dir,
+            on_conflict=on_conflict,
         )
 
         return local_dir
@@ -657,7 +691,14 @@ class ADLS2FilesystemIOManager(ConfigurableIOManager):
             "'overwrite': Overwrite existing files (default), "
             "'fail': Raise an error if the local directory exists and is non-empty, "
             "'warn': Log a warning and proceed with the download, "
-            "'skip': Log a warning and return the existing directory without downloading."
+            "'skip': Log a warning and return the existing directory without downloading, "
+            "'merge': Download only files that don't already exist locally."
+        ),
+    )
+    dry_run: bool = Field(
+        default=False,
+        description=(
+            "If True, log actions but do not upload or download any files."
         ),
     )
     delete_after_upload: bool = Field(
@@ -685,6 +726,7 @@ class ADLS2FilesystemIOManager(ConfigurableIOManager):
             adls2_client=adls2.adls2_client,
             input_mode=self.input_mode,
             on_input_conflict=self.on_input_conflict,
+            dry_run=self.dry_run,
             delete_after_upload=self.delete_after_upload,
             prefix=f"dagster-files/{user}",
             max_concurrency=self.max_concurrency,
