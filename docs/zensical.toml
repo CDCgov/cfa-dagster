@@ -14,18 +14,15 @@ nav = [
       "getting-started/quickstart.md",
       "getting-started/installation.md",
       "getting-started/concepts.md"
-    ]
-  },
+    ] },
   { "Tutorials" = [
       "tutorial/azure.md",
       "tutorial/docker.md"
-    ]
-  },
+    ] },
   { "Examples" = [
       "examples/county-rt.md",
       "examples/nssp-etl.md"
-    ]
-  }
+    ] }
 ]
 
 watch = [ "includes" ]
