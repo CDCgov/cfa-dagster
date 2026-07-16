@@ -5,9 +5,6 @@ on:
     branches:
       - docs
 
-#env:
-#  GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
-
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
@@ -36,13 +33,7 @@ jobs:
       - name: Build website
         run: |
           cd docs &&
-          uv run zensical build --clean 
-#          cp -r site/* ./ &&
-#          git config --global user.email "tsw6@cdc.gov"
-#          git config --global user.name "kelly-a-reagan"
-#          git add docs/ &&
-#          git diff --cached --quiet || git commit -m "Copy site files to /docs for GitHub Pages" &&
-#          git push || true
+          uv run zensical build --clean
 
       - uses: actions/upload-pages-artifact@v5
         with:
