@@ -16,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pages: write
+      id-token: write
     outputs:
       page_artifact_id: ${{ steps.upload.outputs.artifact_id }}
     steps:
