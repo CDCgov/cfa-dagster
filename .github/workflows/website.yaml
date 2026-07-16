@@ -42,6 +42,7 @@ jobs:
           retention-days: "3"
 
   deploy:
+    if: ${{ github.event_name == 'push' && github.ref_name == 'docs' }}
     runs-on: ubuntu-latest
     needs: build
 
