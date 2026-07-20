@@ -9,7 +9,7 @@ IMAGE_NAME=<Your GitHub repository name>
 TAG=<Your GitHub repo branch name within the repo specified on the previous line>
 
 az acr login --name 'cfaprdbatchcr'
-docker pull $(REGISTRY)$(IMAGE_NAME):$(TAG)
+docker pull "${REGISTRY}${IMAGE_NAME}:${TAG}"
 ```
 2. Build the Docker image with given tag
 ```
