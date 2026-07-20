@@ -122,25 +122,20 @@ If you would like to be able to explore the filesystem within the container you 
 Then, *before* you materialize your Dagster assets, make sure to run the job.
 
 To run the job, navigate to the “Jobs” page on the side panel. You should see your jobs when you click on this page.
-
-![Screenshot](../images/image_1.png)
+<img src="../../assets/images/image_1.png" alt="Dagster UI navigation panel">
  
 Then, click on the job you would like to run. In this example, click on `build_image` and it will take you to an overview of the job.
-
-<img src="../../assets/images/image_2.png" alt="Screenshot of Dagster UI job">
+<img src="../../assets/images/image_2.png" alt="Dagster UI job">
  
 Click on the Launchpad tab, which is next to the Overview tab above the `build_image_op` box. When you click on the Launchpad tab, it will open a page that looks like this:
-
-![Screenshot](../images/image_3.png)
+<img src="../../assets/images/image_3.png" alt="Dagster UI job launchpad">
  
 Note: Any time you modify a configuration, click on the “Refresh config” button above the code box. Dagster will tell you if your configuration file needs to be refreshed. 
 
 When you are ready to run your job, click on the “Launch Run” button on the bottom right-hand corner of the screen. While your job is running, you can see the logs printed out in real time at the bottom of the screen.
-
-![Screenshot](../images/image_4.png)
+<img src="../../assets/images/image_4.png" alt="Dagster UI job running with logs printed">
  
 If the run is successful, you will see a “Success” message in green at the top of the screen.
+<img src="../../assets/images/image_5.png" alt="Dagster UI successful job message">
 
-![Screenshot](../images/image_5.png)
- 
-Now, continue with running your workflow through Azure or Docker. 
+Now, continue with running your workflow through [Azure](azure.md) or [Docker](docker.md). 
