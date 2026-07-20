@@ -13,7 +13,7 @@ docker pull $(REGISTRY)$(IMAGE_NAME):$(TAG)
 ```
 2. Build the Docker image with given tag
 ```
-docker build -t $(REGISTRY)$(IMAGE_NAME):$(TAG) \
+docker build -t "${REGISTRY}${IMAGE_NAME}:${TAG}" \
 		--build-arg TAG=$(TAG) -f Dockerfile .
 ```
 3. Push the tagged image to the container registry
