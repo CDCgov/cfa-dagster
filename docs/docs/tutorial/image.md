@@ -133,7 +133,7 @@ Click on the Launchpad tab, which is next to the Overview tab above the `build_i
 
 <img src="../../assets/images/image_3.png" alt="Dagster UI job launchpad" width="75%" height="75%">
  
-Note: Any time you modify a configuration, click on the “Refresh config” button above the code box. Dagster will tell you if your configuration file needs to be refreshed. 
+[!TIP] Any time you modify a configuration, click on the “Refresh config” button above the code box. Dagster will tell you if your configuration file needs to be refreshed. 
 
 When you are ready to run your job, click on the “Launch Run” button on the bottom right-hand corner of the screen. While your job is running, you can see the logs printed out in real time at the bottom of the screen.
 
