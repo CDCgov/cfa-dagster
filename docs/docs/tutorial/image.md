@@ -1,6 +1,6 @@
 # Tutorial on Creating a Job to Build and Push Image to ACR
 
-First, we will add code to `dagster_defs.py` that will create an [op](docs/docs/getting-started/concepts.md #Ops) to be called by a [job](https://docs.dagster.io/guides/build/jobs). The `op` tells the `job` to build the image, login to ACR, and push the image to ACR. Add the following code to your `dagster_defs.py` file:
+First, we will add code to `dagster_defs.py` that will create an [op](../getting-started/concepts.md#Ops) to be called by a [job](https://docs.dagster.io/guides/build/jobs). The `op` tells the `job` to build the image, login to ACR, and push the image to ACR. Add the following code to your `dagster_defs.py` file:
 ```
 if not is_production():
     # Build and Push Image ---------------------------
