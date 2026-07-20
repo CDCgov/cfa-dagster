@@ -122,7 +122,8 @@ If you would like to be able to explore the filesystem within the container you 
 Then, *before* you materialize your Dagster assets, make sure to run the job.
 
 To run the job, navigate to the “Jobs” page on the side panel. You should see your jobs when you click on this page.
-<img src="../../assets/images/image_1.png" alt="Dagster UI navigation panel">
+
+![Dagster UI Navigation Panel](../../assets/images/image_1.png)
  
 Then, click on the job you would like to run. In this example, click on `build_image` and it will take you to an overview of the job.
 <img src="../../assets/images/image_2.png" alt="Dagster UI job">
