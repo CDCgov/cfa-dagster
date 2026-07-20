@@ -127,7 +127,7 @@ To run the job, navigate to the “Jobs” page on the side panel. You should se
  
 Then, click on the job you would like to run. In this example, click on `build_image` and it will take you to an overview of the job.
 
-![Screenshot](../images/image_2.png)
+<img src="../../assets/images/image_2.png" alt="Screenshot of Dagster UI job">
  
 Click on the Launchpad tab, which is next to the Overview tab above the `build_image_op` box. When you click on the Launchpad tab, it will open a page that looks like this:
 
