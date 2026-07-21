@@ -39,6 +39,7 @@ jobs:
           uv run zensical build --clean
 
       - name: Upload built artifact
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         id: upload
         uses: actions/upload-pages-artifact@v5
         with:
@@ -47,6 +48,7 @@ jobs:
           retention-days: "3"
 
       - name: Deploy to GH Pages
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: actions/deploy-pages@v5
         with:
           artifact_name: github-pages
