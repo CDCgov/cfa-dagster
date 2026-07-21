@@ -16,7 +16,7 @@ nav = [
       "getting-started/concepts.md"
     ] },
   { "Tutorials" = [
-      "tutorials/image.md",
+      "tutorial/image.md",
       "tutorial/azure.md",
       "tutorial/docker.md"
     ] },
