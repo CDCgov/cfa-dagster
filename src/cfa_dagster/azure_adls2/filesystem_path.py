@@ -1,6 +1,9 @@
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+log = logging.getLogger(__name__)
 
 from azure.storage.filedatalake import (
     DataLakeDirectoryClient,
@@ -10,6 +13,7 @@ from azure.storage.filedatalake import (
 
 if TYPE_CHECKING:
     from .filesystem_io_manager import FilesystemADLS2IOManager
+    from .filesystem_metadata import OnInputConflict
 
 
 @dataclass(frozen=True)
@@ -75,6 +79,7 @@ class ADLS2Path:
         self,
         relative_path: str | None = None,
         local_dir: Path | None = None,
+        on_conflict: "OnInputConflict" = "overwrite",
     ) -> Path:
         """
         Download this path or a subpath.
@@ -102,9 +107,14 @@ class ADLS2Path:
             if not local_dir:
                 local_dir = self.local_dir / relative_path
 
+        if self._io_manager._dry_run:
+            log.info(f"DRY RUN: would download {target_path}")
+            return local_dir
+
         return self._io_manager.download_prefix(
             adls2_prefix=target_path,
             local_dir=local_dir,
+            on_conflict=on_conflict,
         )
 
     def __str__(self) -> str:

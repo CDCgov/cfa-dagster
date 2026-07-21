@@ -245,16 +245,16 @@ class HotReloader:
         self._observer.daemon = True
         self._observer.start()
         if len(resolved) == 1 and resolved[0].is_file():
-            log.info(f"Hot-reloading: watching {resolved[0]}")
+            log.info(f"Hot-reloader: watching {resolved[0]}")
         elif all(p.is_file() for p in resolved):
             for p in resolved:
-                log.info(f"Hot-reloading: watching {p}")
+                log.info(f"Hot-reloader: watching {p}")
         else:
             dirs = sorted(
                 {str(p.parent if p.is_file() else p) for p in resolved}
             )
             log.info(
-                f"Hot-reloading: watching python files under {', '.join(dirs)}"
+                f"Hot-reloader: watching python files under {', '.join(dirs)}"
             )
 
     def stop(self):
@@ -268,7 +268,7 @@ class HotReloader:
             self._server_ready = wait_for_server(self._host, self._port)
             if not self._server_ready:
                 return
-        log.info("Hot-reloading: Change detected, reloading workspace...")
+        log.info("Hot-reloader: Change detected, reloading workspace...")
         reload_via_graphql(host=self._host, port=self._port)
 
 

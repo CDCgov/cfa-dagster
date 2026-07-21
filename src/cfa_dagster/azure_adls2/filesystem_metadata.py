@@ -4,7 +4,7 @@ from typing import Literal, Optional
 import dagster as dg
 
 InputMode = Literal["path", "download", "reference"]
-OnInputConflict = Literal["overwrite", "fail", "warn", "skip"]
+OnInputConflict = Literal["overwrite", "fail", "warn", "skip", "merge"]
 
 METADATA_KEY = "adls2_fs_io_manager"
 
