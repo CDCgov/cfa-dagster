@@ -1,28 +1,9 @@
 # Tutorial on Running Workflow Through Docker
 
-## General
-
-1. Login to Azure Container Registry and pull the latest container image
-```
-REGISTRY=cfaprdbatchcr.azurecr.io/
-IMAGE_NAME=<Your GitHub repository name>
-TAG=<Your GitHub repo branch name within the repo specified on the previous line>
-
-az acr login --name 'cfaprdbatchcr'
-docker pull "${REGISTRY}${IMAGE_NAME}:${TAG}"
-```
-2. Build the Docker image with given tag
-```
-docker build -t $(REGISTRY)$(IMAGE_NAME):$(TAG) \
-		--build-arg TAG=$(TAG) -f Dockerfile .
-```
-3. Push the tagged image to the container registry
-```
-docker push $(REGISTRY)$(IMAGE_NAME):$(TAG)
-```
+First, build and push your Docker image by following the instructions on [creating a job to build and push image to ACR](/docs/docs/tutorial/image.md).
 
 ## Docker
-1. Modify the defs object at the bottom of the `dagster_defs.py` file by uncommenting the docker configuration.
+Modify the defs object at the bottom of the `dagster_defs.py` file by uncommenting the docker configuration.
 ```
 defs = dg.Definitions(
     **collected_defs,
