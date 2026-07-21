@@ -10,4 +10,5 @@
 *[NSSP]: National Syndromic Surveillance Program
 *[ODE]: Ordinary Differential Equations
 *[RSV]: Respiratory Syncytial Virus
+*[STF]: Short-Term Forecasts
 *[UI]: User Interface

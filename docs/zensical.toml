@@ -22,7 +22,8 @@ nav = [
     ] },
   { "Examples" = [
       "examples/county-rt.md",
-      "examples/nssp-etl.md"
+      "examples/nssp-etl.md",
+      "examples/stf-forecasting.md"
     ] }
 ]
 
