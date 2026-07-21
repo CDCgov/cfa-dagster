@@ -1,7 +1,7 @@
 # Tutorial on Creating a Job to Build and Push Image to ACR
 
 First, we will add code to `dagster_defs.py` that will create an [op](../getting-started/concepts.md#Ops) to be called by a [job](https://docs.dagster.io/guides/build/jobs). The `op` tells the `job` to build the image, login to ACR, and push the image to ACR. Add the following code to your `dagster_defs.py` file:
-```
+```python
 if not is_production():
     # Build and Push Image ---------------------------
 
@@ -87,7 +87,7 @@ if not is_production():
 ```
 
 If you would like to be able to explore the filesystem within the container you just built in the previous step, you can add the following *optional* code, which creates a job to be able to interactively navigate the filesystem:
-```
+```python
 @dg.op
     def explore_image_op(
         context: dg.OpExecutionContext,
@@ -123,24 +123,24 @@ Then, *before* you materialize your Dagster assets, make sure to run the job.
 
 To run the job, navigate to the “Jobs” page on the side panel. You should see your jobs when you click on this page.
 
-<img src="../../assets/images/image_1.png" alt="Dagster UI navigation panel" width="50%" height="50%">
+<img src="../../assets/images/image_navigation_panel.png" alt="Dagster UI navigation panel" width="50%" height="50%">
  
 Then, click on the job you would like to run. In this example, click on `build_image` and it will take you to an overview of the job.
 
-<img src="../../assets/images/image_2.png" alt="Dagster UI job" width="75%" height="75%">
+<img src="../../assets/images/image_job_overview.png" alt="Dagster UI job" width="75%" height="75%">
  
 Click on the Launchpad tab, which is next to the Overview tab above the `build_image_op` box. When you click on the Launchpad tab, it will open a page that looks like this:
 
-<img src="../../assets/images/image_3.png" alt="Dagster UI job launchpad" width="75%" height="75%">
+<img src="../../assets/images/image_launchpad.png" alt="Dagster UI job launchpad" width="75%" height="75%">
  
 [!TIP] Any time you modify a configuration, click on the “Refresh config” button above the code box. Dagster will tell you if your configuration file needs to be refreshed. 
 
 When you are ready to run your job, click on the “Launch Run” button on the bottom right-hand corner of the screen. While your job is running, you can see the logs printed out in real time at the bottom of the screen.
 
-<img src="../../assets/images/image_4.png" alt="Dagster UI job running with logs printed" width="75%" height="75%">
+<img src="../../assets/images/image_job_running.png" alt="Dagster UI job running with logs printed" width="75%" height="75%">
  
 If the run is successful, you will see a “Success” message in green at the top of the screen.
 
-<img src="../../assets/images/image_5.png" alt="Dagster UI successful job message" width="75%" height="75%">
+<img src="../../assets/images/image_job_success.png" alt="Dagster UI successful job message" width="75%" height="75%">
 
 Now, continue with running your workflow through [Azure](azure.md) or [Docker](docker.md). 
