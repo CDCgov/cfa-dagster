@@ -1,7 +1,7 @@
 # Tutorial on Creating a Job to Build and Push Image to ACR
 
 First, we will add code to `dagster_defs.py` that will create an [op](../getting-started/concepts.md#Ops) to be called by a [job](https://docs.dagster.io/guides/build/jobs). The `op` tells the `job` to build the image, login to ACR, and push the image to ACR. Add the following code to your `dagster_defs.py` file:
-```
+```python
 if not is_production():
     # Build and Push Image ---------------------------
 
@@ -87,7 +87,7 @@ if not is_production():
 ```
 
 If you would like to be able to explore the filesystem within the container you just built in the previous step, you can add the following *optional* code, which creates a job to be able to interactively navigate the filesystem:
-```
+```python
 @dg.op
     def explore_image_op(
         context: dg.OpExecutionContext,
