@@ -174,7 +174,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         context: Optional[Union[LaunchRunContext, ResumeRunContext]] = None,
     ) -> ExecutionConfig:
         """
-        Resolve the ExecutionConfig using cascading checks **in ordr of precedence**:
+        Resolve the ExecutionConfig using cascading checks **in order of precedence**:
             1. RunConfig(execution)
             2. Run tags cfa_dagster/execution
             3. Repo Definitions(metadata.cfa_dagster/execution)

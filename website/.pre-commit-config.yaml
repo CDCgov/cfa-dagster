@@ -1,0 +1,33 @@
+repos:
+  # Basic file cleanliness
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-yaml
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+  # Secrets
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+  # Typos
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.36.2
+    hooks:
+      - id: typos
+  - repo: local
+    hooks:
+      # Prettier
+      - id: prettier
+        name: prettier
+        language: node
+        entry: npx prettier --write --config .prettierrc.json --log-level warn
+        # format only these files
+        types_or: [json, markdown, yaml]
+        # note that pre-commit uses regexes for exclusions
+        exclude: "includes\\/abbreviations\\.md"

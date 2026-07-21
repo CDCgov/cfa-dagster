@@ -21,7 +21,7 @@ ENV PATH="/root/.local/bin:$PATH"
 # add Dagster workflow file
 COPY ./dagster_defs.py .
 
-# remove dev depencies before install
+# remove dev dependencies before install
 RUN sed -i 's/cfa-dagster\[[^]]*\]/cfa-dagster/' dagster_defs.py
 
 # create a virtual environment for the dagster workflows
