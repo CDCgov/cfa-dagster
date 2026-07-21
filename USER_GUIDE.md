@@ -14,7 +14,7 @@ See the [examples](examples/) first if you haven't done so already
 - [Job](https://docs.dagster.io/guides/build/jobs#uses): a python function that runs Assets or Ops with some configuration
 - [Partition](https://docs.dagster.io/guides/build/partitions-and-backfills/partitioning-assets): a parameter to an Asset that allows parallel compute
 - [Run Launcher](https://docs.dagster.io/deployment/execution/run-launchers#custom-run-launchers): the python class that determines the Dagster run environment e.g. on your computer, in Docker, on Azure Batch, or on Azure Container App Job
-- [Executor](https://docs.dagster.io/guides/operate/run-executors#for-a-code-location): the python class that determines how steps (Ops, Assets) are executed in a Dagster run e.g. sequentially or in parallel in the Run Launcher environment, parallelized across Azure Batch tasks, or parallelized acros Azure Container App Job executions
+- [Executor](https://docs.dagster.io/guides/operate/run-executors#for-a-code-location): the python class that determines how steps (Ops, Assets) are executed in a Dagster run e.g. sequentially or in parallel in the Run Launcher environment, parallelized across Azure Batch tasks, or parallelized across Azure Container App Job executions
 - [Backfill](https://docs.dagster.io/guides/build/partitions-and-backfills/backfilling-data): Materializing multiple partitions of an Asset at once aka running a python function parallelized against a set of parameters
 
 ## Using Dagster in an Existing Repo
