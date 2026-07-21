@@ -1,6 +1,6 @@
 # CFA NSSP ETL Pipeline
 
-The CFA NSSp ETL pipeline pulls in respiratory viruses data daily from the NSSP API made available for CFA. Click [here](https://github.com/cdcent/cfa-nssp-etl) to go to the GitHub repository.
+The CFA NSSP ETL pipeline pulls in respiratory viruses data daily from the NSSP API made available for CFA. Click [here](https://github.com/cdcent/cfa-nssp-etl) to go to the GitHub repository.
 
 ## Dagster implementation
 
