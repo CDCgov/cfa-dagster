@@ -1,9 +1,10 @@
 # Tutorial on Running Workflow Through Docker
 
-First, build and push your Docker image by following the instructions on [creating a job to build and push image to ACR](/docs/docs/tutorial/image.md).
+First, build and push your Docker image by following the instructions on [creating a job to build and push image to ACR](image.md).
 
 ## Docker
 To run your container in Docker,
+
 1. Include the following configuration at the top of your `dagster_defs.py` file. Make sure that "image" matches your image built in the previous step.
 ```
 docker_config = ExecutionConfig(
