@@ -108,6 +108,6 @@ def get_status_caj(
         filter=f"Name eq '{job_execution_id}'",
     ).next()  # only expecting one execution since we have the exact name
 
-    # Status represented by enum, but property acces converts to Capital case
+    # Status represented by enum, but property access converts to Capital case
     # https://learn.microsoft.com/en-us/python/api/azure-mgmt-appcontainers/azure.mgmt.appcontainers.models.jobexecutionrunningstate?view=azure-python
     return execution if not execution else execution.status

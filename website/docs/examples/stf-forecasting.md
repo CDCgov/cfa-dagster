@@ -8,7 +8,7 @@ The CFA STF Routine Forecasting project produces short-term forecasts for RSV, C
 
 ### Why Dagster
 
-* This worflow requires data to be read into the models, three different models to be run for three different respiratory diseases, and post-processing the results.
+* This workflow requires data to be read into the models, three different models to be run for three different respiratory diseases, and post-processing the results.
 * The workflow is triggered to run when there is new data.
 * The workflow will stop when upstream assets do not materialize successfully, but will continue for those that do materialize successfully.
 
