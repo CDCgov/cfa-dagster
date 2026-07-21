@@ -66,7 +66,10 @@ def _resolve_module_path(
         if candidate_file.is_file():
             return candidate_file.resolve()
         candidate_pkg = base / module_name
-        if candidate_pkg.is_dir() and (candidate_pkg / "__init__.py").is_file():
+        if (
+            candidate_pkg.is_dir()
+            and (candidate_pkg / "__init__.py").is_file()
+        ):
             return candidate_pkg.resolve()
 
     return None
@@ -105,9 +108,7 @@ def resolve_target_paths(
             elif module_path.is_file():
                 targets.add(module_path.resolve())
         else:
-            log.warning(
-                "Could not resolve root_module '%s'", root_module
-            )
+            log.warning("Could not resolve root_module '%s'", root_module)
 
     if not targets and entry_point:
         ep = Path(entry_point)
@@ -228,9 +229,7 @@ class HotReloader:
                 with self._lock:
                     if self._timer and self._timer.is_alive():
                         self._timer.cancel()
-                    self._timer = threading.Timer(
-                        debounce, callback
-                    )
+                    self._timer = threading.Timer(debounce, callback)
                     self._timer.daemon = True
                     self._timer.start()
 
@@ -241,9 +240,7 @@ class HotReloader:
                     _Handler(), str(path.parent), recursive=False
                 )
             else:
-                self._observer.schedule(
-                    _Handler(), str(path), recursive=True
-                )
+                self._observer.schedule(_Handler(), str(path), recursive=True)
 
         self._observer.daemon = True
         self._observer.start()
@@ -257,8 +254,7 @@ class HotReloader:
                 {str(p.parent if p.is_file() else p) for p in resolved}
             )
             log.info(
-                f"Hot-reloading: watching python files under "
-                f"{', '.join(dirs)}"
+                f"Hot-reloading: watching python files under {', '.join(dirs)}"
             )
 
     def stop(self):
