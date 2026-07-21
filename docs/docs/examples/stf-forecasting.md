@@ -4,7 +4,7 @@ The CFA STF Routine Forecasting project produces short-term forecasts for RSV, C
 
 ## Dagster implementation
 
-<img src="../../assets/images/stf_dagster_lineage.png" alt="Dagster UI showing 10 assets for the STF Routine Forecasting workflow">
+<img src="stf_dagster_lineage.png" alt="Dagster UI showing 10 assets for the STF Routine Forecasting workflow">
 
 ### Why Dagster
 
