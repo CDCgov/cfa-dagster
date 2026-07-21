@@ -6,7 +6,7 @@ First, build and push your Docker image by following the instructions on [creati
 To run the container in Azure CAJ,
 
 1. Include the following configuration at the top of your `dagster_defs.py` file. Modify the "image" to match the image built in the previous step.
-```
+```python
 azure_caj_config = ExecutionConfig(
     executor=SelectorConfig(
         class_name=azure_container_app_job_executor.__name__,
@@ -27,7 +27,7 @@ azure_caj_config = ExecutionConfig(
 To run the container in Azure Batch,
 
 1. Include the following configuration at the top of your `dagster_defs.py` file. Modify the "pool_name", "working_dir", and "container_kwargs" as needed. Make sure that "image" matches your image built in the previous step.
-```
+```python
 azure_batch_config = ExecutionConfig(
     executor=SelectorConfig(
         class_name=azure_batch_executor.__name__,

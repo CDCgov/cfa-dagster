@@ -39,7 +39,7 @@ Instructions for installing and configuring the Dagster CLI from the Dagster off
 ## Update your Dockerfile
 
 After your virtual environment is activated in your Dockerfile, add the following code:
-```
+```dockerfile
 # add Dagster workflow file
 COPY ./dagster_defs.py .
 
