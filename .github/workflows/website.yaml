@@ -31,11 +31,11 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version-file: "docs/.python-version"
+          python-version-file: "website/.python-version"
 
       - name: Build website
         run: |
-          cd docs &&
+          cd website &&
           uv run zensical build --clean
 
       - name: Upload built artifact
@@ -43,7 +43,7 @@ jobs:
         uses: actions/upload-pages-artifact@v5
         with:
           name: github-pages
-          path: ./docs/site
+          path: ./website/site
           retention-days: "3"
 
       - name: Deploy to GH Pages
@@ -51,4 +51,4 @@ jobs:
         with:
           artifact_name: github-pages
           preview: false
-          publish_dir: ./docs/site
+          publish_dir: ./website/site
