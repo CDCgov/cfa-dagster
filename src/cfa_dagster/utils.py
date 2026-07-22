@@ -216,6 +216,12 @@ def _run_cli(
     """
     set_env_vars()
     configure_dev_db()
+
+    # Ensure CWD is on the module search path so dagster_defs is importable
+    cwd = str(Path.cwd())
+    if sys.path[0] != cwd:
+        sys.path.insert(0, cwd)
+
     raw_args = argv if argv is not None else sys.argv
     log.debug(f"raw_args: {raw_args}")
 
@@ -240,6 +246,8 @@ def _run_cli(
         if fallback and "-f" not in args and "--python-file" not in args:
             log.info(f"No dagster project found, using -f {defs_file}")
             args = [*args, "-f", defs_file]
+            defs_path = Path(fallback).resolve()
+            sys.path.insert(0, str(defs_path.parent))
 
     if first_subcommand == "dev":
         from .hot_reload import start_hot_reloader_for_dev
