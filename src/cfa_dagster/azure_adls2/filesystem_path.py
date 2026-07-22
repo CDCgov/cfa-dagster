@@ -3,13 +3,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-log = logging.getLogger(__name__)
-
 from azure.storage.filedatalake import (
     DataLakeDirectoryClient,
     DataLakeFileClient,
     FileSystemClient,
 )
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .filesystem_io_manager import FilesystemADLS2IOManager
