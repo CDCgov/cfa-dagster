@@ -171,14 +171,64 @@ def find_pyproject_toml(start_dir: Path) -> Optional[Path]:
     return None
 
 
+def _read_dg_project_config(pyproj_path: Path) -> Optional[dict]:
+    """Read the [tool.dg.project] section from a pyproject.toml."""
+    try:
+        data = tomllib.loads(pyproj_path.read_text())
+        return data.get("tool", {}).get("dg", {}).get("project")
+    except Exception:
+        return None
+
+
+def _check_dg_module_findable(root_path: Path, root_module: str) -> bool:
+    """Check whether dg CLI's get_path_for_local_module would find this module."""
+    base_path = (
+        root_path / "src" if (root_path / "src").is_dir() else root_path
+    )
+    path = base_path / root_module
+    return path.with_suffix(".py").is_file() or path.is_dir()
+
+
+def resolve_defs_file(defs_file: str) -> str:
+    """Resolve the definitions file name by priority:
+    1. [tool.dg.project] defs_module / root_module from pyproject.toml
+    2. The caller-provided defs_file (e.g. from uv run somefile.py)
+    3. The conventional DEFS_FILE (dagster_defs.py)
+    """
+    pyproj = find_pyproject_toml(Path.cwd())
+    if pyproj:
+        proj_config = _read_dg_project_config(pyproj)
+        if proj_config:
+            module_name = proj_config.get("defs_module") or proj_config.get(
+                "root_module"
+            )
+            if module_name:
+                py_file = module_name + ".py"
+                if Path(py_file).is_file():
+                    return py_file
+
+    if Path(defs_file).is_file():
+        return defs_file
+
+    if Path(DEFS_FILE).is_file():
+        return DEFS_FILE
+
+    return defs_file
+
+
 def check_needs_fallback_file(defs_file: str) -> Optional[str]:
     pyproj = find_pyproject_toml(Path.cwd())
     if pyproj:
         try:
             data = tomllib.loads(pyproj.read_text())
-            dg = data.get("tool", {}).get("dg", {})
-            if dg.get("directory_type") in ("project", "workspace"):
-                return None
+            dg_config = data.get("tool", {}).get("dg", {})
+            if dg_config.get("directory_type") in ("project", "workspace"):
+                proj_config = dg_config.get("project", {})
+                root_module = proj_config.get("root_module")
+                if root_module and _check_dg_module_findable(
+                    pyproj.parent, root_module
+                ):
+                    return None
         except Exception:
             pass
     fp = Path(defs_file)
@@ -216,6 +266,8 @@ def _run_cli(
     """
     set_env_vars()
     configure_dev_db()
+
+    defs_file = resolve_defs_file(defs_file)
 
     # Ensure CWD is on the module search path so dagster_defs is importable
     cwd = str(Path.cwd())
