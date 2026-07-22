@@ -26,8 +26,9 @@ repos:
       - id: prettier
         name: prettier
         language: node
-        entry: npx prettier --write --config .prettierrc.json --log-level warn
+        entry: npx prettier --write --config website/.prettierrc.json --log-level warn
         # format only these files
         types_or: [json, markdown, yaml]
         # note that pre-commit uses regexes for exclusions
         exclude: "includes\\/abbreviations\\.md"
+        files: "^website/"
