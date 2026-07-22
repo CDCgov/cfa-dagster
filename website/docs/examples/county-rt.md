@@ -1,8 +1,10 @@
 # CFA County Rt (Sub-state Rt)
 
-This CFA project implements and evaluates hierarchical generalized additive models (HGAMs) for $R_t$ estimation at the county level in the United States. Click [here](https://github.com/cdcent/cfa-county-rt) to go to the GitHub repository.
+This CFA project implements and evaluates hierarchical generalized additive models (HGAMs) for *Rt* estimation at the county level in the United States. Click [here](https://github.com/cdcent/cfa-county-rt) to go to the GitHub repository.
 
 ## Dagster implementation
+
+<img src="county_rt_dagster_lineage.png" alt="Dagster UI showing 4 assets for the county Rt workflow">
 
 ### Why Dagster
 
