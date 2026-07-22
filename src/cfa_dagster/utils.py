@@ -154,7 +154,10 @@ def set_env_vars():
     dagster_home = str(importlib.resources.files("cfa_dagster"))
     # used by cfa-dagster for database and blob storage locations
     if not os.getenv("DAGSTER_USER"):
-        os.environ["DAGSTER_USER"] = Path.home().name.lower()
+        if os.getenv("GITHUB_ACTIONS"):
+            os.environ["DAGSTER_USER"] = "github_actions"
+        else:
+            os.environ["DAGSTER_USER"] = Path.home().name.lower()
     # used by dagster
     if not os.getenv("DAGSTER_HOME"):
         os.environ["DAGSTER_HOME"] = dagster_home
@@ -205,6 +208,7 @@ def _run_cli(
     argv: list[str] | None = None,
     defs_file: str = DEFS_FILE,
     always_add_host_port: bool = False,
+    add_fallback: bool = False,
 ):
     """
     Runs a cli tool, automatically falling back to ``-f defs_file`` when
@@ -231,13 +235,14 @@ def _run_cli(
         port = LOCAL_PORT
     log.debug(f"args: {args}")
 
-    if first_subcommand == "dev":
-        from .hot_reload import start_hot_reloader_for_dev
-
+    if first_subcommand == "dev" or add_fallback:
         fallback = check_needs_fallback_file(defs_file)
         if fallback and "-f" not in args and "--python-file" not in args:
             log.info(f"No dagster project found, using -f {defs_file}")
             args = [*args, "-f", defs_file]
+
+    if first_subcommand == "dev":
+        from .hot_reload import start_hot_reloader_for_dev
 
         try:
             start_hot_reloader_for_dev(
@@ -278,6 +283,7 @@ def run_dagster_webserver():
         cli,
         "DAGSTER_WEBSERVER",
         always_add_host_port=True,
+        add_fallback=True,
     )
 
 
