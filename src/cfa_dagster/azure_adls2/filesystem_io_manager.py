@@ -26,6 +26,7 @@ from upath import UPath
 from ..utils import is_production
 from .filesystem_metadata import (
     ADLS2FilesystemIOManagerMetadata,
+    DownloadResult,
     InputMode,
     OnInputConflict,
 )
@@ -423,14 +424,14 @@ class FilesystemADLS2IOManager(UPathIOManager):
 
         local_dir.mkdir(parents=True, exist_ok=True)
 
-        file_count = self._download_directory(
+        result = self._download_directory(
             adls2_prefix=adls2_prefix,
             local_dir=local_dir,
             on_conflict=effective_conflict,
         )
 
         context.log.debug(
-            f"Downloaded {file_count} file(s) from "
+            f"Downloaded {len(result.downloaded)} file(s) from "
             f"{self._uri_for_prefix(adls2_prefix)} to {local_dir}"
         )
 
@@ -483,17 +484,18 @@ class FilesystemADLS2IOManager(UPathIOManager):
         adls2_prefix: str,
         local_dir: Path,
         on_conflict: OnInputConflict = "overwrite",
-    ) -> int:
+    ) -> DownloadResult:
         """Download all files under an ADLS2 prefix to a local directory.
 
         Returns:
-            Number of files downloaded.
+            DownloadResult with downloaded and skipped file lists.
         """
         paths = self._file_system_client.get_paths(
             path=adls2_prefix, recursive=True
         )
 
-        file_count = 0
+        downloaded: list[Path] = []
+        skipped: list[Path] = []
         for path_item in paths:
             if path_item.is_directory:
                 continue
@@ -503,9 +505,16 @@ class FilesystemADLS2IOManager(UPathIOManager):
             relative_path = adls2_path[len(adls2_prefix) :].lstrip("/")
 
             local_file = local_dir / relative_path
+            local_exists = local_file.exists()
 
-            if on_conflict == "merge" and local_file.exists():
+            if on_conflict == "merge" and local_exists:
                 log.debug(f"Skipping existing file: {local_file}")
+                skipped.append(local_file)
+                continue
+
+            if self._dry_run:
+                if local_exists:
+                    skipped.append(local_file)
                 continue
 
             local_file.parent.mkdir(parents=True, exist_ok=True)
@@ -517,9 +526,13 @@ class FilesystemADLS2IOManager(UPathIOManager):
                 )
                 download.readinto(f)
 
-            file_count += 1
+            downloaded.append(local_file)
 
-        return file_count
+        return DownloadResult(
+            local_dir=local_dir,
+            downloaded=downloaded,
+            skipped=skipped,
+        )
 
     # -------------------------------------------------------------------------
     # Deletion helpers
@@ -562,7 +575,7 @@ class FilesystemADLS2IOManager(UPathIOManager):
         adls2_prefix: str,
         local_dir: Path | None = None,
         on_conflict: OnInputConflict = "overwrite",
-    ) -> Path:
+    ) -> DownloadResult:
         """
         Download an ADLS prefix to a local directory.
 
@@ -580,26 +593,20 @@ class FilesystemADLS2IOManager(UPathIOManager):
 
         Returns
         -------
-        Path
-            Local directory containing downloaded files.
+        DownloadResult
+            The local directory and list of downloaded file paths.
         """
 
         if local_dir is None:
             local_dir = Path(tempfile.mkdtemp())
 
-        if self._dry_run:
-            log.info(f"DRY RUN: would download {adls2_prefix} to {local_dir}")
-            return local_dir
-
         local_dir.mkdir(parents=True, exist_ok=True)
 
-        self._download_directory(
+        return self._download_directory(
             adls2_prefix=adls2_prefix,
             local_dir=local_dir,
             on_conflict=on_conflict,
         )
-
-        return local_dir
 
 
 class ADLS2FilesystemIOManager(ConfigurableIOManager):

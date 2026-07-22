@@ -1,4 +1,5 @@
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Literal, Optional
 
 import dagster as dg
@@ -75,3 +76,14 @@ class ADLS2FilesystemIOManagerMetadata:
 
     def to_dict(self) -> dict:
         return {METADATA_KEY: asdict(self)}
+
+
+@dataclass
+class DownloadResult:
+    local_dir: Path
+    downloaded: list[Path]
+    skipped: list[Path]
+
+    @property
+    def files(self) -> list[Path]:
+        return self.downloaded + self.skipped
