@@ -4,6 +4,8 @@ The CFA NSSP ETL pipeline pulls in respiratory viruses data daily from the NSSP 
 
 ## Dagster implementation
 
+<img src="nssp_etl_dagster_lineage.png" alt="Dagster UI showing 2 assets for the NSSP ETL workflow" height="60%" width="60%">
+
 ### Why Dagster
 
 * This pipeline requires updates to be made at regular intervals.

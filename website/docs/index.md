@@ -8,3 +8,9 @@ The purpose of this website is to provide an overview of [Dagster](https://docs.
 * Dagster provides a clear user interface to expose events, metadata, standard output (stdout), and standard input (stdin) logs for your workload regardless of the compute environment.
 * Dagster has built-in schedulers and event-based triggers to run your workload when you want.
 * The platform is designed to provide visibility across the entire data ecosystem, not just individual jobs.
+
+<figure markdown="span">
+    <img src="dagster-logo-dark.png#only-dark" alt="Dagster logo" width="30%" height="30%">
+    <img src="dagster-logo-light.png#only-light" alt="Dagster logo" width="30%" height="30%">
+    <figcaption></figcaption>
+</figure>
