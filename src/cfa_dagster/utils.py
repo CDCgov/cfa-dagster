@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 
 LOCAL_HOSTNAME = "127.0.0.1"
 LOCAL_PORT = 4000
-DEFS_FILE = "dagster_defs.py"
+DEFAULT_DEFS_FILE = "dagster_defs.py"
 PROD_HOSTNAME = os.getenv(
     "DAGSTER_WEBSERVER_URL", "dagster.apps.edav.ext.cdc.gov"
 )
@@ -171,52 +171,12 @@ def find_pyproject_toml(start_dir: Path) -> Optional[Path]:
     return None
 
 
-def _read_dg_project_config(pyproj_path: Path) -> Optional[dict]:
-    """Read the [tool.dg.project] section from a pyproject.toml."""
-    try:
-        data = tomllib.loads(pyproj_path.read_text())
-        return data.get("tool", {}).get("dg", {}).get("project")
-    except Exception:
-        return None
-
-
-def _check_dg_module_findable(root_path: Path, root_module: str) -> bool:
-    """Check whether dg CLI's get_path_for_local_module would find this module."""
-    base_path = (
-        root_path / "src" if (root_path / "src").is_dir() else root_path
-    )
-    path = base_path / root_module
-    return path.with_suffix(".py").is_file() or path.is_dir()
-
-
-def resolve_defs_file(defs_file: str) -> str:
-    """Resolve the definitions file name by priority:
-    1. [tool.dg.project] defs_module / root_module from pyproject.toml
-    2. The caller-provided defs_file (e.g. from uv run somefile.py)
-    3. The conventional DEFS_FILE (dagster_defs.py)
+def check_needs_fallback_file() -> Optional[str]:
     """
-    pyproj = find_pyproject_toml(Path.cwd())
-    if pyproj:
-        proj_config = _read_dg_project_config(pyproj)
-        if proj_config:
-            module_name = proj_config.get("defs_module") or proj_config.get(
-                "root_module"
-            )
-            if module_name:
-                py_file = module_name + ".py"
-                if Path(py_file).is_file():
-                    return py_file
-
-    if Path(defs_file).is_file():
-        return defs_file
-
-    if Path(DEFS_FILE).is_file():
-        return DEFS_FILE
-
-    return defs_file
-
-
-def check_needs_fallback_file(defs_file: str) -> Optional[str]:
+    Return the name of the fallback file if:
+    1. The user provides a file instead of module in the pyproject.toml for [tool.dg.project.defs_module]
+    2. The user doesn't have [tool.dg.project] in the pyproject.toml
+    """
     pyproj = find_pyproject_toml(Path.cwd())
     if pyproj:
         try:
@@ -224,15 +184,19 @@ def check_needs_fallback_file(defs_file: str) -> Optional[str]:
             dg_config = data.get("tool", {}).get("dg", {})
             if dg_config.get("directory_type") in ("project", "workspace"):
                 proj_config = dg_config.get("project", {})
-                root_module = proj_config.get("root_module")
-                if root_module and _check_dg_module_findable(
-                    pyproj.parent, root_module
-                ):
-                    return None
+                defs_module = proj_config.get("defs_module")
+                if defs_module:
+                    proj_defs_file = Path(defs_module).with_suffix(".py")
+                    # if they provided a file, return the file
+                    if proj_defs_file.is_file():
+                        log.debug(f"Provided defs file: {proj_defs_file}")
+                        return str(proj_defs_file.resolve())
+                    # if they didn't provide a file, assume it is a valid module and return None
+                    else:
+                        return None
         except Exception:
             pass
-    fp = Path(defs_file)
-    return str(fp.resolve()) if fp.is_file() else None
+    return DEFAULT_DEFS_FILE
 
 
 def _get_flag_value(args: list[str], *flags: str) -> str | None:
@@ -256,7 +220,7 @@ def _run_cli(
     cli,
     env_prefix: str,
     argv: list[str] | None = None,
-    defs_file: str = DEFS_FILE,
+    defs_file: Optional[str] = None,
     always_add_host_port: bool = False,
     add_fallback: bool = False,
 ):
@@ -266,13 +230,6 @@ def _run_cli(
     """
     set_env_vars()
     configure_dev_db()
-
-    defs_file = resolve_defs_file(defs_file)
-
-    # Ensure CWD is on the module search path so dagster_defs is importable
-    cwd = str(Path.cwd())
-    if sys.path[0] != cwd:
-        sys.path.insert(0, cwd)
 
     raw_args = argv if argv is not None else sys.argv
     log.debug(f"raw_args: {raw_args}")
@@ -294,14 +251,13 @@ def _run_cli(
     log.debug(f"args: {args}")
 
     if first_subcommand in ("dev", "launch") or add_fallback:
-        fallback = check_needs_fallback_file(defs_file)
+        fallback = defs_file or check_needs_fallback_file()
         if fallback and "-f" not in args and "--python-file" not in args:
+            defs_file = fallback
             log.info(f"No dagster project found, using -f {defs_file}")
             args = [*args, "-f", defs_file]
-            defs_path = Path(fallback).resolve()
-            sys.path.insert(0, str(defs_path.parent))
 
-    if first_subcommand == "dev":
+    if first_subcommand == "dev" and defs_file:
         from .hot_reload import start_hot_reloader_for_dev
 
         try:
@@ -356,7 +312,7 @@ def run_dagster():
     _run_cli(cli, ENV_PREFIX)
 
 
-def run_dg(argv: list[str] | None = None, defs_file: str = "dagster_defs.py"):
+def run_dg(argv: list[str] | None = None, defs_file: Optional[str] = None):
     """
     Wrapper for the `dg` cli
     """
@@ -385,6 +341,7 @@ def start_dev_env(caller_name: str):
     # called directly via `uv run dagster_defs.py` or `python dagster_defs.py`
     if caller_name == "__main__":
         defs_file = Path(sys.argv[0]).name
+        log.debug(f"defs_file: {defs_file}")
         run_dg(argv=[None, "dev", *sys.argv[1:]], defs_file=defs_file)
 
     # get the user from the environment, throw an error if variable is not set

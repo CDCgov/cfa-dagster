@@ -91,6 +91,8 @@ def resolve_target_paths(
         ep = Path(entry_point)
         if ep.is_file():
             targets.add(ep.resolve())
+            # if the entry point is a file, we just need to watch that file
+            return sorted(targets)
 
     pyproj = (
         Path(pyproject_path)
@@ -109,11 +111,6 @@ def resolve_target_paths(
                 targets.add(module_path.resolve())
         else:
             log.warning("Could not resolve root_module '%s'", root_module)
-
-    if not targets and entry_point:
-        ep = Path(entry_point)
-        if ep.is_file():
-            targets.add(ep.resolve())
 
     return sorted(targets)
 
