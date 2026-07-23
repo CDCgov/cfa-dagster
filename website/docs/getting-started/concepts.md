@@ -16,14 +16,14 @@ A [resource](https://docs.dagster.io/dagster-basics-tutorial/resources#step-4-vi
 
 Resources often represent:
 
-* Database connections
-* Data warehouse clients
-* API clients
-* Cloud storage clients
-* Credentials and secrets
-* Logging systems
-* I/O managers
-* Configuration dictionaries
+- Database connections
+- Data warehouse clients
+- API clients
+- Cloud storage clients
+- Credentials and secrets
+- Logging systems
+- I/O managers
+- Configuration dictionaries
 
 ## Schedules
 
@@ -50,4 +50,5 @@ Each workflow (containing assets, resources or schedules) must be part of a [Def
 [Partitions](https://docs.dagster.io/guides/build/partitions-and-backfills/partitioning-ops#non-partitioned-job-with-date-config) divide the workflow into smaller pieces, which could speed up computation by using parallel processing. Users can test on an individual partition before trying to run larger ranges of data. In the cookie example, this could be scaling the recipe back to make 8 cookies instead of making the cookie dough for 80 cookies.
 
 ## Dynamic Graph Assets
+
 [Dynamic graph assets](https://github.com/CDCgov/cfa-dagster/blob/main/src/cfa_dagster/dynamic_graph_asset.py) were developed specifically for CFA Dagster workflows and were built on existing Dagster concepts. In standard Dagster, if you want an asset to run multiple times with different configurations, you typically use partitions. `@dynamic_graph_asset` allows you to run the same logic across multiple independent dimensions in parallel.

@@ -87,7 +87,8 @@ if not is_production():
         build_image_op()
 ```
 
-If you would like to be able to explore the filesystem within the container you just built in the previous step, you can add the following *optional* code, which creates a job to be able to interactively navigate the filesystem:
+If you would like to be able to explore the filesystem within the container you just built in the previous step, you can add the following _optional_ code, which creates a job to be able to interactively navigate the filesystem:
+
 ```python
 @dg.op
     def explore_image_op(
@@ -120,7 +121,8 @@ If you would like to be able to explore the filesystem within the container you 
     def explore_image():
         explore_image_op()
 ```
-Then, *before* you materialize your Dagster assets, make sure to run the job.
+
+Then, _before_ you materialize your Dagster assets, make sure to run the job.
 
 To run the job, navigate to the “Jobs” page on the side panel. You should see your jobs when you click on this page.
 

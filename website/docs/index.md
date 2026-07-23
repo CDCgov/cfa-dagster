@@ -4,7 +4,7 @@ The purpose of this website is to provide an overview of [Dagster](https://docs.
 
 ## Key Benefits
 
-* Dagster allows you to run the same code on your machine, in Docker, on Azure Batch, or on Azure Container App Jobs with a simple configuration change.
-* Dagster provides a clear user interface to expose events, metadata, standard output (stdout), and standard input (stdin) logs for your workload regardless of the compute environment.
-* Dagster has built-in schedulers and event-based triggers to run your workload when you want.
-* The platform is designed to provide visibility across the entire data ecosystem, not just individual jobs.
+- Dagster allows you to run the same code on your machine, in Docker, on Azure Batch, or on Azure Container App Jobs with a simple configuration change.
+- Dagster provides a clear user interface to expose events, metadata, standard output (stdout), and standard input (stdin) logs for your workload regardless of the compute environment.
+- Dagster has built-in schedulers and event-based triggers to run your workload when you want.
+- The platform is designed to provide visibility across the entire data ecosystem, not just individual jobs.
