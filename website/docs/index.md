@@ -1,5 +1,4 @@
 # Welcome to the CFA Dagster Adoption Guide
-<link rel="stylesheet" href="assets/stylesheets/custom.css">
 
 The purpose of this website is to provide an overview of [Dagster](https://docs.dagster.io/dagster-basics-tutorial/resources) and how teams within CFA have adopted Dagster in their workflow. Dagster is an orchestration platform that provides observability into your workflows as they are transparently executed in either local or cloud environments. Dagster unifies logic that is often distributed between GitHub Actions workflows, Makefiles, Bash and Python Scripts, and configured in the Azure Portal.
 
@@ -15,4 +14,3 @@ The purpose of this website is to provide an overview of [Dagster](https://docs.
     <img src="dagster-logo-light.png#only-light" alt="Dagster logo" width="30%" height="30%">
     <figcaption></figcaption>
 </figure>
-
