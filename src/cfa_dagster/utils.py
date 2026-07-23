@@ -293,7 +293,7 @@ def _run_cli(
         port = LOCAL_PORT
     log.debug(f"args: {args}")
 
-    if first_subcommand == "dev" or add_fallback:
+    if first_subcommand in ("dev", "launch") or add_fallback:
         fallback = check_needs_fallback_file(defs_file)
         if fallback and "-f" not in args and "--python-file" not in args:
             log.info(f"No dagster project found, using -f {defs_file}")
