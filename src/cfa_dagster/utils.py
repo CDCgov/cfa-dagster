@@ -190,7 +190,7 @@ def check_needs_fallback_file() -> Optional[str]:
                     # if they provided a file, return the file
                     if proj_defs_file.is_file():
                         log.debug(f"Provided defs file: {proj_defs_file}")
-                        return str(proj_defs_file.resolve())
+                        return str(proj_defs_file)
                     # if they didn't provide a file, assume it is a valid module and return None
                     else:
                         return None
