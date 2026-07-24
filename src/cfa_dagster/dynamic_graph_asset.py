@@ -880,7 +880,7 @@ def dynamic_graph_asset(
                     result = next(result)
 
                 # handle sequences
-                result = (result if should_return_all else result[0],)
+                result = result if should_return_all else result[0]
 
                 result, metadata = unpack_output(result)
 
