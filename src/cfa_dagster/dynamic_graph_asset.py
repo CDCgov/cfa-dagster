@@ -198,17 +198,15 @@ def _get_exclusion_resource_info(
 
 
 def _get_config_cls(hints):
-    config_cls = next(
-        (
-            hint
-            for hint in hints.values()
-            if inspect.isclass(hint)
+    for name, hint in hints.items():
+        if (
+            name == "config"
+            and inspect.isclass(hint)
             and issubclass(hint, dg.Config)
             and not issubclass(hint, dg.ConfigurableResource)
-        ),
-        None,
-    )
-    return config_cls
+        ):
+            return hint
+    return None
 
 
 def _get_asset_key(
@@ -790,24 +788,15 @@ def dynamic_graph_asset(
 
             log.debug(f"is_first_dimension: '{is_first_dimension}'")
 
-            if config_cls is not None:
-                dga_internal_shared_config = kwargs.get(
-                    "dga_internal_shared_config"
-                )
-                config = config_cls(**dga_internal_shared_config)
+            call_kwargs = {}
+            if "context" in decorated_fn_kwargs:
+                call_kwargs["context"] = context
+            if config_cls is not None and "config" in decorated_fn_kwargs:
+                config = config_cls(**kwargs.get("dga_internal_shared_config"))
+                call_kwargs["config"] = config
                 log.debug(f"config: '{config}'")
-                result = fn(
-                    context,
-                    config,
-                    **upstream_kwargs,
-                    **resource_kwargs,
-                )
-            else:
-                result = fn(
-                    context,
-                    **upstream_kwargs,
-                    **resource_kwargs,
-                )
+            fn_kwargs = {**call_kwargs, **upstream_kwargs, **resource_kwargs}
+            result = fn(**fn_kwargs)
 
             if isinstance(result, GeneratorType):
                 result = next(result)
