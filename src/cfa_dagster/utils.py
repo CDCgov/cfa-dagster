@@ -11,12 +11,11 @@ import dagster as dg
 import psycopg2
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
-from click.exceptions import NoArgsIsHelpError, UsageError
+from click.exceptions import Abort, NoArgsIsHelpError
 from dagster._core.definitions.unresolved_asset_job_definition import (
     UnresolvedAssetJobDefinition,
 )
 from dagster_graphql import DagsterGraphQLClient
-from dagster_shared.check.functions import CheckError
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from .azure_keyvault import KEY_VAULT_URL_CFA_PREDICT
@@ -279,7 +278,7 @@ def _run_cli(
             standalone_mode=False,
         )
         sys.exit(0)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, Abort):
         sys.exit(0)
 
 

@@ -1,10 +1,9 @@
 import json
 import os
-import sys
 from unittest.mock import Mock, patch
 
 import pytest
-from click.exceptions import NoArgsIsHelpError, UsageError
+from click.exceptions import Abort, NoArgsIsHelpError, UsageError
 from dagster import MetadataValue
 from dagster_shared.check.functions import CheckError
 
@@ -309,8 +308,9 @@ def test_execution_config_from_executor_config():
 
 def test_run_cli_system_exit_propagates():
     mock_cli = Mock(side_effect=SystemExit(42))
-    with patch("cfa_dagster.utils.set_env_vars"), patch(
-        "cfa_dagster.utils.configure_dev_db"
+    with (
+        patch("cfa_dagster.utils.set_env_vars"),
+        patch("cfa_dagster.utils.configure_dev_db"),
     ):
         with pytest.raises(SystemExit) as excinfo:
             _run_cli(mock_cli, "TEST", argv=["prog", "subcommand"])
@@ -319,8 +319,9 @@ def test_run_cli_system_exit_propagates():
 
 def test_run_cli_check_error_propagates():
     mock_cli = Mock(side_effect=CheckError("check failed"))
-    with patch("cfa_dagster.utils.set_env_vars"), patch(
-        "cfa_dagster.utils.configure_dev_db"
+    with (
+        patch("cfa_dagster.utils.set_env_vars"),
+        patch("cfa_dagster.utils.configure_dev_db"),
     ):
         with pytest.raises(CheckError, match="check failed"):
             _run_cli(mock_cli, "TEST", argv=["prog", "subcommand"])
@@ -328,8 +329,9 @@ def test_run_cli_check_error_propagates():
 
 def test_run_cli_usage_error_propagates():
     mock_cli = Mock(side_effect=UsageError("bad usage"))
-    with patch("cfa_dagster.utils.set_env_vars"), patch(
-        "cfa_dagster.utils.configure_dev_db"
+    with (
+        patch("cfa_dagster.utils.set_env_vars"),
+        patch("cfa_dagster.utils.configure_dev_db"),
     ):
         with pytest.raises(UsageError, match="bad usage"):
             _run_cli(mock_cli, "TEST", argv=["prog", "subcommand"])
@@ -337,8 +339,9 @@ def test_run_cli_usage_error_propagates():
 
 def test_run_cli_no_args_is_help():
     help_cli = Mock(side_effect=[NoArgsIsHelpError(Mock()), None])
-    with patch("cfa_dagster.utils.set_env_vars"), patch(
-        "cfa_dagster.utils.configure_dev_db"
+    with (
+        patch("cfa_dagster.utils.set_env_vars"),
+        patch("cfa_dagster.utils.configure_dev_db"),
     ):
         with pytest.raises(SystemExit) as excinfo:
             _run_cli(help_cli, "TEST", argv=["prog", "subcommand"])
@@ -352,8 +355,20 @@ def test_run_cli_no_args_is_help():
 
 def test_run_cli_keyboard_interrupt():
     mock_cli = Mock(side_effect=KeyboardInterrupt())
-    with patch("cfa_dagster.utils.set_env_vars"), patch(
-        "cfa_dagster.utils.configure_dev_db"
+    with (
+        patch("cfa_dagster.utils.set_env_vars"),
+        patch("cfa_dagster.utils.configure_dev_db"),
+    ):
+        with pytest.raises(SystemExit) as excinfo:
+            _run_cli(mock_cli, "TEST", argv=["prog", "subcommand"])
+        assert excinfo.value.code == 0
+
+
+def test_run_cli_click_abort():
+    mock_cli = Mock(side_effect=Abort())
+    with (
+        patch("cfa_dagster.utils.set_env_vars"),
+        patch("cfa_dagster.utils.configure_dev_db"),
     ):
         with pytest.raises(SystemExit) as excinfo:
             _run_cli(mock_cli, "TEST", argv=["prog", "subcommand"])
