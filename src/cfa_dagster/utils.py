@@ -272,10 +272,6 @@ def _run_cli(
 
     try:
         cli(args=args, auto_envvar_prefix=env_prefix, standalone_mode=False)
-    except SystemExit as e:
-        sys.exit(e.code)
-    except CheckError:
-        sys.exit(1)
     except NoArgsIsHelpError:
         cli(
             args=["--help"],
@@ -283,9 +279,7 @@ def _run_cli(
             standalone_mode=False,
         )
         sys.exit(0)
-    except UsageError:
-        sys.exit(1)
-    else:
+    except KeyboardInterrupt:
         sys.exit(0)
 
 
