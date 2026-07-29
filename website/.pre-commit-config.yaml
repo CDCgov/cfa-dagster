@@ -30,5 +30,5 @@ repos:
         # format only these files
         types_or: [json, markdown, yaml]
         # note that pre-commit uses regexes for exclusions
-        exclude: "includes\\/abbreviations\\.md"
+        exclude: "^website/includes/abbreviations\\.md$"
         files: "^website/"
