@@ -9,6 +9,8 @@ from dagster_docker.docker_executor import (
     docker_executor as base_docker_executor,
 )
 
+from cfa_dagster.utils import require_dagster_user
+
 
 @executor(
     name=base_docker_executor.name,
@@ -42,6 +44,7 @@ def docker_executor(init_context: InitExecutorContext) -> Executor:
     """
     config = dict(init_context.executor_config or {})
     env_vars = check.opt_list_elem(config, "env_vars", of_type=str)
+    require_dagster_user()
     req_vars = [
         "DAGSTER_USER",
         "CFA_DAGSTER_ENV",

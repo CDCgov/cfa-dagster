@@ -28,6 +28,8 @@ from dagster_docker.utils import (
     validate_docker_image,
 )
 
+from cfa_dagster.utils import require_dagster_user
+
 from .utils import CAJ_CONFIG_SCHEMA, get_status_caj, start_caj, stop_caj
 
 log = logging.getLogger(__name__)
@@ -95,6 +97,7 @@ def azure_container_app_job_executor(
     )
 
     # propagate user & dev env vars
+    require_dagster_user()
     req_vars = [
         "DAGSTER_USER",
         "CFA_DAGSTER_ENV",

@@ -27,6 +27,7 @@ from dagster_docker.utils import (
 )
 from typing_extensions import Self
 
+from ..utils import require_dagster_user
 from .utils import CAJ_CONFIG_SCHEMA, get_status_caj, start_caj, stop_caj
 
 log = logging.getLogger(__name__)
@@ -127,6 +128,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
     def _launch_container_with_command(self, run, docker_image, command):
         container_context = self.get_container_context(run)
         env_vars = container_context.env_vars or []
+        require_dagster_user()
         req_vars = [
             "DAGSTER_USER",
             "CFA_DAGSTER_ENV",

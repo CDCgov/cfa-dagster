@@ -25,6 +25,7 @@ from dagster_docker import DockerRunLauncher
 from typing_extensions import Self
 
 from ..azure_container_app_job import AzureContainerAppJobRunLauncher
+from ..utils import require_dagster_user
 from .utils import ExecutionConfig, SelectorConfig
 
 log = logging.getLogger(__name__)
@@ -142,6 +143,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
             env_vars = launcher_config.get("env_vars", [])
             # Need to check if env vars are present first or
             # each run will append them again
+            require_dagster_user()
             req_vars = [
                 "DAGSTER_USER",
                 "CFA_DAGSTER_ENV",

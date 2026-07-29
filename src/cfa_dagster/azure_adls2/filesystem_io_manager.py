@@ -1,5 +1,4 @@
 import logging
-import os
 import tempfile
 from pathlib import Path
 from typing import Any, Union, cast
@@ -23,7 +22,7 @@ from dagster_azure.adls2 import ADLS2DefaultAzureCredential, ADLS2Resource
 from pydantic import Field
 from upath import UPath
 
-from ..utils import is_production
+from ..utils import is_production, require_dagster_user
 from .filesystem_metadata import (
     ADLS2FilesystemIOManagerMetadata,
     InputMode,
@@ -718,7 +717,7 @@ class ADLS2FilesystemIOManager(ConfigurableIOManager):
             else "cfadagsterdev",
             credential=ADLS2DefaultAzureCredential(kwargs={}),
         )
-        user = "prod" if self.use_production else os.getenv("DAGSTER_USER")
+        user = "prod" if self.use_production else require_dagster_user()
         log.debug(f"self.on_input_conflict: {self.on_input_conflict}")
 
         return FilesystemADLS2IOManager(

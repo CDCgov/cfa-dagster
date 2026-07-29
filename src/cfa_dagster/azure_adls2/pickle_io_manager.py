@@ -1,4 +1,3 @@
-import os
 from typing import Any
 
 from dagster import (
@@ -15,7 +14,7 @@ from dagster_azure.adls2 import (
 from dagster_azure.adls2.resources import ADLS2Resource
 from pydantic import Field
 
-from ..utils import is_production
+from ..utils import is_production, require_dagster_user
 
 
 class ADLS2PickleIOManager(ConfigurableIOManager):
@@ -99,7 +98,7 @@ class ADLS2PickleIOManager(ConfigurableIOManager):
             else "cfadagsterdev",
             credential=ADLS2DefaultAzureCredential(kwargs={}),
         )
-        user = "prod" if self.use_production else os.getenv("DAGSTER_USER")
+        user = "prod" if self.use_production else require_dagster_user()
 
         return PickledObjectADLS2IOManager(
             file_system=adls2.storage_account,

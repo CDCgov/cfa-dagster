@@ -35,6 +35,13 @@ PROD_HOSTNAME = os.getenv(
 )
 
 
+def require_dagster_user() -> str:
+    value = os.getenv("DAGSTER_USER")
+    if not value:
+        raise RuntimeError("DAGSTER_USER env var is required but not set. ")
+    return value
+
+
 def is_production() -> bool:
     # If DAGSTER_IS_DEV_CLI is set, we're in dev mode regardless of CFA_DAGSTER_ENV
     if os.getenv("DAGSTER_IS_DEV_CLI"):
@@ -336,10 +343,6 @@ def start_dev_env(caller_name: str):
         defs_file = Path(sys.argv[0]).name
         log.debug(f"defs_file: {defs_file}")
         run_dg(argv=[None, "dev", *sys.argv[1:]], defs_file=defs_file)
-
-    # get the user from the environment, throw an error if variable is not set
-    if not os.getenv("DAGSTER_USER"):
-        raise RuntimeError("Env var 'DAGSTER_USER' is not set!")
 
 
 def collect_definitions(namespace):

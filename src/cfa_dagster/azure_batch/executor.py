@@ -1,6 +1,5 @@
 import hashlib
 import logging
-import os
 import re
 import uuid
 from collections.abc import Iterator
@@ -34,6 +33,8 @@ from dagster_docker.utils import (
     validate_docker_config,
     validate_docker_image,
 )
+
+from cfa_dagster.utils import require_dagster_user
 
 from ..utils import get_run_timestamp
 
@@ -124,6 +125,7 @@ def azure_batch_executor(
     )
 
     # propagate user & dev env vars
+    require_dagster_user()
     req_vars = [
         "DAGSTER_USER",
         "CFA_DAGSTER_ENV",
@@ -133,7 +135,7 @@ def azure_batch_executor(
         "CFA_DG_PG_PASSWORD",
     ]
     for env_var in req_vars:
-        if os.getenv(env_var) and env_var not in env_vars:
+        if env_var not in env_vars:
             env_vars.append(env_var)
 
     validate_docker_config(network, networks, container_kwargs)
@@ -272,7 +274,7 @@ class AzureBatchStepHandler(StepHandler):
             location_name = run.remote_job_origin.repository_origin.code_location_origin.location_name
         else:
             location_name = run.job_name
-        dagster_user = os.getenv("DAGSTER_USER")
+        dagster_user = require_dagster_user()
 
         run_creation_hour = None
         try:

@@ -28,6 +28,7 @@ from ..azure_batch import azure_batch_executor
 from ..azure_container_app_job import azure_container_app_job_executor
 
 # using relative import to avoid circular dependency
+from ..utils import require_dagster_user
 from .utils import (
     ExecutionConfig,
 )
@@ -169,6 +170,7 @@ def create_executor_step_handler(
     log.debug(f"env_vars before req: '{env_vars}'")
     # Need to check if env vars are present first or
     # each run will append them again
+    require_dagster_user()
     req_vars = [
         "DAGSTER_USER",
         "CFA_DAGSTER_ENV",
