@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import os
 import re
 import uuid
 from collections.abc import Iterator
@@ -135,7 +136,7 @@ def azure_batch_executor(
         "CFA_DG_PG_PASSWORD",
     ]
     for env_var in req_vars:
-        if env_var not in env_vars:
+        if os.getenv(env_var) and env_var not in env_vars:
             env_vars.append(env_var)
 
     validate_docker_config(network, networks, container_kwargs)
