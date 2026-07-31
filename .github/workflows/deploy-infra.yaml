@@ -6,7 +6,7 @@ on:
     branches:
       - main
     paths:
-      - 'pyproject.toml'
+      - "pyproject.toml"
 
 env:
   IMAGE_NAME: cfa-dagster
@@ -35,16 +35,16 @@ jobs:
 
       - name: Push image
         run: |
-            OWNER='${{ github.repository_owner }}'
-            # to lowercase
-            OWNER=${OWNER,,}
-            REGISTRY_IMAGE="ghcr.io/$OWNER/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}"
+          OWNER='${{ github.repository_owner }}'
+          # to lowercase
+          OWNER=${OWNER,,}
+          REGISTRY_IMAGE="ghcr.io/$OWNER/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}"
 
-            echo 'Pushing to ghcr'
-            skopeo copy \
-            --dest-creds ${{ github.actor }}:${{ secrets.GITHUB_TOKEN }} \
-            "docker-archive:result" \
-            "docker://$REGISTRY_IMAGE"
+          echo 'Pushing to ghcr'
+          skopeo copy \
+          --dest-creds ${{ github.actor }}:${{ secrets.GITHUB_TOKEN }} \
+          "docker-archive:result" \
+          "docker://$REGISTRY_IMAGE"
 
   deploy-container-app:
     if: github.ref == 'refs/heads/main'

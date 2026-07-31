@@ -24,6 +24,7 @@ Using Dagster in an existing repo is as easy as adding a `dagster_defs.py` file 
 ### Dockerfile requirements
 
 Your `Dockerfile` must:
+
 - Have `uv` installed
 - Copy `dagster_defs.py` in the `WORKDIR`
 - Sync Dagster's python dependencies and add them to the `PATH`

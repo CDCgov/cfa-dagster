@@ -7,7 +7,6 @@ on:
       - main
 
 jobs:
-
   build-and-push-docker-image:
   # omitted for brevity
 

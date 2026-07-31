@@ -1,6 +1,7 @@
 # Dagster Infra Overview
 
 A Dagster OSS [deployment](https://docs.dagster.io/deployment/oss/oss-deployment-architecture) is made of four parts
+
 1. dagster-webserver
 2. dagster-daemon
 3. code locations

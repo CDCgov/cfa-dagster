@@ -45,11 +45,11 @@ concurrency:
   runs:
     max_concurrent_runs: 100
     tag_concurrency_limits:
-    - key: concurrency
-      value: single
-      limit: 1
-    - key: docker/container_id
-      limit: 5
+      - key: concurrency
+        value: single
+        limit: 1
+      - key: docker/container_id
+        limit: 5
 
 backfills:
   use_threads: true

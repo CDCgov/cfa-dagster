@@ -87,7 +87,8 @@ if not is_production():
         build_image_op()
 ```
 
-If you would like to be able to explore the filesystem within the container you just built in the previous step, you can add the following *optional* code, which creates a job to be able to interactively navigate the filesystem:
+If you would like to be able to explore the filesystem within the container you just built in the previous step, you can add the following _optional_ code, which creates a job to be able to interactively navigate the filesystem:
+
 ```python
 @dg.op
     def explore_image_op(
@@ -120,7 +121,8 @@ If you would like to be able to explore the filesystem within the container you 
     def explore_image():
         explore_image_op()
 ```
-Then, *before* you materialize your Dagster assets, make sure to run the job.
+
+Then, _before_ you materialize your Dagster assets, make sure to run the job.
 
 To run the job, navigate to the “Jobs” page on the side panel. You should see your jobs when you click on this page.
 
@@ -135,7 +137,7 @@ Click on the Launchpad tab, which is next to the Overview tab above the `build_i
 <img src="image_3.png" alt="Dagster UI job launchpad" width="75%" height="75%">
 
 !!! tip
-    Any time you modify a configuration, click on the “Refresh config” button above the code box. Dagster will tell you if your configuration file needs to be refreshed.
+Any time you modify a configuration, click on the “Refresh config” button above the code box. Dagster will tell you if your configuration file needs to be refreshed.
 
 When you are ready to run your job, click on the “Launch Run” button on the bottom right-hand corner of the screen. While your job is running, you can see the logs printed out in real time at the bottom of the screen.
 
