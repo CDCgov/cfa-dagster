@@ -13,7 +13,8 @@ nav = [
       "getting-started/overview.md",
       "getting-started/quickstart.md",
       "getting-started/installation.md",
-      "getting-started/concepts.md"
+      "getting-started/concepts.md",
+      "getting-started/production.md"
     ] },
   { "Tutorials" = [
       "tutorial/image.md",

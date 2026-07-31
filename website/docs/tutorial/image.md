@@ -1,6 +1,6 @@
 # Tutorial on Creating a Job to Build and Push Image to ACR
 
-First, we will add code to `dagster_defs.py` that will create an [op](../getting-started/concepts.md#Ops) to be called by a [job](https://docs.dagster.io/guides/build/jobs). The `op` tells the `job` to build the image, login to ACR, and push the image to ACR. Add the following code to your `dagster_defs.py` file:
+First, we will add code to `dagster_defs.py` that will create an [op](../getting-started/concepts.md#ops) to be called by a [job](https://docs.dagster.io/guides/build/jobs). The `op` tells the `job` to build the image, login to ACR, and push the image to ACR. Add the following code to your `dagster_defs.py` file:
 
 ```python
 if not is_production():
@@ -134,7 +134,8 @@ Click on the Launchpad tab, which is next to the Overview tab above the `build_i
 
 <img src="image_3.png" alt="Dagster UI job launchpad" width="75%" height="75%">
 
-[!TIP] Any time you modify a configuration, click on the “Refresh config” button above the code box. Dagster will tell you if your configuration file needs to be refreshed.
+!!! tip
+    Any time you modify a configuration, click on the “Refresh config” button above the code box. Dagster will tell you if your configuration file needs to be refreshed.
 
 When you are ready to run your job, click on the “Launch Run” button on the bottom right-hand corner of the screen. While your job is running, you can see the logs printed out in real time at the bottom of the screen.
 

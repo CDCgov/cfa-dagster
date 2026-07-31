@@ -1,6 +1,6 @@
 # Using Dagster in a Project
 
-* **Python:** Dagster supports Python 3.10 - 3.13 (3.12 recommended).
+* **Python:** Dagster supports Python 3.10 - 3.13 (3.13 recommended).
 * **Package manager:** To manage the python packages, we recommend [uv](https://docs.astral.sh/uv/) which Dagster uses internally.
 * **Git:** Refer to the [Git documentation](https://github.com/git-guides/install-git) if you don’t have this installed.
 
