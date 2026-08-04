@@ -6,7 +6,7 @@ This basic example should help you get up and running with local Dagster develop
 
 To get started with local Dagster development, clone the [`cfa-dagster` repository](https://github.com/CDCgov/cfa-dagster/tree/main) and check out the [examples](examples/). Running the example will automatically install the necessary dependencies into a virtual environment and activate it.
 
-1. Now that you've cloned the repo and have entered the `examples/` directory, start the Dagster UI by running `uv run dagster_defs.py` and clicking the link in your terminal (usually http://127.0.0.1:4000/)
+1. Now that you've cloned the repo and have entered the `examples/` directory, start the Dagster UI by running `uv run dagster_defs.py` and clicking the link in your terminal (<http://127.0.0.1:4000/> by default)
 2. Build your image by navigating to the [build_image_job](http://127.0.0.1:4000/locations/dagster_defs.py/jobs/build_image_job/playground) and clicking `Launch Run` in the bottom right
 3. Materialize an asset!
 
@@ -16,7 +16,7 @@ To get started with local Dagster development, clone the [`cfa-dagster` reposito
 
 ## Next steps
 
-- Try materializing partitioned_r_asset
+- Try materializing `partitioned_r_asset`
 - Try materializing multiple assets at once
 - Try materializing your Asset on Azure Container App Jobs
 

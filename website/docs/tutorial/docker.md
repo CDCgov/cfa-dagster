@@ -33,3 +33,20 @@ docker_config = ExecutionConfig(
 
 2. Locate the `defs = dg.Definitions...` object towards the bottom of the `dagster_defs.py` file.
 3. Set the `default_config` for the `dynamic_executor` to be `docker_config`.
+
+```python
+# Create Dagster definitions
+defs = dg.Definitions(
+    **collected_defs,
+    executor=dynamic_executor(
+        default_config=docker_config,
+        # alternate configs show you default values in the Launchpad on hover
+        alternate_configs=[
+            default_config,
+            docker_config,
+            azure_caj_config,
+            azure_batch_config,
+        ],
+    ),
+)
+```
