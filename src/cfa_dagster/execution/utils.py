@@ -21,6 +21,7 @@ from dagster_docker.utils import DOCKER_CONFIG_SCHEMA
 
 from ..azure_batch.executor import azure_batch_executor
 from ..azure_container_app_job.executor import azure_container_app_job_executor
+from ..azure_container_instance.executor import azure_container_instance_executor
 from ..utils import is_production
 
 log = logging.getLogger(__name__)
@@ -364,6 +365,7 @@ def get_dynamic_executor_config_schema(
             "multiprocess_executor": multiprocess_executor_schema,
             "azure_batch_executor": azure_batch_executor.config_schema.config_type.fields,
             "azure_container_app_job_executor": azure_container_app_job_executor.config_schema.config_type.fields,
+            "azure_container_instance_executor": azure_container_instance_executor.config_schema.config_type.fields,
             **(
                 {"docker_executor": docker_executor_schema}
                 if use_full_schema

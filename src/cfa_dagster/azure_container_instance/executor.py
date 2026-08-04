@@ -64,11 +64,6 @@ if TYPE_CHECKING:
     config_schema=merge_dicts(
         base_docker_executor.config_schema.config_type.fields,
         {
-            "pool_name": Field(
-                StringSource,
-                is_required=True,
-                description="The name of the Azure Container Instance Pool.",
-            ),
             "container_kwargs": Field(
                 Permissive(
                     {
