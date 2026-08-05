@@ -20,7 +20,7 @@ from azure.mgmt.containerinstance import (
 from azure.core.exceptions import HttpResponseError
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.subscription import SubscriptionClient
-from dagster import Field, Permissive, StringSource, executor
+from dagster import Field, Float, Permissive, StringSource, executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
@@ -61,26 +61,36 @@ if TYPE_CHECKING:
 # Turn ACI restart policy to Never b/c dagster handles this already?
 
 @executor(
-    name="azure_container_instance",
+    name="azure_container_instance_executor",
     config_schema=merge_dicts(
         base_docker_executor.config_schema.config_type.fields,
         {
+            "cpu": Field(
+                Float,
+                is_required=False,
+                default_value=1.0,
+                description="Number of CPU cores requested for the ACI container.",
+            ),
+            "memory": Field(
+                Float,
+                is_required=False,
+                default_value=2.0,
+                description="Memory requested for the ACI container, in GB.",
+            ),
             "container_kwargs": Field(
                 Permissive(
                     {
                         "working_dir": Field(
                             StringSource,
                             is_required=True,
-                            description="Path to the working directory. Must match the WORKDIR in your Dockerfile",
+                            description=(
+                                "Path to the working directory. Must match "
+                                "the WORKDIR in your Dockerfile."
+                            ),
                         )
                     }
                 ),
                 is_required=True,
-                description=(
-                    "key-value pairs that can be passed into containers.create. See "
-                    "https://docker-py.readthedocs.io/en/stable/containers.html for the full list "
-                    "of available options."
-                ),
             ),
         },
     ),
@@ -121,6 +131,8 @@ def azure_container_instance_executor(
         config, "container_kwargs", key_type=str
     )
     working_dir = container_kwargs.get("working_dir")
+    cpu = check.float_elem(config, "cpu")
+    memory = check.float_elem(config, "memory")
     if not working_dir:
         raise ValueError(
             (
@@ -380,3 +392,109 @@ class AzureContainerInstanceStepHandler(StepHandler):
                 "Azure Location": self._location,
             },
         )
+
+    def check_step_health(
+        self,    step_handler_context: StepHandlerContext,
+    ) -> CheckStepHealthResult:
+        container_group_name = self._get_container_group_id(
+            step_handler_context
+        )
+
+        try:
+            container_group = self._azure_client.container_groups.get(
+                resource_group_name=self._resource_group,
+                container_group_name=container_group_name,
+            )
+        except ResourceNotFoundError:
+            return CheckStepHealthResult.unhealthy(
+                reason=(
+                    f"Azure Container Instance group "
+                    f"{container_group_name!r} was not found."
+                )
+            )
+        except HttpResponseError as error:
+            return CheckStepHealthResult.unhealthy(
+                reason=(
+                    f"Unable to inspect Azure Container Instance group "
+                    f"{container_group_name!r}: {error}"
+                )
+            )
+
+        if not container_group.containers:
+            return CheckStepHealthResult.unhealthy(
+                reason=(
+                    f"Azure Container Instance group "
+                    f"{container_group_name!r} contains no containers."
+                )
+            )
+
+        container = container_group.containers[0]
+        instance_view = container.instance_view
+
+        if instance_view is None or instance_view.current_state is None:
+            # Azure may not have populated runtime state immediately after creation.
+            return CheckStepHealthResult.healthy()
+
+        current_state = instance_view.current_state
+        state = current_state.state
+        exit_code = current_state.exit_code
+        detail_status = current_state.detail_status
+
+        if state in ("Waiting", "Running"):
+            return CheckStepHealthResult.healthy()
+
+        if state == "Terminated":
+            if exit_code == 0:
+                return CheckStepHealthResult.healthy()
+
+            return CheckStepHealthResult.unhealthy(
+                reason=(
+                    f"Azure Container Instance group "
+                    f"{container_group_name!r} terminated unsuccessfully. "
+                    f"Exit code: {exit_code}. "
+                    f"Detail: {detail_status or 'No detail supplied.'}"
+                )
+            )
+
+        return CheckStepHealthResult.unhealthy(
+            reason=(
+                f"Azure Container Instance group "
+                f"{container_group_name!r} has unexpected container state "
+                f"{state!r}. Detail: {detail_status or 'No detail supplied.'}"
+            )
+        )
+
+    def terminate_step(
+        self,
+        step_handler_context: StepHandlerContext,
+        ) -> Iterator[DagsterEvent]:
+        step_key = self._get_step_key(step_handler_context)
+        container_group_name = self._get_container_group_id(
+            step_handler_context
+        )
+    
+        yield DagsterEvent.engine_event(
+            step_handler_context.get_step_context(step_key),
+            message=(
+                f"Deleting Azure Container Instance group "
+                f"{container_group_name!r} for step {step_key!r}."
+            ),
+            event_specific_data=EngineEventData(),
+        )
+    
+        try:
+            self._azure_client.container_groups.begin_delete(
+                resource_group_name=self._resource_group,
+                container_group_name=container_group_name,
+            )
+        except ResourceNotFoundError:
+            log.info(
+                "Azure Container Instance group %r was already deleted.",
+                container_group_name,
+            )
+        except HttpResponseError:
+            log.exception(
+                "Failed to delete Azure Container Instance group %r.",
+                container_group_name,
+            )
+            raise
