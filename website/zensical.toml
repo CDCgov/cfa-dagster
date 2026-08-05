@@ -37,25 +37,25 @@ watch = [ "includes" ]
 [project.plugins.mkdocstrings.handlers.python]
 inventories = ["https://docs.python.org/3/objects.inv"]
 paths = [".."]
-options = {
-  docstring_style = "google",
-  inherited_members = true,
-  # we probably don't want to inline the source code for brevity
-  show_source = false,
-  show_signature = true,
-  show_signature_annotations = true,
-  show_root_heading = true,
-  # required to show dataclass attributes
-  show_attributes = true,
-  members = true,
-  show_labels = true,
-  # required to show dataclasses under submodules
-  show_if_no_docstring = true,
-  # required to show dynamic_graph_asset
-  show_submodules = true,
-  # filter out anything starting with _, or log, or T, but allow __init__
-  filters = ["!^_", "!^log$", "!^T$", "__init__"],
-}
+
+[project.plugins.mkdocstrings.handlers.python.options]
+docstring_style = "google"
+inherited_members = true
+# we probably don't want to inline the source code for brevity
+show_source = false
+show_signature = true
+show_signature_annotations = true
+show_root_heading = true
+# required to show dataclass attributes
+show_attributes = true
+members = true
+show_labels = true
+# required to show dataclasses under submodules
+show_if_no_docstring = true
+# required to show dynamic_graph_asset
+show_submodules = true
+# filter out anything starting with _, or log, or T, but allow __init__
+filters = ["!^_", "!^log$", "!^T$", "__init__"]
 
 [project.theme]
 
