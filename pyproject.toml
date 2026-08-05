@@ -45,6 +45,7 @@ dev = [
 dev = [
     "mdx-truly-sane-lists>=1.3,<2",
     "zensical>=0.0.45",
+    "mkdocstrings[python]",
 ]
 
 [build-system]

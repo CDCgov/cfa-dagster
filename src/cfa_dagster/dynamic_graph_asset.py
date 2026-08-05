@@ -41,7 +41,7 @@ from .execution.utils import ExecutionConfig, SelectorConfig
 
 log = logging.getLogger(__name__)
 
-INTERNAL_CONFIG_IO_MANAGER = ADLS2PickleIOManager().get_resource_definition()
+_INTERNAL_CONFIG_IO_MANAGER = ADLS2PickleIOManager().get_resource_definition()
 
 
 class GraphAssetKwargs(TypedDict, total=False):
@@ -66,7 +66,7 @@ class GraphAssetKwargs(TypedDict, total=False):
 
 
 @dataclass
-class DimensionResourceInfo:
+class _DimensionResourceInfo:
     param_name: str
     resource_cls: type
     dimension_fields: list[str]
@@ -98,7 +98,7 @@ class GraphDimensionExclusion(dg.Config, Generic[T]):
 
 
 @dataclass
-class ExclusionResourceInfo:
+class _ExclusionResourceInfo:
     param_name: str
     resource_cls: type
     exclusion_fields: list[str]
@@ -118,8 +118,8 @@ def _get_resource_params(hints) -> dict[str, type]:
 
 def _get_dimension_resource_info(
     asset_name: str, resource_params: dict[str, type]
-) -> DimensionResourceInfo:
-    dimension_info: DimensionResourceInfo | None = None
+) -> _DimensionResourceInfo:
+    dimension_info: _DimensionResourceInfo | None = None
 
     for param_name, resource_cls in resource_params.items():
         resource_hints = get_type_hints(resource_cls)
@@ -138,7 +138,7 @@ def _get_dimension_resource_info(
                     f"Found: '{dimension_info.param_name}' and '{param_name}'. "
                     "Only one resource may contain GraphDimension fields."
                 )
-            dimension_info = DimensionResourceInfo(
+            dimension_info = _DimensionResourceInfo(
                 param_name=param_name,
                 resource_cls=resource_cls,
                 dimension_fields=dimension_fields,
@@ -159,8 +159,8 @@ def _get_exclusion_resource_info(
     asset_name: str,
     resource_params: dict[str, type],
     dimension_fields: list[str],
-) -> list[ExclusionResourceInfo]:
-    exclusion_infos: list[ExclusionResourceInfo] = []
+) -> list[_ExclusionResourceInfo]:
+    exclusion_infos: list[_ExclusionResourceInfo] = []
 
     for param_name, resource_cls in resource_params.items():
         resource_hints = get_type_hints(resource_cls)
@@ -185,7 +185,7 @@ def _get_exclusion_resource_info(
                 )
 
         exclusion_infos.append(
-            ExclusionResourceInfo(
+            _ExclusionResourceInfo(
                 param_name=param_name,
                 resource_cls=resource_cls,
                 exclusion_fields=exclusion_fields,
@@ -277,19 +277,19 @@ def _has_return_value(fn) -> bool:
 
 
 # using this causes the code location to crash when running multiple assets at once
-multiprocess_config = ExecutionConfig(
+_multiprocess_config = ExecutionConfig(
     executor=SelectorConfig(class_name="multiprocess_executor")
 )
-in_process_config = ExecutionConfig(
+_in_process_config = ExecutionConfig(
     executor=SelectorConfig(class_name="in_process_executor")
 )
 
 #  Choosing a lesser-used alpha char as a prefix to prevent Dagster/python keyword errors
 # DagsterInvalidDefinitionError: "in" is not a valid name in Dagster. It conflicts with a Dagster or python reserved keyword.
-SEGMENT_PREFIX = "x_"
+_SEGMENT_PREFIX = "x_"
 # Using triple underscore as a separator since a single underscore could be an
 # encoded character and a double underscore could be two consecutive encoded character
-SEGMENT_SEPARATOR = "___"
+_SEGMENT_SEPARATOR = "___"
 
 
 # -- Mapping key encoding --
@@ -300,12 +300,12 @@ def _encode_segment(value: str) -> str:
         lambda m: f"_{ord(m.group()):02X}_",
         str(value),
     )
-    return f"{SEGMENT_PREFIX}{encoded}"
+    return f"{_SEGMENT_PREFIX}{encoded}"
 
 
 def _decode_segment(encoded: str) -> str:
     """Decode _XX_ sequences back to original characters."""
-    encoded = encoded.removeprefix(SEGMENT_PREFIX)
+    encoded = encoded.removeprefix(_SEGMENT_PREFIX)
 
     return re.sub(
         r"_([0-9A-F]{2})_",
@@ -315,13 +315,13 @@ def _decode_segment(encoded: str) -> str:
 
 
 def _encode_mapping_key(values: tuple) -> str:
-    return SEGMENT_SEPARATOR.join(_encode_segment(v) for v in values)
+    return _SEGMENT_SEPARATOR.join(_encode_segment(v) for v in values)
 
 
 def _decode_mapping_key(mapping_key: str) -> list:
     return [
         _decode_segment(segment)
-        for segment in mapping_key.split(SEGMENT_SEPARATOR)
+        for segment in mapping_key.split(_SEGMENT_SEPARATOR)
     ]
 
 
@@ -361,7 +361,7 @@ def _in_to_asset_in(name: str, op_in: dg.In) -> dg.AssetIn:
     )
 
 
-def unpack_output(output) -> tuple[Any, dict]:
+def _unpack_output(output) -> tuple[Any, dict]:
     if isinstance(output, dg.Output):
         user_value = output.value
         user_metadata = output.metadata or {}
@@ -390,7 +390,7 @@ def _infer_ins(
 
 def _apply_graph_dimensions(
     context: dg.OpExecutionContext,
-    dimension_resource_info: DimensionResourceInfo,
+    dimension_resource_info: _DimensionResourceInfo,
     graph_dimensions: dict[str, str],
 ) -> Any:
     dimension_resource = getattr(
@@ -659,7 +659,7 @@ def dynamic_graph_asset(
                 ),
             },
             required_resource_keys=required_resource_keys,
-            tags=in_process_config.to_run_tags(),
+            tags=_in_process_config.to_run_tags(),
         )
         def gen_config(context, **kwargs):
             log.debug(f"kwargs: '{kwargs}'")
@@ -802,7 +802,7 @@ def dynamic_graph_asset(
                 result = next(result)
             log.debug(f"compute result: '{result}'")
             if should_return_all or is_first_dimension:
-                result, metadata = unpack_output(result)
+                result, metadata = _unpack_output(result)
 
                 # Merge our graph_dimensions metadata
                 merged_metadata = {
@@ -858,7 +858,7 @@ def dynamic_graph_asset(
                 if does_return_value
                 else {"out": dg.Out(dg.Nothing)}
             ),
-            tags=in_process_config.to_run_tags(),
+            tags=_in_process_config.to_run_tags(),
         )
         def output_op(context, **kwargs):
             compute_result = kwargs.get("compute_result")
@@ -871,7 +871,7 @@ def dynamic_graph_asset(
                 # handle sequences
                 result = result if should_return_all else result[0]
 
-                result, metadata = unpack_output(result)
+                result, metadata = _unpack_output(result)
 
                 # Merge our graph_dimensions metadata
                 merged_metadata = {
@@ -904,7 +904,7 @@ def dynamic_graph_asset(
         existing_resource_defs = graph_asset_kwargs.get("resource_defs") or {}
 
         merged_resource_defs = {
-            INTERNAL_CONFIG_IO_MANAGER_KEY: INTERNAL_CONFIG_IO_MANAGER,
+            INTERNAL_CONFIG_IO_MANAGER_KEY: _INTERNAL_CONFIG_IO_MANAGER,
             **existing_resource_defs,
         }
 

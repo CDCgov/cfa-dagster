@@ -160,7 +160,7 @@ def daily_reports(context: dg.AssetExecutionContext):
 
 ## Dynamic Graph Assets
 
-[Dynamic graph assets](https://github.com/CDCgov/cfa-dagster/blob/main/src/cfa_dagster/dynamic_graph_asset.py) combine two existing Dagster concepts, [graph assets](https://docs.dagster.io/guides/build/assets/graph-backed-assets#defining-graph-backed-assets) and [dynamic outputs](https://docs.dagster.io/guides/build/ops/dynamic-graphs#a-dynamic-job), into one decorator to provide easy, runtime-configurable parallelism. Unlike normal Dagster partitions, dynamic graph assets allows you to parallelize logic against more than two dimensions.
+[Dynamic graph assets](../api.md#cfa_dagster.dynamic_graph_asset.dynamic_graph_asset) combine two existing Dagster concepts, [graph assets](https://docs.dagster.io/guides/build/assets/graph-backed-assets#defining-graph-backed-assets) and [dynamic outputs](https://docs.dagster.io/guides/build/ops/dynamic-graphs#a-dynamic-job), into one decorator to provide easy, runtime-configurable parallelism. Unlike normal Dagster partitions, dynamic graph assets allows you to parallelize logic against more than two dimensions.
 
 ```python
 
