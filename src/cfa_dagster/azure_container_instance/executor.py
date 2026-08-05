@@ -10,6 +10,7 @@ import dagster._check as check
 from azure.mgmt.containerinstance.models import (
     Container,
     ContainerGroup,
+    OperatingSystemTypes,
     ResourceRequests,
     ResourceRequirements,
 )
@@ -105,7 +106,6 @@ def azure_container_instance_executor(
 
         execution:
           config:
-            pool_name: ...
             image: ...
             env_vars: ...
             container_kwargs: ...
@@ -160,10 +160,8 @@ def azure_container_instance_executor(
         container_kwargs=container_kwargs,
     )
 
-    pool_name = check.opt_str_elem(config, "pool_name")
-
     return StepDelegatingExecutor(
-        AzureContainerInstanceStepHandler(image, container_context, pool_name),
+        AzureContainerInstanceStepHandler(image, container_context, cpu, memory),
         retries=check.not_none(RetryMode.from_config(retries)),
         max_concurrent=max_concurrent,
         tag_concurrency_limits=tag_concurrency_limits,
@@ -189,6 +187,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
             .subscription_id
         )
 
+        self._location = "eastus"
         self._resource_group = "ext-edav-cfa-prd"
 
         self._azure_client = ContainerInstanceManagementClient(
@@ -196,6 +195,8 @@ class AzureContainerInstanceStepHandler(StepHandler):
         )
 
         self._image = check.opt_str_param(image, "image")
+        self._cpu = cpu
+        self._memory = memory
         self._container_context = check.inst_param(
             container_context, "container_context", DockerContainerContext
         )
@@ -265,48 +266,6 @@ class AzureContainerInstanceStepHandler(StepHandler):
         )
         return step_keys_to_execute[0]
 
-    def _build_container_group(
-        self,
-        client,
-        container_context
-    )
-
-    def _create_step_container(
-        self,
-        client,
-        container_context,
-        step_image,
-        step_handler_context: StepHandlerContext,
-    ):
-        execute_step_args = step_handler_context.execute_step_args
-        # step_keys_to_execute = check.not_none(execute_step_args.step_keys_to_execute)
-        # assert len(step_keys_to_execute) == 1, "Launching multiple steps is not currently supported"
-        step_key = self._get_step_key(step_handler_context)
-
-        container_kwargs = {**container_context.container_kwargs}
-        container_kwargs.pop("stop_timeout", None)
-
-        env_vars = dict(
-            [parse_env_var(env_var) for env_var in container_context.env_vars]
-        )
-        env_vars["DAGSTER_RUN_JOB_NAME"] = (
-            step_handler_context.dagster_run.job_name
-        )
-        env_vars["DAGSTER_RUN_STEP_KEY"] = step_key
-
-        job_execution_id = start_caj(
-            self._azure_client,
-            resource_group=self._resource_group,
-            container_instance=self._container_app_job_name,
-            image=step_image,
-            env_vars=env_vars,
-            command=execute_step_args.get_command_args(),
-            cpu=self._cpu,
-            memory=self._memory,
-        )
-        self._step_caj_execution_ids[step_key] = job_execution_id
-        return job_execution_id
-
     def _get_container_group_id(self, step_handler_context: StepHandlerContext):
         """
         Creates a unique container group id for Azure Container instance
@@ -360,6 +319,63 @@ class AzureContainerInstanceStepHandler(StepHandler):
 
         return f"dagster-{base_id}"
 
+    # build the object but don't hit Azure API yet -> return container object
+    def _build_container_group(
+        self,
+        step_handler_context,
+    ):
+        container = Container(
+            name=self._get_container_group_id(step_handler_context),
+            image=self._get_image(step_handler_context),
+            resources=ResourceRequirements(
+                requests=ResourceRequests(memory_in_gb=self._memory, cpu=self._cpu)
+                ),
+        )
+
+        container_group_params = ContainerGroup(
+            location=self._location,
+            containers=[container],
+            os_type=OperatingSystemTypes.LINUX,
+        )
+
+        return container_group_params
+
+    def _create_step_container(
+        self,
+        client,
+        container_context,
+        step_image,
+        step_handler_context: StepHandlerContext,
+    ):
+        execute_step_args = step_handler_context.execute_step_args
+        # step_keys_to_execute = check.not_none(execute_step_args.step_keys_to_execute)
+        # assert len(step_keys_to_execute) == 1, "Launching multiple steps is not currently supported"
+        step_key = self._get_step_key(step_handler_context)
+
+        container_kwargs = {**container_context.container_kwargs}
+        container_kwargs.pop("stop_timeout", None)
+
+        env_vars = dict(
+            [parse_env_var(env_var) for env_var in container_context.env_vars]
+        )
+        env_vars["DAGSTER_RUN_JOB_NAME"] = (
+            step_handler_context.dagster_run.job_name
+        )
+        env_vars["DAGSTER_RUN_STEP_KEY"] = step_key
+
+        job_execution_id = start_caj(
+            self._azure_client,
+            resource_group=self._resource_group,
+            container_instance=self._container_app_job_name,
+            image=step_image,
+            env_vars=env_vars,
+            command=execute_step_args.get_command_args(),
+            cpu=self._cpu,
+            memory=self._memory,
+        )
+        self._step_caj_execution_ids[step_key] = job_execution_id
+        return job_execution_id
+
     def _clamp_with_hash(self, value: str, max_len: int) -> str:
         if len(value) <= max_len:
             return value
@@ -370,228 +386,33 @@ class AzureContainerInstanceStepHandler(StepHandler):
         digest = hashlib.sha1(value.encode()).hexdigest()[:hash_len]
         return f"{value[:keep_len]}-{digest}"
 
-    def _get_or_create_job(self, batch_client, job_id: str, pool_id: str):
-        pool_info = batch_models.BatchPoolInfo(pool_id=pool_id)
-
-        job = batch_models.BatchJobCreateOptions(
-            id=job_id,
-            pool_info=pool_info,
-        )
-
-        try:
-            batch_client.create_job(job=job)
-            log.info(f"Created Batch job {job_id}")
-            return batch_client.get_job(job_id=job_id)
-
-        except HttpResponseError as err:
-            if err.error.code != "JobExists":
-                raise
-
-            # Job was created by another thread/process
-            log.debug(f"Batch job {job_id} already exists")
-
-            existing_job = batch_client.get_job(job_id=job_id)
-
-            # Should never happen since pool_id is factored into job_id hash
-            if existing_job.pool_info.pool_id != pool_id:
-                raise RuntimeError(
-                    f"Batch job {job_id} exists but is bound to pool "
-                    f"{existing_job.pool_info.pool_id}, expected {pool_id}"
-                )
-
-            return existing_job
-
     def launch_step(
-        self, step_handler_context: StepHandlerContext
+        self,
+        step_handler_context: StepHandlerContext,
     ) -> Iterator[DagsterEvent]:
-        container_context = self._get_docker_container_context(
+        step_key = self._get_step_key(step_handler_context)
+        container_group_name = self._get_container_group_id(
             step_handler_context
         )
-        step_image = self._get_image(step_handler_context)
-        validate_docker_image(step_image)
-        step_key = self._get_step_key(step_handler_context)
-        execute_step_args = step_handler_context.execute_step_args
-
-        job_id = self._get_job_id(step_handler_context)
-        log.debug(f"job_id: '{job_id}'")
-
-        self._get_or_create_job(self._batch_client, job_id)
-
-        env_vars = dict(
-            [parse_env_var(env_var) for env_var in container_context.env_vars]
-        )
-        env_vars["DAGSTER_RUN_JOB_NAME"] = (
-            step_handler_context.dagster_run.job_name
-        )
-        env_vars["DAGSTER_RUN_STEP_KEY"] = step_key
-        command = execute_step_args.get_command_args()
-
-        resource_group_name = "ext-edav-cfa-network-prd"
-        user_assigned_identity_name = "ext-edav-cfa-batch-account"
-        resource_id = f"/subscriptions/{self._subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{user_assigned_identity_name}"
-
-        container_registry = batch_models.ContainerRegistryReference(
-            registry_server="cfaprdbatchcr.azurecr.io",
-            identity_reference=batch_models.BatchNodeIdentityReference(
-                resource_id=resource_id
-            ),
+        container_group = self._build_container_group(
+            step_handler_context
         )
 
-        volumes = container_context.container_kwargs.get("volumes", [])
-        mount_options = ""
-        for volume in volumes:
-            source, target = volume.split(":", 1)
-            mount_options += f" --mount type=bind,source=$AZ_BATCH_NODE_MOUNTS_DIR/{source},target={target}"
-
-        workdir = container_context.container_kwargs.get(
-            "working_dir", "/app"
-        )  # TODO: validate this
-
-        container_settings = batch_models.BatchTaskContainerSettings(
-            image_name=step_image,
-            container_run_options=f"--rm --workdir {workdir} {mount_options}",
-            registry=container_registry,
-        )
-
-        # Run task as admin to be able to read/write to mounted drives
-        user_identity = batch_models.UserIdentity(
-            auto_user=batch_models.AutoUserSpecification(
-                scope=batch_models.AutoUserScope.pool,
-                elevation_level=batch_models.ElevationLevel.admin,
-            )
+        self._azure_client.container_groups.begin_create_or_update(
+            resource_group_name=self._resource_group,
+            container_group_name=container_group_name,
+            container_group=container_group,
         )
 
         yield DagsterEvent.step_worker_starting(
             step_handler_context.get_step_context(step_key),
             message=(
-                f"Launching step in task {task_id}, Azure Batch job: {job_id}."
+                f"Launching step {step_key!r} in Azure Container Instance "
+                f"group {container_group_name!r}."
             ),
             metadata={
-                "Azure Batch Job ID": job_id,
-                # "Azure Batch Pool ID": self._pool_id,
+                "Azure Container Group": container_group_name,
+                "Azure Resource Group": self._resource_group,
+                "Azure Location": self._location,
             },
         )
-
-    def check_step_health(
-        self, step_handler_context: StepHandlerContext
-    ) -> CheckStepHealthResult:
-        group_id = self._get_container_group_id(step_handler_context)
-
-        try:
-            task = self._batch_client.get_task(job_id=job_id, task_id=task_id)
-
-            # --- Check for explicit task failure info ---
-            failure_details = None
-            if task.execution_info and task.execution_info.failure_info:
-                fi = task.execution_info.failure_info
-                failure_details = f"{fi.category}: {fi.code} - {fi.message}"
-
-            # --- State handling ---
-            if task.state in ("active", "preparing", "running"):
-                return CheckStepHealthResult.healthy()
-
-            elif task.state == "completed":
-                exit_code = task.execution_info.exit_code
-
-                if exit_code == 0 and not failure_details:
-                    return CheckStepHealthResult.healthy()
-
-                # Build detailed failure message
-                reasons = [
-                    f"Azure Batch task {task_id} in job {job_id} failed."
-                ]
-
-                if exit_code is not None:
-                    reasons.append(f"Exit code: {exit_code}")
-
-                if failure_details:
-                    reasons.append(f"Task failure: {failure_details}")
-
-                return CheckStepHealthResult.unhealthy(
-                    reason=" | ".join(reasons)
-                )
-
-            else:
-                return CheckStepHealthResult.unhealthy(
-                    reason=(
-                        f"Azure Batch task {task_id} in job {job_id} "
-                        f"has unexpected state {task.state}."
-                    )
-                )
-
-        except HttpResponseError as err:
-            return CheckStepHealthResult.unhealthy(
-                reason=f"Error checking Azure Batch task status: {err}"
-            )
-
-    def _check_step_health(
-        self, step_handler_context: StepHandlerContext
-    ) -> CheckStepHealthResult:
-        job_id = self._get_job_id(step_handler_context)
-        task_id = self._get_task_id(step_handler_context)
-
-        try:
-            task = self._batch_client.get_task(job_id=job_id, task_id=task_id)
-            if task.state in ("active", "preparing", "running"):
-                return CheckStepHealthResult.healthy()
-            elif task.state == "completed":
-                if task.execution_info.exit_code == 0:
-                    return CheckStepHealthResult.healthy()  # Consider it healthy and let the framework handle completion
-                else:
-                    return CheckStepHealthResult.unhealthy(
-                        reason=f"Azure Batch task {task_id} in job {job_id} failed with exit code {task.execution_info.exit_code}."
-                    )
-            else:
-                return CheckStepHealthResult.unhealthy(
-                    reason=f"Azure Batch task {task_id} in job {job_id} has unexpected state {task.state}."
-                )
-        except HttpResponseError as err:
-            return CheckStepHealthResult.unhealthy(
-                reason=f"Error checking Azure Batch task status: {err}"
-            )
-
-    def terminate_step(
-        self, step_handler_context: StepHandlerContext
-    ) -> Iterator[DagsterEvent]:
-        step_key = self._get_step_key(step_handler_context)
-        job_id = self._get_job_id(step_handler_context)
-        task_id = self._get_task_id(step_handler_context)
-
-        yield DagsterEvent.engine_event(
-            step_handler_context.get_step_context(step_key),
-            message=f"Terminating Azure Batch task {task_id} in job {job_id} for step {step_key}.",
-            event_specific_data=EngineEventData(),
-        )
-        self._batch_client.terminate_task(job_id=job_id, task_id=task_id)
-
-
-# Just fiddling around
-from azure.mgmt.containerinstance.models import (
-    Container,
-    ContainerGroup,
-    ResourceRequests,
-    ResourceRequirements,
-)
-
-requests = ResourceRequests(
-    memory_in_gb=2,
-    cpu=1,
-)
-
-resources = ResourceRequirements(
-    requests=requests,
-)
-
-container = Container(
-    name="test-step",
-    image="ubuntu:22.04",
-    resources=resources,
-    command=["bash", "-c", "echo hello"],
-)
-
-group = ContainerGroup(
-    location="eastus",
-    containers=[container],
-    os_type="Linux",
-    restart_policy="Never",
-)
