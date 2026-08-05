@@ -340,42 +340,6 @@ class AzureContainerInstanceStepHandler(StepHandler):
 
         return container_group_params
 
-    def _create_step_container(
-        self,
-        client,
-        container_context,
-        step_image,
-        step_handler_context: StepHandlerContext,
-    ):
-        execute_step_args = step_handler_context.execute_step_args
-        # step_keys_to_execute = check.not_none(execute_step_args.step_keys_to_execute)
-        # assert len(step_keys_to_execute) == 1, "Launching multiple steps is not currently supported"
-        step_key = self._get_step_key(step_handler_context)
-
-        container_kwargs = {**container_context.container_kwargs}
-        container_kwargs.pop("stop_timeout", None)
-
-        env_vars = dict(
-            [parse_env_var(env_var) for env_var in container_context.env_vars]
-        )
-        env_vars["DAGSTER_RUN_JOB_NAME"] = (
-            step_handler_context.dagster_run.job_name
-        )
-        env_vars["DAGSTER_RUN_STEP_KEY"] = step_key
-
-        job_execution_id = start_caj(
-            self._azure_client,
-            resource_group=self._resource_group,
-            container_instance=self._container_app_job_name,
-            image=step_image,
-            env_vars=env_vars,
-            command=execute_step_args.get_command_args(),
-            cpu=self._cpu,
-            memory=self._memory,
-        )
-        self._step_caj_execution_ids[step_key] = job_execution_id
-        return job_execution_id
-
     def _clamp_with_hash(self, value: str, max_len: int) -> str:
         if len(value) <= max_len:
             return value
