@@ -12,9 +12,9 @@ from dagster._core.execution.plan.plan import ExecutionPlan
 from dagster._core.executor.init import InitExecutorContext
 
 from cfa_dagster import (
-    azure_container_app_job_executor, 
+    azure_container_app_job_executor,
     azure_container_instance_executor,
-    docker_executor
+    docker_executor,
 )
 from cfa_dagster.execution.executor import (
     DynamicExecutor,
@@ -182,6 +182,7 @@ def test_create_executor_azure_container_app():
         # Skip this test if we can't properly mock the dependencies
         pytest.skip("Skipping test due to complex executor dependencies")
 
+
 def test_create_executor_azure_container_instance(monkeypatch):
     """Test creating azure_container_instance"""
     monkeypatch.setenv("DAGSTER_USER", "test-user")
@@ -193,7 +194,7 @@ def test_create_executor_azure_container_instance(monkeypatch):
     )
 
     # Create the config for testing
-    config={
+    config = {
         "image": "mcr.microsoft.com/azuredocs/aci-helloworld",
         "cpu": 1.0,
         "memory": 2.0,

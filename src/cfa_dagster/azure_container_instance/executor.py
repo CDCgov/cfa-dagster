@@ -7,6 +7,9 @@ from collections.abc import Iterator
 from typing import TYPE_CHECKING, Optional, cast
 
 import dagster._check as check
+from azure.core.exceptions import HttpResponseError
+from azure.identity import DefaultAzureCredential
+from azure.mgmt.containerinstance import ContainerInstanceManagementClient
 from azure.mgmt.containerinstance.models import (
     Container,
     ContainerGroup,
@@ -14,11 +17,6 @@ from azure.mgmt.containerinstance.models import (
     ResourceRequests,
     ResourceRequirements,
 )
-from azure.mgmt.containerinstance import (
-    ContainerInstanceManagementClient
-)
-from azure.core.exceptions import HttpResponseError
-from azure.identity import DefaultAzureCredential
 from azure.mgmt.subscription import SubscriptionClient
 from dagster import Field, Float, Permissive, StringSource, executor
 from dagster._core.definitions.executor_definition import (
@@ -53,12 +51,13 @@ if TYPE_CHECKING:
     from dagster._core.origin import JobPythonOrigin
 
 # Notes:
-# We can ACI standby pools for faster startup times but for the first iteration I will not
+# We can ACPI standby pools for faster startup times but for the first iteration I will not
 # Permissive() is a dagster config that allows open (not closed) schema definition
 # One dagster step = One Container Group
-# Dagster run ID + step key + retry number → ACI container-group name
+# Dagster run ID + step key + retry number → ACPI container-group name
 # _get_job_id(), _get_or_create_job(), and _get_task_id() will collapse into container-group naming function
-# Turn ACI restart policy to Never b/c dagster handles this already?
+# Turn ACPI restart policy to Never b/c dagster handles this already?
+
 
 @executor(
     name="azure_container_instance_executor",
@@ -69,13 +68,13 @@ if TYPE_CHECKING:
                 Float,
                 is_required=False,
                 default_value=1.0,
-                description="Number of CPU cores requested for the ACI container.",
+                description="Number of CPU cores requested for the ACPI container.",
             ),
             "memory": Field(
                 Float,
                 is_required=False,
                 default_value=2.0,
-                description="Memory requested for the ACI container, in GB.",
+                description="Memory requested for the ACPI container, in GB.",
             ),
             "container_kwargs": Field(
                 Permissive(
@@ -173,7 +172,9 @@ def azure_container_instance_executor(
     )
 
     return StepDelegatingExecutor(
-        AzureContainerInstanceStepHandler(image, container_context, cpu, memory),
+        AzureContainerInstanceStepHandler(
+            image, container_context, cpu, memory
+        ),
         retries=check.not_none(RetryMode.from_config(retries)),
         max_concurrent=max_concurrent,
         tag_concurrency_limits=tag_concurrency_limits,
@@ -278,7 +279,9 @@ class AzureContainerInstanceStepHandler(StepHandler):
         )
         return step_keys_to_execute[0]
 
-    def _get_container_group_id(self, step_handler_context: StepHandlerContext):
+    def _get_container_group_id(
+        self, step_handler_context: StepHandlerContext
+    ):
         """
         Creates a unique container group id for Azure Container instance
 
@@ -340,8 +343,10 @@ class AzureContainerInstanceStepHandler(StepHandler):
             name=self._get_container_group_id(step_handler_context),
             image=self._get_image(step_handler_context),
             resources=ResourceRequirements(
-                requests=ResourceRequests(memory_in_gb=self._memory, cpu=self._cpu)
-                ),
+                requests=ResourceRequests(
+                    memory_in_gb=self._memory, cpu=self._cpu
+                )
+            ),
         )
 
         container_group_params = ContainerGroup(
@@ -370,9 +375,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
         container_group_name = self._get_container_group_id(
             step_handler_context
         )
-        container_group = self._build_container_group(
-            step_handler_context
-        )
+        container_group = self._build_container_group(step_handler_context)
 
         self._azure_client.container_groups.begin_create_or_update(
             resource_group_name=self._resource_group,
@@ -394,7 +397,8 @@ class AzureContainerInstanceStepHandler(StepHandler):
         )
 
     def check_step_health(
-        self,    step_handler_context: StepHandlerContext,
+        self,
+        step_handler_context: StepHandlerContext,
     ) -> CheckStepHealthResult:
         container_group_name = self._get_container_group_id(
             step_handler_context
@@ -467,7 +471,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
     def terminate_step(
         self,
         step_handler_context: StepHandlerContext,
-        ) -> Iterator[DagsterEvent]:
+    ) -> Iterator[DagsterEvent]:
         step_key = self._get_step_key(step_handler_context)
         container_group_name = self._get_container_group_id(
             step_handler_context
