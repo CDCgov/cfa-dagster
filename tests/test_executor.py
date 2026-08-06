@@ -192,6 +192,18 @@ def test_create_executor_azure_container_instance():
     )
 
     # Create the config in a way that bypasses __post_init__ validation for testing purposes
+    config={
+        "image": "mcr.microsoft.com/azuredocs/aci-helloworld",
+        "cpu": 1.0,
+        "memory": 2.0,
+        "env_vars": [],
+        "container_kwargs": {
+            "working_dir": "/app",
+        },
+        "retries": {
+            "enabled": {},
+        },
+    }
     execution_config = ExecutionConfig.__new__(ExecutionConfig)
     object.__setattr__(execution_config, "launcher", None)
     object.__setattr__(
@@ -199,7 +211,7 @@ def test_create_executor_azure_container_instance():
         "executor",
         SelectorConfig(
             class_name=azure_container_instance_executor.__name__,
-            config={"resource_group": "test-rg"},
+            config=config,
         ),
     )
 
