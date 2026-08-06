@@ -472,7 +472,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
         container_group_name = self._get_container_group_id(
             step_handler_context
         )
-    
+
         yield DagsterEvent.engine_event(
             step_handler_context.get_step_context(step_key),
             message=(
@@ -481,7 +481,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
             ),
             event_specific_data=EngineEventData(),
         )
-    
+
         try:
             self._azure_client.container_groups.begin_delete(
                 resource_group_name=self._resource_group,

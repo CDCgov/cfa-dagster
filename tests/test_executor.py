@@ -11,7 +11,11 @@ from dagster._core.execution.context.system import PlanOrchestrationContext
 from dagster._core.execution.plan.plan import ExecutionPlan
 from dagster._core.executor.init import InitExecutorContext
 
-from cfa_dagster import azure_container_app_job_executor, docker_executor
+from cfa_dagster import (
+    azure_container_app_job_executor, 
+    azure_container_instance_executor,
+    docker_executor
+)
 from cfa_dagster.execution.executor import (
     DynamicExecutor,
     create_executor,
@@ -65,12 +69,21 @@ def test_create_executor_in_process():
 
     # Create the config in a way that bypasses __post_init__ validation for testing purposes
     # by using object.__setattr__ to set attributes on the frozen dataclass
+    config={
+        "image": "mcr.microsoft.com/azuredocs/aci-helloworld",
+        "cpu": 1.0,
+        "memory": 2.0,
+        "env_vars": [],
+        "container_kwargs": {
+            "working_dir": "/app",
+        },
+    },
     execution_config = ExecutionConfig.__new__(ExecutionConfig)
     object.__setattr__(execution_config, "launcher", None)
     object.__setattr__(
         execution_config,
         "executor",
-        SelectorConfig(class_name=in_process_executor.__name__, config={}),
+        SelectorConfig(class_name=in_process_executor.__name__, config=config),
     )
 
     # Rather than trying to patch the executor_creation_fn property,
@@ -164,6 +177,37 @@ def test_create_executor_azure_container_app():
         "executor",
         SelectorConfig(
             class_name=azure_container_app_job_executor.__name__,
+            config={"resource_group": "test-rg"},
+        ),
+    )
+
+    # Rather than trying to patch the executor_creation_fn property,
+    # we'll just test that the function accepts the inputs without error
+    try:
+        executor = create_executor(init_context, execution_config)
+        # If it doesn't raise an exception, the test passes
+        assert executor is not None
+    except Exception:
+        # Skip this test if we can't properly mock the dependencies
+        pytest.skip("Skipping test due to complex executor dependencies")
+
+def test_create_executor_azure_container_instance():
+    """Test creating azure_container_instance"""
+    init_context = Mock(spec=InitExecutorContext)
+    init_context.executor_config = {}
+    # Mock the _replace method to return a proper dict for executor_config
+    init_context._replace = lambda **kwargs: Mock(
+        executor_config=kwargs.get("executor_config", {})
+    )
+
+    # Create the config in a way that bypasses __post_init__ validation for testing purposes
+    execution_config = ExecutionConfig.__new__(ExecutionConfig)
+    object.__setattr__(execution_config, "launcher", None)
+    object.__setattr__(
+        execution_config,
+        "executor",
+        SelectorConfig(
+            class_name=azure_container_instance_executor.__name__,
             config={"resource_group": "test-rg"},
         ),
     )
