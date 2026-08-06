@@ -76,21 +76,6 @@ if TYPE_CHECKING:
                 default_value=2.0,
                 description="Memory requested for the ACPI container, in GB.",
             ),
-            "container_kwargs": Field(
-                Permissive(
-                    {
-                        "working_dir": Field(
-                            StringSource,
-                            is_required=True,
-                            description=(
-                                "Path to the working directory. Must match "
-                                "the WORKDIR in your Dockerfile."
-                            ),
-                        )
-                    }
-                ),
-                is_required=True,
-            ),
         },
     ),
     requirements=multiple_process_executor_requirements(),
@@ -129,16 +114,8 @@ def azure_container_instance_executor(
     container_kwargs = check.opt_dict_elem(
         config, "container_kwargs", key_type=str
     )
-    working_dir = container_kwargs.get("working_dir")
     cpu = check.float_elem(config, "cpu")
     memory = check.float_elem(config, "memory")
-    if not working_dir:
-        raise ValueError(
-            (
-                "Missing property 'container_kwargs.working_dir' "
-                "is required and must match your Dockerfile WORKDIR"
-            )
-        )
     retries = check.dict_elem(config, "retries", key_type=str)
     max_concurrent = check.opt_int_elem(config, "max_concurrent")
     tag_concurrency_limits = check.opt_list_elem(
@@ -223,6 +200,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
             .get("config", {})
             .get("image")
         )
+        log.info("Resolved image: %s", image)
         if not image:
             image = self._image
 
