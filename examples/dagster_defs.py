@@ -1,11 +1,4 @@
-#!/usr/bin/env -S uv run --script
-# PEP 723 dependency definition: https://peps.python.org/pep-0723/
-# /// script
-# requires-python = ">=3.13,<3.14"
-# dependencies = [
-#    "cfa-dagster[dev] @ git+https://github.com/cdcgov/cfa-dagster.git",
-# ]
-# ///
+#!/usr/bin/env python
 
 import json
 import os
@@ -128,12 +121,10 @@ azure_container_instance_config = ExecutionConfig(
     executor=SelectorConfig(
         class_name=azure_container_instance_executor.__name__,
         config={
-            # Removing pool name for now!
-            # "pool_name": "cfa-dagster",
             # specify a default image
             "image": image,
             # set env vars here
-            "env_vars": ["CFA_DAGSTER_LOG_LEVEL=debug"],
+            "env_vars": [],
             "container_kwargs": {
                 # set the working directory to match your Dockerfile
                 # required for Azure Container Instance
@@ -273,7 +264,7 @@ defs = dg.Definitions(
     },
     executor=dynamic_executor(
         # try switching to Azure compute after pushing your image
-        default_config=default_config,
+        default_config=azure_container_instance_config,
         # default_config=docker_config,
         # default_config=azure_caj_config,
         # default_config=azure_batch_config,
