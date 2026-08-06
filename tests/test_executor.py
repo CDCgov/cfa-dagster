@@ -182,8 +182,9 @@ def test_create_executor_azure_container_app():
         # Skip this test if we can't properly mock the dependencies
         pytest.skip("Skipping test due to complex executor dependencies")
 
-def test_create_executor_azure_container_instance():
+def test_create_executor_azure_container_instance(monkeypatch):
     """Test creating azure_container_instance"""
+    monkeypatch.setenv("DAGSTER_USER", "test-user")
     init_context = Mock(spec=InitExecutorContext)
     init_context.executor_config = {}
     # Mock the _replace method to return a proper dict for executor_config
@@ -191,7 +192,7 @@ def test_create_executor_azure_container_instance():
         executor_config=kwargs.get("executor_config", {})
     )
 
-    # Create the config in a way that bypasses __post_init__ validation for testing purposes
+    # Create the config for testing
     config={
         "image": "mcr.microsoft.com/azuredocs/aci-helloworld",
         "cpu": 1.0,
@@ -217,13 +218,12 @@ def test_create_executor_azure_container_instance():
 
     # Rather than trying to patch the executor_creation_fn property,
     # we'll just test that the function accepts the inputs without error
-    try:
-        executor = create_executor(init_context, execution_config)
-        # If it doesn't raise an exception, the test passes
-        assert executor is not None
-    except Exception:
-        # Skip this test if we can't properly mock the dependencies
-        pytest.skip("Skipping test due to complex executor dependencies")
+    executor = create_executor(init_context, execution_config)
+    # If it doesn't raise an exception, the test passes
+    assert executor is not None
+    # except Exception:
+    #     # Skip this test if we can't properly mock the dependencies
+    #     pytest.skip("Skipping test due to complex executor dependencies")
 
 
 def test_create_executor_invalid_class():
