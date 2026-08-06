@@ -69,21 +69,12 @@ def test_create_executor_in_process():
 
     # Create the config in a way that bypasses __post_init__ validation for testing purposes
     # by using object.__setattr__ to set attributes on the frozen dataclass
-    config={
-        "image": "mcr.microsoft.com/azuredocs/aci-helloworld",
-        "cpu": 1.0,
-        "memory": 2.0,
-        "env_vars": [],
-        "container_kwargs": {
-            "working_dir": "/app",
-        },
-    },
     execution_config = ExecutionConfig.__new__(ExecutionConfig)
     object.__setattr__(execution_config, "launcher", None)
     object.__setattr__(
         execution_config,
         "executor",
-        SelectorConfig(class_name=in_process_executor.__name__, config=config),
+        SelectorConfig(class_name=in_process_executor.__name__, config={}),
     )
 
     # Rather than trying to patch the executor_creation_fn property,
