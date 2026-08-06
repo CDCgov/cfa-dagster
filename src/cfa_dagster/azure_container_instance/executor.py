@@ -474,13 +474,13 @@ class AzureContainerInstanceStepHandler(StepHandler):
         )
 
         try:
-            self._azure_client.container_groups.begin_delete(
+            self._azure_client.container_groups.stop(
                 resource_group_name=self._resource_group,
                 container_group_name=container_group_name,
             )
         except ResourceNotFoundError:
             log.info(
-                "Azure Container Instance group %r was already deleted.",
+                "Azure Container Instance group %r was already stopped.",
                 container_group_name,
             )
         except HttpResponseError:
