@@ -18,7 +18,7 @@ from azure.mgmt.containerinstance.models import (
     ResourceRequirements,
 )
 from azure.mgmt.subscription import SubscriptionClient
-from dagster import Field, Float, Permissive, StringSource, executor
+from dagster import Field, Float, Int, Permissive, StringSource, executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
@@ -51,12 +51,12 @@ if TYPE_CHECKING:
     from dagster._core.origin import JobPythonOrigin
 
 # Notes:
-# We can ACPI standby pools for faster startup times but for the first iteration I will not
+# We can ACI standby pools for faster startup times but for the first iteration I will not
 # Permissive() is a dagster config that allows open (not closed) schema definition
 # One dagster step = One Container Group
-# Dagster run ID + step key + retry number → ACPI container-group name
+# Dagster run ID + step key + retry number → ACI container-group name
 # _get_job_id(), _get_or_create_job(), and _get_task_id() will collapse into container-group naming function
-# Turn ACPI restart policy to Never b/c dagster handles this already?
+# Turn ACI restart policy to Never b/c dagster handles this already?
 
 
 @executor(
@@ -74,8 +74,14 @@ if TYPE_CHECKING:
                 Float,
                 is_required=False,
                 default_value=2.0,
-                description="Memory requested for the ACPI container, in GB.",
+                description="Memory requested for the ACI container, in GB.",
             ),
+            "max_concurrent": Field(
+                Int,
+                is_required=False,
+                default_value=1,
+                description="Maximum number of ACI step containers running concurrently.s",
+            )
         },
     ),
     requirements=multiple_process_executor_requirements(),
@@ -121,6 +127,9 @@ def azure_container_instance_executor(
     tag_concurrency_limits = check.opt_list_elem(
         config, "tag_concurrency_limits"
     )
+
+    if max_concurrent is not None and max_concurrent > 5:
+        raise ValueError("max_concurrent must be 5 or fewer")
 
     # propagate user & dev env vars
     require_dagster_user()
