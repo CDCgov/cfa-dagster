@@ -12,13 +12,16 @@ from azure.mgmt.containerinstance import ContainerInstanceManagementClient
 from azure.mgmt.containerinstance.models import (
     Container,
     ContainerGroup,
+    ContainerGroupIdentity,
+    UserAssignedIdentities,
+    ImageRegistryCredential,
     OperatingSystemTypes,
     ResourceRequests,
     ResourceRequirements,
 )
 from azure.mgmt.msi import ManagedServiceIdentityClient
 from azure.mgmt.subscription import SubscriptionClient
-from dagster import Field, Float, Int, executor
+from dagster import Field, Float, Int, StringSource, executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
@@ -79,6 +82,14 @@ if TYPE_CHECKING:
                 default_value=1,
                 description="Maximum number of ACI step containers running concurrently.",
             ),
+            "identity_name": Field(
+                StringSource,
+                is_required=False,
+                description=(
+                    "Name of the user-assigned managed identity "
+                    "to attach to the ACI container group."
+                ),
+            ),
         },
     ),
     requirements=multiple_process_executor_requirements(),
@@ -93,7 +104,7 @@ def azure_container_instance_executor(
     .. code-block:: python
         some_job = dg.define_asset_job(
             name="some_job",
-            executor_def=azure_container_app_job_executor,
+            executor_def=azure_container_instance_executor,
             ..
         )
 
@@ -177,6 +188,9 @@ class AzureContainerInstanceStepHandler(StepHandler):
             .next()
             .subscription_id
         )
+        self._identity = None
+        self._container_group_identity = None
+        self._image_registry_credentials = None
 
         self._location = "eastus"
         self._resource_group = "ext-edav-cfa-prd"
@@ -186,12 +200,29 @@ class AzureContainerInstanceStepHandler(StepHandler):
             subscription_id=self._subscription_id,
         )
 
-        self._identity = None
         if identity_name:
-            self._identity = self._load_identity_by_name(
-                credential,
-                identity_name,
+            self._identity = self._load_identity_by_name(credential, identity_name)
+
+            identity_id = self._identity.id
+            
+            if not identity_id:
+               raise RuntimeError(
+                   f"Managed identity {self._identity.name!r} has no resource ID."
+               )
+
+            self._container_group_identity = ContainerGroupIdentity(
+                type="UserAssigned",
+                user_assigned_identities={
+                    identity_id: UserAssignedIdentities()
+                },
             )
+
+            self._image_registry_credentials = [
+                ImageRegistryCredential(
+                    server="cfaprdbatchcr.azurecr.io",
+                    identity=identity_id,
+                )
+            ]
 
         self._image = check.opt_str_param(image, "image")
         self._cpu = cpu
@@ -374,6 +405,8 @@ class AzureContainerInstanceStepHandler(StepHandler):
             location=self._location,
             containers=[container],
             os_type=OperatingSystemTypes.LINUX,
+            identity=self._container_group_identity,
+            image_registry_credentials=self._image_registry_credentials,
         )
 
         return container_group_params
