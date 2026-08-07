@@ -1,11 +1,4 @@
-#!/usr/bin/env -S uv run --script
-# PEP 723 dependency definition: https://peps.python.org/pep-0723/
-# /// script
-# requires-python = ">=3.13,<3.14"
-# dependencies = [
-#    "cfa-dagster[dev] @ git+https://github.com/cdcgov/cfa-dagster.git",
-# ]
-# ///
+#!/usr/bin/env python
 
 import json
 import os
@@ -25,6 +18,7 @@ from cfa_dagster import (
     SelectorConfig,
     azure_batch_executor,
     azure_container_app_job_executor,
+    azure_container_instance_executor,
     collect_definitions,
     docker_executor,
     dynamic_executor,
@@ -111,6 +105,29 @@ azure_batch_config = ExecutionConfig(
             "container_kwargs": {
                 # set the working directory to match your Dockerfile
                 # required for Azure Batch
+                "working_dir": workdir,
+                # mount config if your existing Batch pool already has Blob mounts
+                # "volumes": [
+                #     "nssp-etl:nssp-etl",
+                # ]
+            },
+        },
+    ),
+)
+
+# configuring an executor to run an Azure Container Instance
+# add this to a job or the Definitions class to use it
+azure_container_instance_config = ExecutionConfig(
+    executor=SelectorConfig(
+        class_name=azure_container_instance_executor.__name__,
+        config={
+            # specify a default image
+            "image": image,
+            # set env vars here
+            "env_vars": [],
+            "container_kwargs": {
+                # set the working directory to match your Dockerfile
+                # required for Azure Container Instance
                 "working_dir": workdir,
                 # mount config if your existing Batch pool already has Blob mounts
                 # "volumes": [
@@ -247,10 +264,11 @@ defs = dg.Definitions(
     },
     executor=dynamic_executor(
         # try switching to Azure compute after pushing your image
-        default_config=default_config,
+        default_config=azure_container_instance_config,
         # default_config=docker_config,
         # default_config=azure_caj_config,
         # default_config=azure_batch_config,
+        # default_config=azure_container_instance_config,
         # alternate configs show you default values in the Launchpad on hover
         alternate_configs=[
             default_config,

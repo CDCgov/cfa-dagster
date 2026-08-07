@@ -23,7 +23,10 @@ dependencies = [
     "azure-keyvault-secrets",
     "psycopg2-binary",
     # used by dagster clis, just importing an error
-    "click"
+    "click",
+    "azure-mgmt-containerinstance>=10.1.0",
+    "pre-commit>=4.6.1",
+    "azure-mgmt-msi>=7.1.0",
 ]
 
 [project.scripts]
