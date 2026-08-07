@@ -1,14 +1,13 @@
 import hashlib
 import logging
 import os
-import re
 import uuid
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Optional, cast
 
 import dagster._check as check
-from azure.core.exceptions import HttpResponseError
-from azure.identity import DefaultAzureCredential, ManagedIdentityCredential
+from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
+from azure.identity import DefaultAzureCredential
 from azure.mgmt.containerinstance import ContainerInstanceManagementClient
 from azure.mgmt.containerinstance.models import (
     Container,
@@ -19,7 +18,7 @@ from azure.mgmt.containerinstance.models import (
 )
 from azure.mgmt.msi import ManagedServiceIdentityClient
 from azure.mgmt.subscription import SubscriptionClient
-from dagster import Field, Float, Int, StringSource, executor
+from dagster import Field, Float, Int, executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
@@ -33,13 +32,11 @@ from dagster._core.executor.step_delegating.step_handler.base import (
     StepHandler,
     StepHandlerContext,
 )
-from dagster._core.utils import parse_env_var
 from dagster._utils.merger import merge_dicts
 from dagster_docker import docker_executor as base_docker_executor
 from dagster_docker.container_context import DockerContainerContext
 from dagster_docker.utils import (
     validate_docker_config,
-    validate_docker_image,
 )
 
 from cfa_dagster.utils import require_dagster_user
@@ -52,12 +49,11 @@ if TYPE_CHECKING:
     from dagster._core.origin import JobPythonOrigin
 
 # Notes:
-# We can ACPI standby pools for faster startup times but for the first iteration I will not
-# Permissive() is a dagster config that allows open (not closed) schema definition
-# One dagster step = One Container Group
-# Dagster run ID + step key + retry number → ACPI container-group name
+# We can ACI standby pools for faster startup times but for the first iteration I will not
+# One dagsters step = One Container Group
+# Dagster run ID + step key + retry number → ACI container-group name
 # _get_job_id(), _get_or_create_job(), and _get_task_id() will collapse into container-group naming function
-# Turn ACPI restart policy to Never b/c dagster handles this already?
+# Turn ACI restart policy to Never b/c dagster handles this already?
 
 
 @executor(
@@ -69,19 +65,19 @@ if TYPE_CHECKING:
                 Float,
                 is_required=False,
                 default_value=1.0,
-                description="Number of CPU cores requested for the ACPI container.",
+                description="Number of CPU cores requested for the ACI container.",
             ),
             "memory": Field(
                 Float,
                 is_required=False,
                 default_value=2.0,
-                description="Memory requested for the ACPI container, in GB.",
+                description="Memory requested for the ACI container, in GB.",
             ),
             "max_concurrent": Field(
                 Int,
                 is_required=False,
                 default_value=1,
-                description="Maximum number of ACPI step containers running concurrently.s",
+                description="Maximum number of ACI step containers running concurrently.",
             ),
         },
     ),
@@ -109,7 +105,6 @@ def azure_container_instance_executor(
           config:
             image: ...
             env_vars: ...
-            container_kwargs: ...
 
     """
     config = init_context.executor_config
@@ -118,9 +113,6 @@ def azure_container_instance_executor(
     env_vars = check.opt_list_elem(config, "env_vars", of_type=str)
     network = check.opt_str_elem(config, "network")
     networks = check.opt_list_elem(config, "networks", of_type=str)
-    container_kwargs = check.opt_dict_elem(
-        config, "container_kwargs", key_type=str
-    )
     cpu = check.float_elem(config, "cpu")
     memory = check.float_elem(config, "memory")
     retries = check.dict_elem(config, "retries", key_type=str)
