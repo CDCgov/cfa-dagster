@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional, cast
 
 import dagster._check as check
 from azure.core.exceptions import HttpResponseError
-from azure.identity import DefaultAzureCredential
+from azure.identity import DefaultAzureCredential, ManagedIdentityCredential
 from azure.mgmt.containerinstance import ContainerInstanceManagementClient
 from azure.mgmt.containerinstance.models import (
     Container,
@@ -17,8 +17,9 @@ from azure.mgmt.containerinstance.models import (
     ResourceRequests,
     ResourceRequirements,
 )
+from azure.mgmt.msi import ManagedServiceIdentityClient
 from azure.mgmt.subscription import SubscriptionClient
-from dagster import Field, Float, Int, Permissive, StringSource, executor
+from dagster import Field, Float, Int, StringSource, executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
@@ -51,12 +52,12 @@ if TYPE_CHECKING:
     from dagster._core.origin import JobPythonOrigin
 
 # Notes:
-# We can ACI standby pools for faster startup times but for the first iteration I will not
+# We can ACPI standby pools for faster startup times but for the first iteration I will not
 # Permissive() is a dagster config that allows open (not closed) schema definition
 # One dagster step = One Container Group
-# Dagster run ID + step key + retry number → ACI container-group name
+# Dagster run ID + step key + retry number → ACPI container-group name
 # _get_job_id(), _get_or_create_job(), and _get_task_id() will collapse into container-group naming function
-# Turn ACI restart policy to Never b/c dagster handles this already?
+# Turn ACPI restart policy to Never b/c dagster handles this already?
 
 
 @executor(
@@ -74,14 +75,14 @@ if TYPE_CHECKING:
                 Float,
                 is_required=False,
                 default_value=2.0,
-                description="Memory requested for the ACI container, in GB.",
+                description="Memory requested for the ACPI container, in GB.",
             ),
             "max_concurrent": Field(
                 Int,
                 is_required=False,
                 default_value=1,
-                description="Maximum number of ACI step containers running concurrently.s",
-            )
+                description="Maximum number of ACPI step containers running concurrently.s",
+            ),
         },
     ),
     requirements=multiple_process_executor_requirements(),
@@ -171,12 +172,13 @@ class AzureContainerInstanceStepHandler(StepHandler):
     def __init__(
         self,
         image: Optional[str],
+        identity_name: Optional[str],
         container_context: DockerContainerContext,
         cpu: float,
         memory: float,
     ):
         super().__init__()
-        log.debug(f"Launching a new {self.name}")
+
         credential = DefaultAzureCredential()
 
         self._subscription_id = (
@@ -190,14 +192,24 @@ class AzureContainerInstanceStepHandler(StepHandler):
         self._resource_group = "ext-edav-cfa-prd"
 
         self._azure_client = ContainerInstanceManagementClient(
-            credential=credential, subscription_id=self._subscription_id
+            credential=credential,
+            subscription_id=self._subscription_id,
         )
+
+        self._identity = None
+        if identity_name:
+            self._identity = self._load_identity_by_name(
+                credential,
+                identity_name,
+            )
 
         self._image = check.opt_str_param(image, "image")
         self._cpu = cpu
         self._memory = memory
         self._container_context = check.inst_param(
-            container_context, "container_context", DockerContainerContext
+            container_context,
+            "container_context",
+            DockerContainerContext,
         )
 
     def _get_image(self, step_handler_context: StepHandlerContext):
@@ -225,6 +237,38 @@ class AzureContainerInstanceStepHandler(StepHandler):
             )
 
         return image
+
+    def _load_identity_by_name(
+        self,
+        credential,
+        identity_name: str,
+    ):
+        client = ManagedServiceIdentityClient(
+            credential,
+            self._subscription_id,
+        )
+
+        identities = list(
+            client.user_assigned_identities.list_by_subscription()
+        )
+
+        matches = [
+            identity
+            for identity in identities
+            if identity.name == identity_name
+        ]
+
+        if not matches:
+            raise RuntimeError(
+                f"Managed identity '{identity_name}' not found."
+            )
+
+        if len(matches) > 1:
+            raise RuntimeError(
+                f"Multiple managed identities named '{identity_name}' found."
+            )
+
+        return matches[0]
 
     def _get_docker_container_context(
         self, step_handler_context: StepHandlerContext
@@ -485,7 +529,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
             )
         except HttpResponseError:
             log.exception(
-                "Failed to delete Azure Container Instance group %r.",
+                "Failed to stops Azure Container Instance group %r.",
                 container_group_name,
             )
             raise
