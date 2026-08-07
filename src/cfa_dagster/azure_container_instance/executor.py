@@ -138,8 +138,6 @@ def azure_container_instance_executor(
         if os.getenv(env_var) and env_var not in env_vars:
             env_vars.append(env_var)
 
-    validate_docker_config(network, networks, container_kwargs)
-
     if network and not networks:
         networks = [network]
 
@@ -152,7 +150,7 @@ def azure_container_instance_executor(
 
     return StepDelegatingExecutor(
         AzureContainerInstanceStepHandler(
-            image, container_context, cpu, memory
+            image, identity_name, container_context, cpu, memory
         ),
         retries=check.not_none(RetryMode.from_config(retries)),
         max_concurrent=max_concurrent,
