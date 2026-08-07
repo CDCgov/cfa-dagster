@@ -55,7 +55,6 @@ if TYPE_CHECKING:
 # We can ACI standby pools for faster startup times but for the first iteration I will not
 # One dagsters step = One Container Group
 # Dagster run ID + step key + retry number → ACI container-group name
-# _get_job_id(), _get_or_create_job(), and _get_task_id() will collapse into container-group naming function
 # Turn ACI restart policy to Never b/c dagster handles this already?
 
 
@@ -407,6 +406,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
             os_type=OperatingSystemTypes.LINUX,
             identity=self._container_group_identity,
             image_registry_credentials=self._image_registry_credentials,
+            restart_policy="Never"
         )
 
         return container_group_params
