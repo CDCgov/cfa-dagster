@@ -184,28 +184,26 @@ def test_create_executor_azure_container_app():
 
 
 def test_create_executor_azure_container_instance(monkeypatch):
-    """Test creating azure_container_instance"""
     monkeypatch.setenv("DAGSTER_USER", "test-user")
+
     init_context = Mock(spec=InitExecutorContext)
     init_context.executor_config = {}
-    # Mock the _replace method to return a proper dict for executor_config
     init_context._replace = lambda **kwargs: Mock(
         executor_config=kwargs.get("executor_config", {})
     )
 
-    # Create the config for testing
     config = {
         "image": "mcr.microsoft.com/azuredocs/aci-helloworld",
+        "identity_name": None,
         "cpu": 1.0,
         "memory": 2.0,
         "env_vars": [],
-        "container_kwargs": {
-            "working_dir": "/app",
-        },
         "retries": {
             "enabled": {},
         },
+        "max_concurrent": 1,
     }
+
     execution_config = ExecutionConfig.__new__(ExecutionConfig)
     object.__setattr__(execution_config, "launcher", None)
     object.__setattr__(
@@ -217,14 +215,19 @@ def test_create_executor_azure_container_instance(monkeypatch):
         ),
     )
 
-    # Rather than trying to patch the executor_creation_fn property,
-    # we'll just test that the function accepts the inputs without error
-    executor = create_executor(init_context, execution_config)
-    # If it doesn't raise an exception, the test passes
+    with patch(
+        "cfa_dagster.azure_container_instance.executor."
+        "AzureContainerInstanceStepHandler"
+    ) as mock_handler:
+        mock_handler.return_value = Mock()
+
+        executor = create_executor(
+            init_context,
+            execution_config,
+        )
+
     assert executor is not None
-    # except Exception:
-    #     # Skip this test if we can't properly mock the dependencies
-    #     pytest.skip("Skipping test due to complex executor dependencies")
+    mock_handler.assert_called_once()
 
 
 def test_create_executor_invalid_class():
