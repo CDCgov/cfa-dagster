@@ -115,6 +115,7 @@ def azure_container_instance_executor(
     networks = check.opt_list_elem(config, "networks", of_type=str)
     cpu = check.float_elem(config, "cpu")
     memory = check.float_elem(config, "memory")
+    identity_name = check.opt_str_elem(config, "identity_name")
     retries = check.dict_elem(config, "retries", key_type=str)
     max_concurrent = check.opt_int_elem(config, "max_concurrent")
     tag_concurrency_limits = check.opt_list_elem(
@@ -145,7 +146,6 @@ def azure_container_instance_executor(
         registry=registry,
         env_vars=env_vars,
         networks=networks or [],
-        container_kwargs=container_kwargs,
     )
 
     return StepDelegatingExecutor(
