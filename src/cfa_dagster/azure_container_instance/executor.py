@@ -268,6 +268,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
             self._subscription_id,
         )
 
+        # TODO: MPW -> add query filter here if possible
         identities = list(
             client.user_assigned_identities.list_by_subscription()
         )
