@@ -83,7 +83,7 @@ if TYPE_CHECKING:
             ),
             "identity_name": Field(
                 StringSource,
-                is_required=False,
+                is_required=True,
                 description=(
                     "Name of the user-assigned managed identity "
                     "to attach to the ACI container group."
