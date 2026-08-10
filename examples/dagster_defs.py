@@ -1,4 +1,11 @@
-#!/usr/bin/env python
+#!/usr/bin/env -S uv run --script
+# PEP 723 dependency definition: https://peps.python.org/pep-0723/
+# /// script
+# requires-python = ">=3.13,<3.14"
+# dependencies = [
+#    "cfa-dagster[dev] @ git+https://github.com/cdcgov/cfa-dagster.git",
+# ]
+# ///
 
 import json
 import os
