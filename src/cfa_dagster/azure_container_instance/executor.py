@@ -44,11 +44,9 @@ from dagster_docker.utils import (
 
 from cfa_dagster.utils import require_dagster_user
 
-from ..utils import get_run_timestamp
-
 log = logging.getLogger(__name__)
 
-azure_logger = logging.getLogger("azure")
+azure_logger = logging.getLogger("azure.mgmt.containerinstance")
 azure_logger.setLevel(logging.DEBUG)
 
 if not azure_logger.handlers:
