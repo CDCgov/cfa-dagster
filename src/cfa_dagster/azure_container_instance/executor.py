@@ -1,7 +1,7 @@
 import hashlib
 import logging
 import os
-import uuid
+import sys
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Optional, cast
 
@@ -47,6 +47,18 @@ from cfa_dagster.utils import require_dagster_user
 from ..utils import get_run_timestamp
 
 log = logging.getLogger(__name__)
+
+azure_logger = logging.getLogger("azure")
+azure_logger.setLevel(logging.DEBUG)
+
+if not azure_logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s %(levelname)s %(name)s: %(message)s"
+        )
+    )
+    azure_logger.addHandler(handler)
 
 if TYPE_CHECKING:
     from dagster._core.origin import JobPythonOrigin
@@ -179,13 +191,22 @@ class AzureContainerInstanceStepHandler(StepHandler):
     ):
         super().__init__()
 
-        credential = DefaultAzureCredential()
+        credential = DefaultAzureCredential(logging_enable=True)
 
         self._subscription_id = (
-            SubscriptionClient(credential)
+            SubscriptionClient(
+                credential,
+                logging_enable=True,
+            )
             .subscriptions.list()
             .next()
             .subscription_id
+        )
+
+        self._azure_client = ContainerInstanceManagementClient(
+            credential=credential,
+            subscription_id=self._subscription_id,
+            logging_enable=True,
         )
         self._identity = None
         self._container_group_identity = None
@@ -193,11 +214,6 @@ class AzureContainerInstanceStepHandler(StepHandler):
 
         self._location = "eastus"
         self._resource_group = "ext-edav-cfa-prd"
-
-        self._azure_client = ContainerInstanceManagementClient(
-            credential=credential,
-            subscription_id=self._subscription_id,
-        )
 
         if identity_name:
             self._identity = self._load_identity_by_name(credential, identity_name)
@@ -266,7 +282,8 @@ class AzureContainerInstanceStepHandler(StepHandler):
         client = ManagedServiceIdentityClient(
             credential,
             self._subscription_id,
-        )
+            logging_enable=True,
+        )      
 
         # TODO: MPW -> add query filter here if possible
         identities = list(
@@ -416,6 +433,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
             resource_group_name=self._resource_group,
             container_group_name=container_group_name,
             container_group=container_group,
+            logging_enable=True
         )
 
         yield DagsterEvent.step_worker_starting(
