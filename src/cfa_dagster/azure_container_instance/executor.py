@@ -21,7 +21,7 @@ from azure.mgmt.containerinstance.models import (
 )
 from azure.mgmt.msi import ManagedServiceIdentityClient
 from azure.mgmt.subscription import SubscriptionClient
-from dagster import Field, Float, Int, StringSource, executor
+from dagster import Field, Float, Int, String, executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
@@ -82,7 +82,7 @@ if TYPE_CHECKING:
                 description="Maximum number of ACI step containers running concurrently.",
             ),
             "identity_name": Field(
-                StringSource,
+                String,
                 is_required=True,
                 description=(
                     "Name of the user-assigned managed identity "
@@ -391,6 +391,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
         self,
         step_handler_context,
     ):
+        execute_step_args = step_handler_context.execute_step_args
         container = Container(
             name=self._get_container_group_id(step_handler_context),
             image=self._get_image(step_handler_context),
@@ -399,6 +400,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
                     memory_in_gb=self._memory, cpu=self._cpu
                 )
             ),
+            command = execute_step_args.get_command_args()
         )
 
         container_group_params = ContainerGroup(
