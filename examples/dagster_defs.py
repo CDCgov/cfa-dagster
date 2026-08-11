@@ -3,7 +3,7 @@
 # /// script
 # requires-python = ">=3.13,<3.14"
 # dependencies = [
-#    "cfa-dagster[dev] @ git+https://github.com/cdcgov/cfa-dagster.git",
+#    "cfa-dagster[dev] @ git+https://github.com/cdcgov/cfa-dagster.git@dev-initialize_aci_executor",
 # ]
 # ///
 
@@ -132,15 +132,7 @@ azure_container_instance_config = ExecutionConfig(
             "image": image,
             # set env vars here
             "env_vars": [],
-            "container_kwargs": {
-                # set the working directory to match your Dockerfile
-                # required for Azure Container Instance
-                "working_dir": workdir,
-                # mount config if your existing Batch pool already has Blob mounts
-                # "volumes": [
-                #     "nssp-etl:nssp-etl",
-                # ]
-            },
+            "identity_name": "dagster-daemon-mi",
         },
     ),
 )
@@ -282,6 +274,7 @@ defs = dg.Definitions(
             docker_config,
             azure_caj_config,
             azure_batch_config,
+            azure_container_instance_config,
         ],
     ),
 )
