@@ -347,7 +347,11 @@ class AzureContainerInstanceStepHandler(StepHandler):
         step_key = self._get_step_key(step_handler_context)
         dagster_user = require_dagster_user()
 
-        readable_name = f"{dagster_user}-{step_key}"
+        readable_name = f"{dagster_user}-{step_key}".lower()
+        readable_name = "".join(
+            char if char.isalnum() else "-"
+            for char in readable_name
+        ).strip("-")
 
         # Create unique hash from unique run_id / step_key (take only first 10 of hash)
         unique_value = f"{run.run_id}:{step_key}"
