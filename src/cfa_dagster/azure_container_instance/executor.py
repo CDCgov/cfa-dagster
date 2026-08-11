@@ -337,54 +337,28 @@ class AzureContainerInstanceStepHandler(StepHandler):
         """
         Creates a unique container group id for Azure Container instance
 
-        The container group id is a uuidv5 generated based on the DAGSTER_USER env
+        The container group id is a hash generated based on the DAGSTER_USER, 
+        and step_key
         variable, the code location name, and the hour the run was created.
 
-        This ensures tasks are logically grouped into jobs without running into
-        the max active job limit imposed by Batch. Since the job id is scoped to
-        the run creation hour, jobs without active tasks can safely be cleaned up by a
-        background process.
+        This ensures tasks don't get the same full_id.
         """
         run = step_handler_context.dagster_run
-
-        if run.remote_job_origin is not None:
-            location_name = run.remote_job_origin.repository_origin.code_location_origin.location_name
-        else:
-            location_name = run.job_name
+        step_key = self._get_step_key(step_handler_context)
         dagster_user = require_dagster_user()
 
-        run_creation_hour = None
-        try:
-            run_creation_hour = get_run_timestamp(run).strftime("%Y-%m-%dT%H")
-        except (ValueError, KeyError):
-            log.debug(
-                "Failed to capture run_creation_hour from tags, falling back to run_record"
-            )
-        if not run_creation_hour:
-            run_record = step_handler_context.instance.get_run_record_by_id(
-                run.run_id
-            )
-            if not run_record:
-                raise RuntimeError(f"No run record for run id: {run.run_id}")
-            run_creation_hour = run_record.create_timestamp.strftime(
-                "%Y-%m-%dT%H"
-            )
+        readable_name = f"{dagster_user}-{step_key}"
 
-        log.debug(f"dagster_user: '{dagster_user}'")
-        log.debug(f"location_name: '{location_name}'")
-        log.debug(f"run_creation_hour: '{run_creation_hour}'")
-        base_id = uuid.uuid5(
-            uuid.NAMESPACE_DNS,
-            ":".join(
-                [
-                    dagster_user,
-                    location_name,
-                    run_creation_hour,
-                ]
-            ),
-        )
+        # Create unique hash from unique run_id / step_key (take only first 10 of hash)
+        unique_value = f"{run.run_id}:{step_key}"
+        unique_hash = hashlib.sha1(unique_value.encode()).hexdigest()[:10]
 
-        return f"dagster-{base_id}"
+        full_id = f"dagster-aci-{readable_name}-{unique_hash}"
+        full_id = self._clamp_with_hash(full_id, max_len=63)
+
+        log.debug("ACI container group ID: %r", full_id)
+
+        return full_id
 
     # build the object but don't hit Azure API yet -> return container object
     def _build_container_group(
