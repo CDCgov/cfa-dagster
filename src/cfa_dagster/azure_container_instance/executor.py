@@ -189,13 +189,10 @@ class AzureContainerInstanceStepHandler(StepHandler):
     ):
         super().__init__()
 
-        credential = DefaultAzureCredential(logging_enable=True)
+        credential = DefaultAzureCredential()
 
         self._subscription_id = (
-            SubscriptionClient(
-                credential,
-                logging_enable=True,
-            )
+            SubscriptionClient(credential)
             .subscriptions.list()
             .next()
             .subscription_id
@@ -204,7 +201,6 @@ class AzureContainerInstanceStepHandler(StepHandler):
         self._azure_client = ContainerInstanceManagementClient(
             credential=credential,
             subscription_id=self._subscription_id,
-            logging_enable=True,
         )
         self._identity = None
         self._container_group_identity = None
