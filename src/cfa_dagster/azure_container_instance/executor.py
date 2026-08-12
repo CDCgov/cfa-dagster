@@ -415,13 +415,27 @@ class AzureContainerInstanceStepHandler(StepHandler):
             environment_variables=aci_env_vars,
         )
 
+        vnet_name = "EXT_EDAV_CFA_VNET_PRD"
+        subnet_name = "EXT_EDAV_CFA_CONTAINER_INSTANCE_PRD"
+        subnet_id = (
+            f"/subscriptions/{self._subscription_id}"
+            f"/resourceGroups/ext-edav-cfa-network-prd"
+            f"/providers/Microsoft.Network/virtualNetworks/{vnet_name}"
+            f"/subnets/{subnet_name}"
+        )
+
         container_group_params = ContainerGroup(
             location=self._location,
             containers=[container],
             os_type=OperatingSystemTypes.LINUX,
             identity=self._container_group_identity,
             image_registry_credentials=self._image_registry_credentials,
-            restart_policy="Never"
+            restart_policy="Never",
+            subnet_ids=[
+            ContainerGroupSubnetId(
+                id=subnet_id,
+                )
+            ],
         )
 
         return container_group_params
