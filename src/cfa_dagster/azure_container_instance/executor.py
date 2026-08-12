@@ -13,6 +13,8 @@ from azure.mgmt.containerinstance.models import (
     Container,
     ContainerGroup,
     ContainerGroupIdentity,
+    ContainerGroupSubnetId,
+    EnvironmentVariable,
     UserAssignedIdentities,
     ImageRegistryCredential,
     OperatingSystemTypes,
@@ -35,6 +37,7 @@ from dagster._core.executor.step_delegating.step_handler.base import (
     StepHandler,
     StepHandlerContext,
 )
+from dagster._core.utils import parse_env_var
 from dagster._utils.merger import merge_dicts
 from dagster_docker import docker_executor as base_docker_executor
 from dagster_docker.container_context import DockerContainerContext
@@ -60,12 +63,6 @@ if not azure_logger.handlers:
 
 if TYPE_CHECKING:
     from dagster._core.origin import JobPythonOrigin
-
-# Notes:
-# We can ACI standby pools for faster startup times but for the first iteration I will not
-# One dagsters step = One Container Group
-# Dagster run ID + step key + retry number → ACI container-group name
-# Turn ACI restart policy to Never b/c dagster handles this already?
 
 
 @executor(
@@ -380,7 +377,32 @@ class AzureContainerInstanceStepHandler(StepHandler):
         self,
         step_handler_context,
     ):
+        container_context = self._get_docker_container_context(
+            step_handler_context
+        )
+
+        env_vars = dict(
+            parse_env_var(env_var)
+            for env_var in container_context.env_vars
+        )
+
+        env_vars["DAGSTER_RUN_JOB_NAME"] = (
+            step_handler_context.dagster_run.job_name
+        )
+        env_vars["DAGSTER_RUN_STEP_KEY"] = (
+            self._get_step_key(step_handler_context)
+        )
+
+        aci_env_vars = [
+            EnvironmentVariable(name=name, value=value)
+            for name, value in env_vars.items()
+        ]
+
         execute_step_args = step_handler_context.execute_step_args
+
+        command = execute_step_args.get_command_args()
+        log.warning("ACI COMMAND: %r", command)
+
         container = Container(
             name=self._get_container_group_id(step_handler_context),
             image=self._get_image(step_handler_context),
@@ -389,7 +411,8 @@ class AzureContainerInstanceStepHandler(StepHandler):
                     memory_in_gb=self._memory, cpu=self._cpu
                 )
             ),
-            command = execute_step_args.get_command_args()
+            command = execute_step_args.get_command_args(),
+            environment_variables=aci_env_vars,
         )
 
         container_group_params = ContainerGroup(
