@@ -17,6 +17,103 @@ def meaning_of_life():
   the_meaning = calculate_meaning_of_life()
   return the_meaning  # 42
 ```
+## Asset Jobs
+
+[Asset jobs](https://docs.dagster.io/guides/build/jobs/asset-jobs) execute and monitor specified assets. In the example of baking cookies, a job could be made to add the chocolate chips to the cookie dough once you have successfully made the cookie dough.
+
+## Definitions
+
+Each workflow (containing assets, resources or schedules) must be part of a [Definitions](https://docs.dagster.io/api/dagster/definitions#definitions) object. For CFA specifically, the definitions object is located within the [dagster_defs.py](https://github.com/CDCgov/cfa-dagster/blob/main/examples/dagster_defs.py) file. The `dagster_defs.py` file contains the Dagster-specific configurations, assets, jobs, and/or schedules in addition to the Definitions object.
+
+`cfa-dagster` exports a helper function to collect all the Dagster definitions in a file e.g.:
+
+```python
+from cfa_dagster import collect_definitions
+
+collected_defs = collect_definitions(globals())
+
+# Create Dagster definitions
+defs = dg.Definitions(
+    **collected_defs, # assets, asset checks, jobs, schedules, sensors
+    ... # other configuration like resources, executor, loggers, metadata, etc.
+)
+```
+
+## Dynamic Graph Assets
+
+[Dynamic graph assets](../api.md#cfa_dagster.dynamic_graph_asset.dynamic_graph_asset) combine two existing Dagster concepts, [graph assets](https://docs.dagster.io/guides/build/assets/graph-backed-assets#defining-graph-backed-assets) and [dynamic outputs](https://docs.dagster.io/guides/build/ops/dynamic-graphs#a-dynamic-job), into one decorator to provide easy, runtime-configurable parallelism. Unlike normal Dagster partitions, dynamic graph assets allows you to parallelize logic against more than two dimensions.
+
+```python
+
+class ParallelAssetConfig(dg.ConfigurableResource):
+    ingredient: GraphDimension[str] = GraphDimension(["sugar", "milk", "flour"])
+
+
+@dynamic_graph_asset(
+    description="A parallel asset that runs R code for different diseases",
+)
+def parallel_asset(
+    context: dg.OpExecutionContext,
+    parallel_asset_config: ParallelAssetConfig,
+):
+    ingredient = parallel_asset_config.ingredient.current_value
+    context.log.info(f"Running for ingredient: {ingredient}")
+
+defs = dg.Definitions(
+    **collected_defs,
+    resources={
+        "parallel_asset_config": ParallelAssetConfig(),
+    },
+)
+```
+
+## Executors
+
+[Executors](https://docs.dagster.io/guides/operate/run-executors) manage how each step or asset in a job is executed. In the cookie example, this would be the head baker deciding who should be performing what tasks and making sure those tasks get done in the proper order. The specific head baker in the bakery that day could be the head baker who likes to have multiple bakers to assemble the cookie dough at the same time or the head baker who wants one baker to make the dough. 
+
+Some of the most common executors used in CFA are:
+- `in_process_executor` or `multiprocess_executor` for running workflow through Dagster locally.
+- `docker_executor` for running workflow using Docker containers.
+- `azure_batch_executor` or `azure_container_app_job_executor` for running workflow through Azure.
+
+## Ops
+
+[Ops](https://docs.dagster.io/guides/build/ops) are single units of work in the pipeline. In the cookie example, an op could be getting the mixing bowl out, getting the flour from the pantry, or picking up the whisk before mixing the ingredients together. Dagster treats each op as a managed step, which allows the user to track whether the step succeeded or failed, record logs and metadata, retry failed steps, and visualize the pipeline in the Dagster UI.
+
+Use an `op` over an asset for tasks that don't produce tracked artifacts e.g.:
+
+```python
+@dg.op
+def build_image():
+  subprocess.run(["docker", "build", "-t", "my_image", "."], check=True)
+
+@dg.job()
+def build_image_job():
+  build_image()
+```
+
+## Partitions
+
+[Partitions](https://docs.dagster.io/guides/build/partitions-and-backfills/partitioning-ops#non-partitioned-job-with-date-config) divide the workflow into smaller pieces, which could speed up computation by using parallel processing. Users can test on an individual partition before trying to run larger ranges of data. In the cookie example, this could be scaling the recipe back to make 8 cookies instead of making the cookie dough for 80 cookies.
+
+Since partitions only allow you to run a workflow in parallel against two dimensions, you generally want to use a dynamic graph asset for parallelism instead. Time-based partitions are used most frequently to track asset outputs as they differ on a daily basis.
+
+```python
+# create a daily partition
+tz = "America/New_York"
+daily_partitions_def = dg.DailyPartitionsDefinition(
+    start_date=dt.datetime.now(ZoneInfo(tz)) - dt.timedelta(days=1),
+    end_offset=1,
+    timezone=tz,
+)
+
+@dg.asset(partitions_def=daily_partitions_def)
+def daily_reports(context: dg.AssetExecutionContext):
+  # daily partitions are represented as YYYY-mm-dd
+  report_date = context.partition_key
+  context.log.info(f"Generating a report for date: {report_date}")
+
+```
 
 ## Resources
 
@@ -69,44 +166,6 @@ defs = dg.Definitions(
     When going to production, be mindful that sensors run in a constrained computing environment. See [Going to Production](./production.md#resource-constraints) for more details
 <!-- prettier-ignore-end -->
 
-## Asset Jobs
-
-[Asset jobs](https://docs.dagster.io/guides/build/jobs/asset-jobs) execute and monitor specified assets. In the example of baking cookies, a job could be made to add the chocolate chips to the cookie dough once you have successfully made the cookie dough.
-
-## Definitions
-
-Each workflow (containing assets, resources or schedules) must be part of a [Definitions](https://docs.dagster.io/api/dagster/definitions#definitions) object. For CFA specifically, the definitions object is located within the [dagster_defs.py](https://github.com/CDCgov/cfa-dagster/blob/main/examples/dagster_defs.py) file. The `dagster_defs.py` file contains the Dagster-specific configurations, assets, jobs, and/or schedules in addition to the Definitions object.
-
-`cfa-dagster` exports a helper function to collect all the Dagster definitions in a file e.g.:
-
-```python
-from cfa_dagster import collect_definitions
-
-collected_defs = collect_definitions(globals())
-
-# Create Dagster definitions
-defs = dg.Definitions(
-    **collected_defs, # assets, asset checks, jobs, schedules, sensors
-    ... # other configuration like resources, executor, loggers, metadata, etc.
-)
-```
-
-## Ops
-
-[Ops](https://docs.dagster.io/guides/build/ops) are single units of work in the pipeline. In the cookie example, an op could be getting the mixing bowl out, getting the flour from the pantry, or picking up the whisk before mixing the ingredients together. Dagster treats each op as a managed step, which allows the user to track whether the step succeeded or failed, record logs and metadata, retry failed steps, and visualize the pipeline in the Dagster UI.
-
-Use an `op` over an asset for tasks that don't produce tracked artifacts e.g.:
-
-```python
-@dg.op
-def build_image():
-  subprocess.run(["docker", "build", "-t", "my_image", "."], check=True)
-
-@dg.job()
-def build_image_job():
-  build_image()
-```
-
 ## Sensors
 
 [Sensors](https://docs.dagster.io/guides/automate/sensors) check for events at regular time intervals, and if triggered, will start a job or other action. Sensors allow the workflow to run automatically without someone needing to manually start the pipeline. In the baking cookies example, this would be like having an assistant take the cookies out of the oven when the timer goes off.
@@ -134,54 +193,3 @@ def new_file_sensor():
 !!! warning
     When going to production, be mindful that sensors run in a constrained computing environment. See [Going to Production](./production.md#resource-constraints) for more details
 <!-- prettier-ignore-end -->
-
-## Partitions
-
-[Partitions](https://docs.dagster.io/guides/build/partitions-and-backfills/partitioning-ops#non-partitioned-job-with-date-config) divide the workflow into smaller pieces, which could speed up computation by using parallel processing. Users can test on an individual partition before trying to run larger ranges of data. In the cookie example, this could be scaling the recipe back to make 8 cookies instead of making the cookie dough for 80 cookies.
-
-Since partitions only allow you to run a workflow in parallel against two dimensions, you generally want to use a dynamic graph asset for parallelism instead. Time-based partitions are used most frequently to track asset outputs as they differ on a daily basis.
-
-```python
-# create a daily partition
-tz = "America/New_York"
-daily_partitions_def = dg.DailyPartitionsDefinition(
-    start_date=dt.datetime.now(ZoneInfo(tz)) - dt.timedelta(days=1),
-    end_offset=1,
-    timezone=tz,
-)
-
-@dg.asset(partitions_def=daily_partitions_def)
-def daily_reports(context: dg.AssetExecutionContext):
-  # daily partitions are represented as YYYY-mm-dd
-  report_date = context.partition_key
-  context.log.info(f"Generating a report for date: {report_date}")
-
-```
-
-## Dynamic Graph Assets
-
-[Dynamic graph assets](../api.md#cfa_dagster.dynamic_graph_asset.dynamic_graph_asset) combine two existing Dagster concepts, [graph assets](https://docs.dagster.io/guides/build/assets/graph-backed-assets#defining-graph-backed-assets) and [dynamic outputs](https://docs.dagster.io/guides/build/ops/dynamic-graphs#a-dynamic-job), into one decorator to provide easy, runtime-configurable parallelism. Unlike normal Dagster partitions, dynamic graph assets allows you to parallelize logic against more than two dimensions.
-
-```python
-
-class ParallelAssetConfig(dg.ConfigurableResource):
-    ingredient: GraphDimension[str] = GraphDimension(["sugar", "milk", "flour"])
-
-
-@dynamic_graph_asset(
-    description="A parallel asset that runs R code for different diseases",
-)
-def parallel_asset(
-    context: dg.OpExecutionContext,
-    parallel_asset_config: ParallelAssetConfig,
-):
-    ingredient = parallel_asset_config.ingredient.current_value
-    context.log.info(f"Running for ingredient: {ingredient}")
-
-defs = dg.Definitions(
-    **collected_defs,
-    resources={
-        "parallel_asset_config": ParallelAssetConfig(),
-    },
-)
-```
