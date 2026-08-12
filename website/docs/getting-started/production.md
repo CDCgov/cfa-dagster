@@ -2,7 +2,7 @@
 
 For cfa-dagster, going to production means pushing your Dagster workflow as an isolated code location to the central Dagster server hosted in the Azure EXT environment. You can access the server from your VAP at <https://dagster.apps.edav.ext.cdc.gov>.
 
-Since each user's local machine can act as a Dagster server, the primary reasons for going to production are:
+Since each user's local machine can act as a Dagster server, referred to as a development server, the primary reasons for going to production are:
 
 - scheduling e.g. run daily at 9am
 - event-trigger e.g. run when nssp gold data is available
