@@ -157,6 +157,9 @@ defs = dg.Definitions(
 
 ```
 
+## Run Launcher
+A [run launcher](https://docs.dagster.io/deployment/execution/run-launchers) allocates the necessary computational resources to carry out a run execution and then starts the execution. In the cookie example, this would be like clearing off the counters, getting all of your necessary components (mixing bowl, whisk, ingredients, etc.) out on the counter before you start making the cookie dough. Then, once you have everything set up, you begin making cookies. In `cfa-dagster`, the run launcher is a [`DynamicRunLauncher`](https://github.com/CDCgov/cfa-dagster/blob/main/src/cfa_dagster/execution/run_launcher.py), which instantiates a concrete launcher at runtime (`DefaultRunLauncher`, `DockerRunLauncher`, or `AzureContainerAppJobRunLauncher`) based on configuration found on the run, run tags, or repository metadata, then delegates launch/resume/health/terminate operations to that concrete launcher.
+
 ## Schedules
 
 [Schedules](https://docs.dagster.io/guides/automate/schedules) define a fixed time interval to run your pipeline. In the example of the cookies, this could be planning to bake the cookies at 1 pm.
