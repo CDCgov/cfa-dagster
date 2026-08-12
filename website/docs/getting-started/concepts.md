@@ -17,6 +17,7 @@ def meaning_of_life():
   the_meaning = calculate_meaning_of_life()
   return the_meaning  # 42
 ```
+
 ## Asset Jobs
 
 [Asset jobs](https://docs.dagster.io/guides/build/jobs/asset-jobs) execute and monitor specified assets. In the example of baking cookies, a job could be made to add the chocolate chips to the cookie dough once you have successfully made the cookie dough.
@@ -69,9 +70,10 @@ defs = dg.Definitions(
 
 ## Executors
 
-[Executors](https://docs.dagster.io/guides/operate/run-executors) manage how each step or asset in a job is executed. In the cookie example, this would be the head baker deciding who should be performing what tasks and making sure those tasks get done in the proper order. The specific head baker in the bakery that day could be the head baker who likes to have multiple bakers to assemble the cookie dough at the same time or the head baker who wants one baker to make the dough. 
+[Executors](https://docs.dagster.io/guides/operate/run-executors) manage how each step or asset in a job is executed. In the cookie example, this would be the head baker deciding who should be performing what tasks and making sure those tasks get done in the proper order. The specific head baker in the bakery that day could be the head baker who likes to have multiple bakers to assemble the cookie dough at the same time or the head baker who wants one baker to make the dough.
 
 Some of the most common executors used in CFA are:
+
 - `in_process_executor` or `multiprocess_executor` for running workflow through Dagster locally.
 - `docker_executor` for running workflow using Docker containers.
 - `azure_batch_executor` or `azure_container_app_job_executor` for running workflow through Azure.
@@ -158,6 +160,7 @@ defs = dg.Definitions(
 ```
 
 ## Run Launcher
+
 A [run launcher](https://docs.dagster.io/deployment/execution/run-launchers) allocates the necessary computational resources to carry out a run execution and then starts the execution. In the cookie example, this would be like clearing off the counters, getting all of your necessary components (mixing bowl, whisk, ingredients, etc.) out on the counter before you start making the cookie dough. Then, once you have everything set up, you begin making cookies. In `cfa-dagster`, the run launcher is a [`DynamicRunLauncher`](https://github.com/CDCgov/cfa-dagster/blob/main/src/cfa_dagster/execution/run_launcher.py), which instantiates a concrete launcher at runtime (`DefaultRunLauncher`, `DockerRunLauncher`, or `AzureContainerAppJobRunLauncher`) based on configuration found on the run, run tags, or repository metadata, then delegates launch/resume/health/terminate operations to that concrete launcher.
 
 ## Schedules

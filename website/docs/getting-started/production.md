@@ -9,16 +9,20 @@ Since each user's local machine can act as a Dagster server, referred to as a de
 - workflows too important to live on someone's personal computer
 
 ## Testing requirements on development server
+
 Follow these steps if you are testing your workflow on your local machine (VAP):
+
 - If using an `in_process_executor` or `multiprocess_executor`, save your file.
 - If using a `docker_executor`, save your file and build image.
 - If using an `azure_batch_executor` or `azure_container_app_jobs_executor`, save file, build image and push image.
 
 ## Testing requirements on production server
-If using an `azure_batch_executor` or `azure_container_app_jobs_executor`, 
+
+If using an `azure_batch_executor` or `azure_container_app_jobs_executor`,
+
 1. Save your file
 2. Build the image
-3. Push image 
+3. Push image
 4. Update code location (See [Using a script](#using-a-script) and [Using the central Dagster server](#using-the-central-dagster-server))
 
 ## Using a script
