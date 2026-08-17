@@ -22,6 +22,7 @@ from dagster._core.remote_representation.external import RemoteRepository
 from dagster._serdes import ConfigurableClass
 from dagster._serdes.config_class import ConfigurableClassData
 from dagster_docker import DockerRunLauncher
+from dagster_k8s import K8sRunLauncher
 from typing_extensions import Self
 
 from ..azure_container_app_job import AzureContainerAppJobRunLauncher
@@ -126,6 +127,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
                 for c in [
                     DefaultRunLauncher,
                     DockerRunLauncher,
+                    K8sRunLauncher,
                     AzureContainerAppJobRunLauncher,
                 ]
             ]
@@ -162,7 +164,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
             class_name=launcher_class_name,
             config_yaml=yaml.dump(launcher_config),
         )
-        run_launcher = launcher_class(inst_data, **launcher_config)
+        run_launcher = launcher_class(inst_data=inst_data, **launcher_config)
 
         run_launcher.register_instance(self._instance)
         return run_launcher

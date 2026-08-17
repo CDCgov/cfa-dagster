@@ -9,6 +9,7 @@ from dagster import (
     Int,
     MetadataValue,
     Noneable,
+    Permissive,
     Selector,
     Shape,
     in_process_executor,
@@ -18,6 +19,7 @@ from dagster._config import process_config
 from dagster._utils.merger import merge_dicts
 from dagster_docker import docker_executor
 from dagster_docker.utils import DOCKER_CONFIG_SCHEMA
+from dagster_k8s import k8s_job_executor
 
 from ..azure_batch.executor import azure_batch_executor
 from ..azure_container_app_job.executor import azure_container_app_job_executor
@@ -319,6 +321,7 @@ def get_dynamic_executor_config_schema(
             "AzureContainerAppJobRunLauncher": (
                 azure_container_app_job_executor.config_schema.config_type.fields
             ),
+            "K8sRunLauncher": Permissive(),  # TODO: provide real config schema
             **(
                 {"DockerRunLauncher": DOCKER_CONFIG_SCHEMA}
                 if use_full_schema
@@ -364,6 +367,7 @@ def get_dynamic_executor_config_schema(
             "multiprocess_executor": multiprocess_executor_schema,
             "azure_batch_executor": azure_batch_executor.config_schema.config_type.fields,
             "azure_container_app_job_executor": azure_container_app_job_executor.config_schema.config_type.fields,
+            "k8s_job_executor": k8s_job_executor.config_schema.config_type.fields,
             **(
                 {"docker_executor": docker_executor_schema}
                 if use_full_schema
