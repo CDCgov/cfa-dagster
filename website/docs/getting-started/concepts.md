@@ -76,7 +76,72 @@ Some of the most common executors used in CFA are:
 
 - `in_process_executor` or `multiprocess_executor` for running workflow through Dagster locally.
 - `docker_executor` for running workflow using Docker containers.
-- `azure_batch_executor` or `azure_container_app_job_executor` for running workflow through Azure.
+- [`azure_batch_executor`](../api.md#cfa_dagster.azure_batch_executor) or [`azure_container_app_job_executor`](../api.md#cfa_dagster.azure_container_app_job_executor) for running workflow through Azure.
+
+You can create an executor via [`SelectorConfig`](../api.md#cfa_dagster.SelectorConfig):
+
+```python
+docker_execution_config = ExecutionConfig(
+    executor=SelectorConfig(
+        class_name=docker_executor.__name__,
+        config={
+            "image": image,
+            "container_kwargs": {
+                "volumes": [
+                    # bind the ~/.azure folder for optional cli login
+                    f"/home/{user}/.azure:/root/.azure",
+                    # bind current file so we don't have to rebuild
+                    # the container image for workflow changes
+                    f"{__file__}:{workdir}/{os.path.basename(__file__)}",
+                ]
+            },
+        },
+    )
+)
+```
+
+And configure it for all your assets via `Definitions`:
+
+```python
+defs = dg.Definitions(
+    **collected_defs,
+    executor=dynamic_executor(
+        # specify the default executor
+        default_config=docker_execution_config,
+        # alternate configs show you default values in the Launchpad on hover
+        alternate_configs=[
+            default_execution_config,
+            docker_execution_config,
+            azure_caj_execution_config,
+            azure_batch_execution_config,
+        ],
+    ),
+)
+
+```
+
+Directly on a job:
+
+```python
+docker_job = dg.define_asset_job(
+    name="docker_job",
+    selection=[some_asset],
+    config=docker_execution_config.to_run_config(),
+)
+
+```
+
+Or via tags on an `asset`, `RunRequest`, `@schedule`, or `@sensor`:
+
+```python
+@dg.asset(op_tags=docker_execution_config.to_run_tags())
+def always_runs_on_docker():
+    print("Hello from docker")
+
+@dg.schedule(target=[some_asset])
+    return dg.RunRequest(tags=docker_execution_config.to_run_tags())
+
+```
 
 ## Ops
 
@@ -159,9 +224,11 @@ defs = dg.Definitions(
 
 ```
 
-## Run Launcher
+## Run Launchers
 
-A [run launcher](https://docs.dagster.io/deployment/execution/run-launchers) allocates the necessary computational resources to carry out a run execution and then starts the execution. In the cookie example, this would be like clearing off the counters, getting all of your necessary components (mixing bowl, whisk, ingredients, etc.) out on the counter before you start making the cookie dough. Then, once you have everything set up, you begin making cookies. In `cfa-dagster`, the run launcher is a [`DynamicRunLauncher`](https://github.com/CDCgov/cfa-dagster/blob/main/src/cfa_dagster/execution/run_launcher.py), which instantiates a concrete launcher at runtime (`DefaultRunLauncher`, `DockerRunLauncher`, or `AzureContainerAppJobRunLauncher`) based on configuration found on the run, run tags, or repository metadata, then delegates launch/resume/health/terminate operations to that concrete launcher.
+A [run launcher](https://docs.dagster.io/deployment/execution/run-launchers) allocates the necessary computational resources to carry out a run execution and then starts the execution. In the cookie example, this would be like clearing off the counters, getting all of your necessary components (mixing bowl, whisk, ingredients, etc.) out on the counter before you start making the cookie dough. Then, once you have everything set up, you begin making cookies. In `cfa-dagster`, the run launcher is a [`DynamicRunLauncher`](../api.md#cfa_dagster.DynamicRunLauncher), which instantiates a concrete launcher at runtime (`DefaultRunLauncher`, `DockerRunLauncher`, or [`AzureContainerAppJobLauncher`](../api.md#cfa_dagster.AzureContainerAppJobRunLauncher)) based on configuration found on the run, run tags, or repository metadata, then delegates launch/resume/health/terminate operations to that concrete launcher.
+
+In most cases, you will not need to configure a run launcher and instead use an [executor](#executors) to configure your run environment. The `DynamicRunLauncher` will automatically choose the `DefaultRunLauncher` when running locally and the `AzureContainerAppJobRunLauncher` when running in production.
 
 ## Schedules
 
