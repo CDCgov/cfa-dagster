@@ -25,7 +25,7 @@ from dagster._core.executor.step_delegating import (
 from dagster_docker import docker_executor
 
 # ruff: noqa: F401
-from dagster_k8s import k8s_job_executor
+from ..k8s.executor import k8s_job_executor
 
 from ..azure_batch import azure_batch_executor
 from ..azure_container_app_job import azure_container_app_job_executor

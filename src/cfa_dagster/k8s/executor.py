@@ -45,6 +45,9 @@ from dagster_k8s.job import (
 )
 from dagster_k8s.launcher import K8sRunLauncher
 from dagster_k8s.utils import get_deployment_id_label
+import logging
+
+log = logging.getLogger(__name__)
 
 _K8S_EXECUTOR_CONFIG_SCHEMA = merge_dicts(
     DagsterK8sJobConfig.config_type_job(),
@@ -258,7 +261,8 @@ class K8sStepHandler(StepHandler):
 
         context = K8sContainerContext.create_for_run(
             step_handler_context.dagster_run,
-            cast("K8sRunLauncher", step_handler_context.instance.run_launcher),
+            run_launcher=None,
+            # cast("K8sRunLauncher", step_handler_context.instance.run_launcher),
             include_run_tags=False,  # For now don't include job-level dagster-k8s/config tags in step pods
         )
         context = context.merge(self._executor_container_context)
@@ -266,15 +270,20 @@ class K8sStepHandler(StepHandler):
         user_defined_k8s_config = get_user_defined_k8s_config(
             step_handler_context.step_tags[step_key]
         )
+        log.debug(f"user_defined_k8s_config: {user_defined_k8s_config}")
         step_context = step_handler_context.get_step_context(step_key)
         op_name = step_context.step.op_name
         per_op_override = UserDefinedDagsterK8sConfig.from_dict(
             self._per_step_k8s_config.get(op_name, {})
         )
+        log.debug(f"per_op_override: {per_op_override}")
 
-        return context.merge(K8sContainerContext(run_k8s_config=user_defined_k8s_config)).merge(
+        final_config = context.merge(K8sContainerContext(run_k8s_config=user_defined_k8s_config)).merge(
             K8sContainerContext(run_k8s_config=per_op_override)
         )
+        log.debug(f"final_config: {final_config}")
+
+        return final_config
 
     def _get_k8s_step_job_name(self, step_handler_context: StepHandlerContext):
         step_key = self._get_step_key(step_handler_context)
@@ -318,8 +327,14 @@ class K8sStepHandler(StepHandler):
 
         container_context = self._get_container_context(step_handler_context)
 
-        job_config = container_context.get_k8s_job_config(
-            self._executor_image, step_handler_context.instance.run_launcher
+        # job_config = container_context.get_k8s_job_config(
+        #     self._executor_image, step_handler_context.instance.run_launcher
+        # )
+        job_config = DagsterK8sJobConfig(
+            job_image=self._executor_image,
+            dagster_home=os.environ.get("DAGSTER_HOME"),
+            instance_config_map="dagster-instance",
+            postgres_password_secret=None,
         )
 
         args = step_handler_context.execute_step_args.get_command_args(
