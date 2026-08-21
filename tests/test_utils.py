@@ -8,7 +8,12 @@ from dagster import MetadataValue
 from dagster_shared.check.functions import CheckError
 
 from cfa_dagster.execution.utils import ExecutionConfig, SelectorConfig
-from cfa_dagster.utils import _run_cli
+from cfa_dagster.utils import (
+    DEFAULT_DEFS_FILE,
+    _run_cli,
+    get_defs_target,
+    resolve_defs_file,
+)
 
 
 def test_selector_config_from_run_config():
@@ -373,3 +378,319 @@ def test_run_cli_click_abort():
         with pytest.raises(SystemExit) as excinfo:
             _run_cli(mock_cli, "TEST", argv=["prog", "subcommand"])
         assert excinfo.value.code == 0
+
+
+FLAT_LAYOUT_TOML = """
+[tool.dg]
+directory_type = "project"
+
+[tool.dg.project]
+root_module = "dagster_defs"
+defs_module = "dagster_defs"
+code_location_target_module = "dagster_defs"
+"""
+
+DOTTED_MODULE_TOML = """
+[tool.dg]
+directory_type = "project"
+
+[tool.dg.project]
+root_module = "cfa_epinow2_pipeline"
+defs_module = "cfa_epinow2_pipeline.dg_defs"
+code_location_target_module = "cfa_epinow2_pipeline.dg_defs"
+"""
+
+DEFAULT_DEFS_TOML = """
+[tool.dg]
+directory_type = "project"
+
+[tool.dg.project]
+root_module = "my_project"
+"""
+
+
+def make_project_dir(
+    tmp_path,
+    dg_toml="",
+    defs_relpaths=(),
+):
+    project_dir = tmp_path / "project"
+    project_dir.mkdir(exist_ok=True)
+    (project_dir / "pyproject.toml").write_text(dg_toml)
+    for relpath in defs_relpaths:
+        defs_file = project_dir / relpath
+        defs_file.parent.mkdir(parents=True, exist_ok=True)
+        defs_file.write_text("defs = None\n")
+    return project_dir
+
+
+def test_get_defs_target_flat_layout(tmp_path):
+    project_dir = make_project_dir(
+        tmp_path, FLAT_LAYOUT_TOML, ["dagster_defs.py"]
+    )
+
+    defs_file = get_defs_target(project_dir)
+
+    assert defs_file == str(project_dir / "dagster_defs.py")
+
+
+def test_get_defs_target_package_layout_dotted_module(tmp_path):
+    project_dir = make_project_dir(
+        tmp_path,
+        DOTTED_MODULE_TOML,
+        ["cfa_epinow2_pipeline/dg_defs.py"],
+    )
+
+    defs_file = get_defs_target(project_dir)
+
+    expected = project_dir / "cfa_epinow2_pipeline" / "dg_defs.py"
+    assert defs_file == str(expected)
+
+
+def test_get_defs_target_src_layout_dotted_module(tmp_path):
+    project_dir = make_project_dir(
+        tmp_path,
+        DOTTED_MODULE_TOML,
+        ["src/cfa_epinow2_pipeline/dg_defs.py"],
+    )
+
+    defs_file = get_defs_target(project_dir)
+
+    expected = project_dir / "src" / "cfa_epinow2_pipeline" / "dg_defs.py"
+    assert defs_file == str(expected)
+
+
+def test_get_defs_target_prefers_flat_over_src_layout(tmp_path):
+    project_dir = make_project_dir(
+        tmp_path,
+        DOTTED_MODULE_TOML,
+        [
+            "cfa_epinow2_pipeline/dg_defs.py",
+            "src/cfa_epinow2_pipeline/dg_defs.py",
+        ],
+    )
+
+    defs_file = get_defs_target(project_dir)
+
+    expected = project_dir / "cfa_epinow2_pipeline" / "dg_defs.py"
+    assert defs_file == str(expected)
+
+
+def test_get_defs_target_raises_when_no_file_or_importable_module(tmp_path):
+    project_dir = make_project_dir(tmp_path, DOTTED_MODULE_TOML)
+
+    with pytest.raises(RuntimeError, match="cfa_epinow2_pipeline.dg_defs"):
+        get_defs_target(project_dir)
+
+
+def test_get_defs_target_default_definitions_src_layout(tmp_path):
+    project_dir = make_project_dir(
+        tmp_path, DEFAULT_DEFS_TOML, ["src/my_project/definitions.py"]
+    )
+
+    defs_file = get_defs_target(project_dir)
+
+    assert defs_file == str(
+        project_dir / "src" / "my_project" / "definitions.py"
+    )
+
+
+def test_get_defs_target_default_definitions_flat_layout(tmp_path):
+    project_dir = make_project_dir(
+        tmp_path, DEFAULT_DEFS_TOML, ["my_project/definitions.py"]
+    )
+
+    defs_file = get_defs_target(project_dir)
+
+    assert defs_file == str(project_dir / "my_project" / "definitions.py")
+
+
+def test_get_defs_target_default_definitions_raises_when_unresolvable(tmp_path):
+    project_dir = make_project_dir(tmp_path, DEFAULT_DEFS_TOML)
+
+    with pytest.raises(RuntimeError, match="my_project.definitions"):
+        get_defs_target(project_dir)
+
+
+def test_get_defs_target_explicit_defs_module_beats_default(tmp_path):
+    project_dir = make_project_dir(
+        tmp_path,
+        DEFAULT_DEFS_TOML.replace(
+            'root_module = "my_project"',
+            'root_module = "my_project"\n'
+            'defs_module = "my_project.custom_defs"',
+        ),
+        ["my_project/custom_defs.py", "my_project/definitions.py"],
+    )
+
+    defs_file = get_defs_target(project_dir)
+
+    expected = project_dir / "my_project" / "custom_defs.py"
+    assert defs_file == str(expected)
+
+
+def test_get_defs_target_no_tool_dg_metadata(tmp_path):
+    project_dir = make_project_dir(tmp_path, '[project]\nname = "x"\n')
+
+    defs_file = get_defs_target(project_dir)
+
+    assert defs_file is None
+
+
+def test_get_defs_target_missing_root_and_defs_modules(tmp_path):
+    toml = """
+[tool.dg]
+directory_type = "project"
+
+[tool.dg.project]
+code_location_target_module = "dagster_defs"
+"""
+    project_dir = make_project_dir(tmp_path, toml, ["dagster_defs.py"])
+
+    defs_file = get_defs_target(project_dir)
+
+    assert defs_file is None
+
+
+MODULE_ONLY_TOML = """
+[tool.dg]
+directory_type = "project"
+
+[tool.dg.project]
+root_module = "fake_pipeline"
+defs_module = "fake_pipeline.dg_defs"
+"""
+
+
+def test_resolve_defs_file_returns_configured_file(tmp_path):
+    project_dir = make_project_dir(
+        tmp_path, FLAT_LAYOUT_TOML, ["dagster_defs.py"]
+    )
+
+    assert resolve_defs_file(project_dir) == str(
+        project_dir / "dagster_defs.py"
+    )
+
+
+def test_resolve_defs_file_resolves_importable_module(tmp_path, monkeypatch):
+    toml = MODULE_ONLY_TOML.replace("fake_pipeline", "fake_pipeline_resolve")
+    modules_dir = tmp_path / "modules"
+    package_dir = modules_dir / "fake_pipeline_resolve"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("")
+    (package_dir / "dg_defs.py").write_text("defs = None\n")
+    monkeypatch.syspath_prepend(str(modules_dir))
+
+    project_dir = make_project_dir(tmp_path, toml)
+
+    assert resolve_defs_file(project_dir) == str(package_dir / "dg_defs.py")
+
+
+def test_get_defs_target_resolves_importable_module(tmp_path, monkeypatch):
+    toml = MODULE_ONLY_TOML.replace("fake_pipeline", "fake_pipeline_target")
+    modules_dir = tmp_path / "modules"
+    package_dir = modules_dir / "fake_pipeline_target"
+    package_dir.mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("")
+    (package_dir / "dg_defs.py").write_text("defs = None\n")
+    monkeypatch.syspath_prepend(str(modules_dir))
+
+    project_dir = make_project_dir(tmp_path, toml)
+
+    assert get_defs_target(project_dir) == str(package_dir / "dg_defs.py")
+
+
+def test_resolve_defs_file_raises_when_unresolvable(tmp_path):
+    unresolvable_toml = """
+[tool.dg]
+directory_type = "project"
+
+[tool.dg.project]
+root_module = "no_such_package_12345"
+defs_module = "no_such_package_12345.defs"
+"""
+    project_dir = make_project_dir(tmp_path, unresolvable_toml)
+
+    with pytest.raises(RuntimeError, match="no_such_package_12345"):
+        resolve_defs_file(project_dir)
+
+
+def test_resolve_defs_file_defaults_without_tool_dg_metadata(tmp_path):
+    project_dir = make_project_dir(tmp_path, '[project]\nname = "x"\n')
+
+    assert resolve_defs_file(project_dir) == DEFAULT_DEFS_FILE
+
+
+def test_run_cli_appends_resolved_defs_file_for_launch():
+    mock_cli = Mock()
+    with (
+        patch("cfa_dagster.utils.set_env_vars"),
+        patch("cfa_dagster.utils.configure_dev_db"),
+        patch(
+            "cfa_dagster.utils.resolve_defs_file",
+            return_value="/tmp/fake_defs.py",
+        ),
+    ):
+        _run_cli(
+            mock_cli,
+            "TEST",
+            argv=["prog", "launch"],
+            add_defs_file_if_missing=True,
+        )
+
+    args = mock_cli.call_args.kwargs["args"]
+    assert args[-2:] == ["-f", "/tmp/fake_defs.py"]
+
+
+def test_run_cli_appends_resolved_defs_file_for_code_server():
+    mock_cli = Mock()
+    with (
+        patch("cfa_dagster.utils.set_env_vars"),
+        patch("cfa_dagster.utils.configure_dev_db"),
+        patch(
+            "cfa_dagster.utils.resolve_defs_file",
+            return_value="/tmp/fake_defs.py",
+        ),
+    ):
+        _run_cli(mock_cli, "TEST", argv=["prog", "code-server", "start"])
+
+    args = mock_cli.call_args.kwargs["args"]
+    assert args[-2:] == ["-f", "/tmp/fake_defs.py"]
+
+
+def test_run_cli_does_not_append_defs_file_with_workspace():
+    mock_cli = Mock()
+    with (
+        patch("cfa_dagster.utils.set_env_vars"),
+        patch("cfa_dagster.utils.configure_dev_db"),
+        patch("cfa_dagster.utils.resolve_defs_file") as resolve_defs_file_mock,
+    ):
+        _run_cli(
+            mock_cli,
+            "TEST",
+            argv=["prog", "dev", "--workspace", "infra/workspace.yaml"],
+        )
+
+    args = mock_cli.call_args.kwargs["args"]
+    assert "-f" not in args
+    assert "--python-file" not in args
+    resolve_defs_file_mock.assert_not_called()
+
+
+def test_run_cli_does_not_append_defs_file_with_short_workspace():
+    mock_cli = Mock()
+    with (
+        patch("cfa_dagster.utils.set_env_vars"),
+        patch("cfa_dagster.utils.configure_dev_db"),
+        patch("cfa_dagster.utils.resolve_defs_file") as resolve_defs_file_mock,
+    ):
+        _run_cli(
+            mock_cli,
+            "TEST",
+            argv=["prog", "code-server", "start", "-w", "workspace.yaml"],
+        )
+
+    args = mock_cli.call_args.kwargs["args"]
+    assert "-f" not in args
+    assert "--python-file" not in args
+    resolve_defs_file_mock.assert_not_called()

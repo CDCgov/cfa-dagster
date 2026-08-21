@@ -95,7 +95,7 @@ def test_get_launcher_config_from_run_config():
             config = launcher._get_launcher_config(run, None)
 
     assert config.launcher.class_name == "DefaultRunLauncher"
-    assert config.executor.class_name == "in_process_executor"
+    assert config.executor is None
 
 
 def test_get_launcher_config_from_run_tags():
@@ -148,23 +148,25 @@ def test_get_launcher_config_from_metadata():
 
     # Mock the _get_location_metadata method to return execution config in metadata
     # Also mock the default config to avoid validation issues
-    with patch.object(
-        launcher,
-        "_get_location_metadata",
-        return_value={
-            "cfa_dagster/execution": Mock(
-                value={
-                    "launcher": {
-                        "DefaultRunLauncher": {}
-                    },  # Changed to avoid validation issues
-                    "executor": {
-                        "in_process_executor": {}
-                    },  # Changed to avoid validation issues
-                }
-            )
-        },
-    ):
-        with patch(
+    with (
+        patch.object(launcher, "_get_execution_config", return_value=None),
+        patch.object(
+            launcher,
+            "_get_location_metadata",
+            return_value={
+                "cfa_dagster/execution": Mock(
+                    value={
+                        "launcher": {
+                            "DefaultRunLauncher": {}
+                        },  # Changed to avoid validation issues
+                        "executor": {
+                            "in_process_executor": {}
+                        },  # Changed to avoid validation issues
+                    }
+                )
+            },
+        ),
+        patch(
             "cfa_dagster.execution.run_launcher.ExecutionConfig.default",
             return_value=ExecutionConfig(
                 launcher=SelectorConfig(
@@ -174,11 +176,12 @@ def test_get_launcher_config_from_metadata():
                     class_name="in_process_executor", config={}
                 ),
             ),
-        ):
-            config = launcher._get_launcher_config(run, context)
+        ),
+    ):
+        config = launcher._get_launcher_config(run, context)
 
     assert config.launcher.class_name == "DefaultRunLauncher"
-    assert config.executor.class_name == "in_process_executor"
+    assert config.executor is None
 
 
 def test_create_launcher_default_dev():
@@ -501,21 +504,23 @@ def test_hierarchy_precedence_level_3_metadata():
 
     # Mock the _get_location_metadata method to return execution config in metadata
     # Also mock the default config to avoid validation issues
-    with patch.object(
-        launcher,
-        "_get_location_metadata",
-        return_value={
-            "cfa_dagster/execution": Mock(
-                value={
-                    "launcher": {
-                        "DefaultRunLauncher": {}
-                    },  # Changed to avoid validation issues
-                    "executor": {"in_process_executor": {}},
-                }
-            )
-        },
-    ):
-        with patch(
+    with (
+        patch.object(launcher, "_get_execution_config", return_value=None),
+        patch.object(
+            launcher,
+            "_get_location_metadata",
+            return_value={
+                "cfa_dagster/execution": Mock(
+                    value={
+                        "launcher": {
+                            "DefaultRunLauncher": {}
+                        },  # Changed to avoid validation issues
+                        "executor": {"in_process_executor": {}},
+                    }
+                )
+            },
+        ),
+        patch(
             "cfa_dagster.execution.run_launcher.ExecutionConfig.default",
             return_value=ExecutionConfig(
                 launcher=SelectorConfig(
@@ -525,12 +530,13 @@ def test_hierarchy_precedence_level_3_metadata():
                     class_name="in_process_executor", config={}
                 ),
             ),
-        ):
-            config = launcher._get_launcher_config(run, context)
+        ),
+    ):
+        config = launcher._get_launcher_config(run, context)
 
     # Metadata should take precedence when run config and tags are absent
     assert config.launcher.class_name == "DefaultRunLauncher"
-    assert config.executor.class_name == "in_process_executor"
+    assert config.executor is None
 
 
 def test_hierarchy_precedence_level_4_legacy_tags():
@@ -555,16 +561,18 @@ def test_hierarchy_precedence_level_4_legacy_tags():
 
     # Mock the _get_location_metadata method to return only legacy launcher metadata
     # Also mock the default config to avoid validation issues
-    with patch.object(
-        launcher,
-        "_get_location_metadata",
-        return_value={
-            "cfa_dagster/launcher": Mock(
-                value={"class": "DefaultRunLauncher", "config": {}}
-            )
-        },
-    ):
-        with patch(
+    with (
+        patch.object(launcher, "_get_execution_config", return_value=None),
+        patch.object(
+            launcher,
+            "_get_location_metadata",
+            return_value={
+                "cfa_dagster/launcher": Mock(
+                    value={"class": "DefaultRunLauncher", "config": {}}
+                )
+            },
+        ),
+        patch(
             "cfa_dagster.execution.run_launcher.ExecutionConfig.default",
             return_value=ExecutionConfig(
                 launcher=SelectorConfig(
@@ -574,8 +582,9 @@ def test_hierarchy_precedence_level_4_legacy_tags():
                     class_name="in_process_executor", config={}
                 ),
             ),
-        ):
-            config = launcher._get_launcher_config(run, context)
+        ),
+    ):
+        config = launcher._get_launcher_config(run, context)
 
     # Legacy tags should take precedence when higher levels are absent
     assert config.launcher.class_name == "DefaultRunLauncher"
@@ -597,19 +606,21 @@ def test_hierarchy_precedence_level_5_legacy_metadata():
 
     # Mock the _get_location_metadata method to return only legacy launcher metadata
     # Also mock the default config to avoid validation issues
-    with patch.object(
-        launcher,
-        "_get_location_metadata",
-        return_value={
-            "cfa_dagster/launcher": Mock(
-                value={
-                    "class": "DefaultRunLauncher",
-                    "config": {},  # Removed param to avoid validation issues
-                }
-            )
-        },
-    ):
-        with patch(
+    with (
+        patch.object(launcher, "_get_execution_config", return_value=None),
+        patch.object(
+            launcher,
+            "_get_location_metadata",
+            return_value={
+                "cfa_dagster/launcher": Mock(
+                    value={
+                        "class": "DefaultRunLauncher",
+                        "config": {},  # Removed param to avoid validation issues
+                    }
+                )
+            },
+        ),
+        patch(
             "cfa_dagster.execution.run_launcher.ExecutionConfig.default",
             return_value=ExecutionConfig(
                 launcher=SelectorConfig(
@@ -619,8 +630,9 @@ def test_hierarchy_precedence_level_5_legacy_metadata():
                     class_name="in_process_executor", config={}
                 ),
             ),
-        ):
-            config = launcher._get_launcher_config(run, context)
+        ),
+    ):
+        config = launcher._get_launcher_config(run, context)
 
     # Legacy metadata should take precedence when all other levels are absent
     assert config.launcher.class_name == "DefaultRunLauncher"
@@ -630,7 +642,8 @@ def test_partial_config_filling():
     """Test that missing launcher/executor are filled from lower priority sources"""
     launcher = DynamicRunLauncher()
 
-    # Create a run with partial config (only executor in run config, launcher in tags)
+    # Create a run with partial config (executor in run config is intentionally
+    # ignored; launcher is resolved from tags)
     run = Mock(spec=DagsterRun)
     run.run_config = {
         "execution": {
@@ -681,6 +694,6 @@ def test_partial_config_filling():
         ):
             config = launcher._get_launcher_config(run, context)
 
-    # Should combine launcher from tags and executor from run config
+    # Should use launcher from tags and leave executor unset.
     assert config.launcher.class_name == "DefaultRunLauncher"
-    assert config.executor.class_name == "in_process_executor"
+    assert config.executor is None

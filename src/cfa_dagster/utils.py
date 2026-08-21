@@ -1,4 +1,5 @@
 import importlib.resources
+import importlib.util
 import logging
 import os
 import sys
@@ -179,78 +180,135 @@ def find_pyproject_toml(start_dir: Path) -> Optional[Path]:
 
 def get_defs_target(
     start_dir: Optional[Path] = None,
-) -> tuple[Optional[str], Optional[str]]:
+) -> Optional[str]:
     """
-    Return ``(defs_file, defs_module)`` resolved from ``[tool.dg]`` metadata
-    in ``pyproject.toml``.
+    Return the concrete definitions file resolved from ``[tool.dg]`` metadata
+    in ``pyproject.toml``, or None when there is no ``[tool.dg]`` metadata.
 
-    At most one of the two is non-None:
-    - ``defs_file`` is set when ``[tool.dg.project].defs_module`` resolves to
-      an existing ``.py`` file
-    - ``defs_module`` is set when ``[tool.dg.project].defs_module`` is a
-      module
-    - both are None when there is no ``[tool.dg]`` metadata
+    The dotted ``defs_module`` is converted to a relative ``.py`` path and
+    checked against two layouts:
+
+    - flat/package layout, e.g.::
+
+          [tool.dg.project]
+          root_module = "some_module"
+          defs_module = "some_module.dagster_defs"
+
+      checks ``pyproj_parent/some_module/dagster_defs.py``
+
+    - src layout, which additionally checks under ``src/``, e.g.::
+
+          [tool.dg.project]
+          root_module = "dagster_defs"
+          defs_module = "dagster_defs"
+
+      checks ``pyproj_parent/dagster_defs.py`` and
+      ``pyproj_parent/src/dagster_defs.py``
+
+    When ``defs_module`` is omitted, dagster's default of
+    ``<root_module>.definitions`` is used, e.g.::
+
+          [tool.dg.project]
+          root_module = "some_module"
+
+      checks ``pyproj_parent/some_module/definitions.py`` and
+      ``pyproj_parent/src/some_module/definitions.py``.
+
+    Raises
+    ------
+    RuntimeError
+        If ``[tool.dg]`` metadata is configured but cannot be resolved to a
+        concrete ``.py`` file.
     """
     pyproj = find_pyproject_toml(start_dir or Path.cwd())
     if not pyproj:
-        return (None, None)
+        return None
     try:
         data = tomllib.loads(pyproj.read_text())
         dg_config = data.get("tool", {}).get("dg", {})
         if dg_config.get("directory_type") not in ("project", "workspace"):
-            return (None, None)
+            return None
         defs_module = dg_config.get("project", {}).get("defs_module")
-        if not defs_module:
-            return (None, None)
-        proj_defs_file = (pyproj.parent / defs_module).with_suffix(".py")
-        if proj_defs_file.is_file():
-            return (str(proj_defs_file), None)
-        return (None, defs_module)
+        root_module = dg_config.get("project", {}).get("root_module")
+        if not root_module:
+            return None
+        # dagster's default when no defs_module is configured is
+        # <root_module>.definitions, e.g. src/<root_module>/definitions.py
+        defs_module = defs_module or f"{root_module}.definitions"
+
+        module_parts = defs_module.split(".")
+        rel_path = Path(*module_parts[:-1], f"{module_parts[-1]}.py")
+        for base_dir in (pyproj.parent, pyproj.parent / "src"):
+            proj_defs_file = base_dir / rel_path
+            log.debug(f"proj_defs_file: {proj_defs_file}")
+            if proj_defs_file.is_file():
+                return str(proj_defs_file)
+
+        module_file = _module_to_defs_file(defs_module)
+        if module_file:
+            log.debug(
+                f"Resolved configured module '{defs_module}' to file:"
+                f" {module_file}"
+            )
+            return module_file
+        raise RuntimeError(
+            f"Configured defs module '{defs_module}' does not resolve to an"
+            " existing .py file and is not importable in this environment."
+            " A definitions file is required to launch."
+        )
+    except RuntimeError:
+        raise
     except Exception:
         log.debug(
             "Unable to read [tool.dg] metadata from pyproject.toml",
             exc_info=True,
         )
-        return (None, None)
-
-
-def check_needs_fallback_file() -> Optional[str]:
-    """
-    Return the name of the fallback file if:
-    1. The user provides a file instead of module in the pyproject.toml for [tool.dg.project.defs_module]
-    2. The user doesn't have [tool.dg.project] in the pyproject.toml
-    """
-    defs_file, defs_module = get_defs_target()
-    if defs_file:
-        log.debug(f"Provided defs file: {defs_file}")
-        return defs_file
-    if defs_module:
-        # a valid module is configured, no fallback needed
         return None
-    return DEFAULT_DEFS_FILE
 
 
-def resolve_code_server_target_args(
-    start_dir: Optional[Path] = None,
-) -> list[str]:
+def _module_to_defs_file(module_name: str) -> str | None:
     """
-    Return the python pointer args for `dagster code-server start`.
-
-    Uses ``pyproject.toml`` metadata when available:
-    - ``[tool.dg.project].defs_module`` that resolves to an existing ``.py``
-      file returns ``["-f", <file>]``
-    - ``[tool.dg.project].defs_module`` that is a module returns
-      ``["-m", <module>]``
-    - otherwise falls back to ``["-f", DEFAULT_DEFS_FILE]``
+    Return the on-disk ``.py`` file backing ``module_name``, or None when
+    the module is not importable, is a namespace package, or its origin
+    is not a regular file (e.g. inside a zip archive).
     """
-    defs_file, defs_module = get_defs_target(start_dir)
+    try:
+        spec = importlib.util.find_spec(module_name)
+    except (ImportError, ValueError):
+        return None
+    if not spec or not spec.origin:
+        return None
+    origin = Path(spec.origin)
+    if not origin.is_file():
+        return None
+    return str(origin)
+
+
+def resolve_defs_file(start_dir: Path | None = None) -> str:
+    """
+    Resolve a concrete definitions file path to launch with.
+
+    Remote executors require launching against a definitions file, so this
+    always returns a path. Resolution order:
+
+    1. A ``[tool.dg.project]`` defs target that resolves to an existing
+       ``.py`` file on disk relative to ``pyproject.toml``
+    2. A configured module that is importable, resolved to its on-disk
+       file via :func:`importlib.util.find_spec`
+    3. ``DEFAULT_DEFS_FILE`` when there is no ``[tool.dg]`` metadata
+
+    Raises
+    ------
+    RuntimeError
+        If ``[tool.dg]`` metadata is configured but neither the defs file
+        nor the module can be resolved, since silently loading the default
+        definitions could launch the wrong code.
+    """
+    defs_file = get_defs_target(start_dir)
     if defs_file:
-        log.debug(f"Using defs file: {defs_file}")
-        return ["-f", defs_file]
-    if defs_module:
-        log.debug(f"Using defs module: {defs_module}")
-        return ["-m", defs_module]
-    return ["-f", DEFAULT_DEFS_FILE]
+        log.debug(f"Resolved defs file from pyproject.toml: {defs_file}")
+        return defs_file
+    return DEFAULT_DEFS_FILE
 
 
 def _get_flag_value(args: list[str], *flags: str) -> str | None:
@@ -270,17 +328,32 @@ def _add_host_port(args: list[str]) -> list[str]:
     return [*args, *extra]
 
 
+def _has_target(args: list[str]) -> bool:
+    return any(
+        flag in args
+        for flag in (
+            "-f",
+            "--python-file",
+            "-m",
+            "--module-name",
+            "-w",
+            "--workspace",
+        )
+    )
+
+
 def _run_cli(
     cli,
     env_prefix: str,
     argv: list[str] | None = None,
     defs_file: Optional[str] = None,
     always_add_host_port: bool = False,
-    add_fallback: bool = False,
+    add_defs_file_if_missing: bool = False,
 ):
     """
-    Runs a cli tool, automatically falling back to ``-f defs_file`` when
-    running ``dev`` outside a dagster project directory.
+    Runs a cli tool, resolving a definitions file via
+    :func:`resolve_defs_file` and launching with ``-f <file>`` when no
+    python file target is provided.
     """
     set_env_vars()
     configure_dev_db()
@@ -304,25 +377,13 @@ def _run_cli(
         port = LOCAL_PORT
     log.debug(f"args: {args}")
 
-    if first_subcommand == "code-server":
-        has_target = (
-            "-f" in args
-            or "--python-file" in args
-            or "-m" in args
-            or "--module-name" in args
-        )
-        if not has_target:
-            target_args = resolve_code_server_target_args()
-            log.info(
-                "Resolved code-server target args from pyproject.toml: %s",
-                target_args,
-            )
-            args = [*args, *target_args]
-    elif first_subcommand in ("dev", "launch") or add_fallback:
-        fallback = defs_file or check_needs_fallback_file()
-        if fallback and "-f" not in args and "--python-file" not in args:
-            defs_file = fallback
-            log.info(f"No dagster project found, using -f {defs_file}")
+    if (
+        first_subcommand in ("dev", "launch", "code-server")
+        or add_defs_file_if_missing
+    ):
+        if not _has_target(args):
+            defs_file = defs_file or resolve_defs_file()
+            log.info(f"Using definitions file: {defs_file}")
             args = [*args, "-f", defs_file]
 
     if first_subcommand == "dev" and defs_file:
@@ -361,7 +422,7 @@ def run_dagster_webserver():
         cli,
         "DAGSTER_WEBSERVER",
         always_add_host_port=True,
-        add_fallback=True,
+        add_defs_file_if_missing=True,
     )
 
 
