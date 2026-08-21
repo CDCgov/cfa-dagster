@@ -177,32 +177,80 @@ def find_pyproject_toml(start_dir: Path) -> Optional[Path]:
     return None
 
 
+def get_defs_target(
+    start_dir: Optional[Path] = None,
+) -> tuple[Optional[str], Optional[str]]:
+    """
+    Return ``(defs_file, defs_module)`` resolved from ``[tool.dg]`` metadata
+    in ``pyproject.toml``.
+
+    At most one of the two is non-None:
+    - ``defs_file`` is set when ``[tool.dg.project].defs_module`` resolves to
+      an existing ``.py`` file
+    - ``defs_module`` is set when ``[tool.dg.project].defs_module`` is a
+      module
+    - both are None when there is no ``[tool.dg]`` metadata
+    """
+    pyproj = find_pyproject_toml(start_dir or Path.cwd())
+    if not pyproj:
+        return (None, None)
+    try:
+        data = tomllib.loads(pyproj.read_text())
+        dg_config = data.get("tool", {}).get("dg", {})
+        if dg_config.get("directory_type") not in ("project", "workspace"):
+            return (None, None)
+        defs_module = dg_config.get("project", {}).get("defs_module")
+        if not defs_module:
+            return (None, None)
+        proj_defs_file = (pyproj.parent / defs_module).with_suffix(".py")
+        if proj_defs_file.is_file():
+            return (str(proj_defs_file), None)
+        return (None, defs_module)
+    except Exception:
+        log.debug(
+            "Unable to read [tool.dg] metadata from pyproject.toml",
+            exc_info=True,
+        )
+        return (None, None)
+
+
 def check_needs_fallback_file() -> Optional[str]:
     """
     Return the name of the fallback file if:
     1. The user provides a file instead of module in the pyproject.toml for [tool.dg.project.defs_module]
     2. The user doesn't have [tool.dg.project] in the pyproject.toml
     """
-    pyproj = find_pyproject_toml(Path.cwd())
-    if pyproj:
-        try:
-            data = tomllib.loads(pyproj.read_text())
-            dg_config = data.get("tool", {}).get("dg", {})
-            if dg_config.get("directory_type") in ("project", "workspace"):
-                proj_config = dg_config.get("project", {})
-                defs_module = proj_config.get("defs_module")
-                if defs_module:
-                    proj_defs_file = Path(defs_module).with_suffix(".py")
-                    # if they provided a file, return the file
-                    if proj_defs_file.is_file():
-                        log.debug(f"Provided defs file: {proj_defs_file}")
-                        return str(proj_defs_file)
-                    # if they didn't provide a file, assume it is a valid module and return None
-                    else:
-                        return None
-        except Exception:
-            pass
+    defs_file, defs_module = get_defs_target()
+    if defs_file:
+        log.debug(f"Provided defs file: {defs_file}")
+        return defs_file
+    if defs_module:
+        # a valid module is configured, no fallback needed
+        return None
     return DEFAULT_DEFS_FILE
+
+
+def resolve_code_server_target_args(
+    start_dir: Optional[Path] = None,
+) -> list[str]:
+    """
+    Return the python pointer args for `dagster code-server start`.
+
+    Uses ``pyproject.toml`` metadata when available:
+    - ``[tool.dg.project].defs_module`` that resolves to an existing ``.py``
+      file returns ``["-f", <file>]``
+    - ``[tool.dg.project].defs_module`` that is a module returns
+      ``["-m", <module>]``
+    - otherwise falls back to ``["-f", DEFAULT_DEFS_FILE]``
+    """
+    defs_file, defs_module = get_defs_target(start_dir)
+    if defs_file:
+        log.debug(f"Using defs file: {defs_file}")
+        return ["-f", defs_file]
+    if defs_module:
+        log.debug(f"Using defs module: {defs_module}")
+        return ["-m", defs_module]
+    return ["-f", DEFAULT_DEFS_FILE]
 
 
 def _get_flag_value(args: list[str], *flags: str) -> str | None:
@@ -256,7 +304,21 @@ def _run_cli(
         port = LOCAL_PORT
     log.debug(f"args: {args}")
 
-    if first_subcommand in ("dev", "launch") or add_fallback:
+    if first_subcommand == "code-server":
+        has_target = (
+            "-f" in args
+            or "--python-file" in args
+            or "-m" in args
+            or "--module-name" in args
+        )
+        if not has_target:
+            target_args = resolve_code_server_target_args()
+            log.info(
+                "Resolved code-server target args from pyproject.toml: %s",
+                target_args,
+            )
+            args = [*args, *target_args]
+    elif first_subcommand in ("dev", "launch") or add_fallback:
         fallback = defs_file or check_needs_fallback_file()
         if fallback and "-f" not in args and "--python-file" not in args:
             defs_file = fallback
@@ -312,7 +374,9 @@ def run_dagster():
     _run_cli(cli, ENV_PREFIX)
 
 
-def run_dg(argv: list[str] | None = None, defs_file: Optional[str] = None):
+def run_dg(
+    argv: Optional[list[str]] | None = None, defs_file: Optional[str] = None
+):
     """
     Wrapper for the `dg` cli
     """
@@ -340,7 +404,7 @@ def start_dev_env(caller_name: str):
     # Start the Dagster UI and set necessary env vars if
     # called directly via `uv run dagster_defs.py` or `python dagster_defs.py`
     if caller_name == "__main__":
-        defs_file = Path(sys.argv[0]).name
+        defs_file = sys.argv[0]
         log.debug(f"defs_file: {defs_file}")
         run_dg(argv=[None, "dev", *sys.argv[1:]], defs_file=defs_file)
 
