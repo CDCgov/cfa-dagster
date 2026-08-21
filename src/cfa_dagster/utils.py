@@ -5,7 +5,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import quote
 
 import dagster as dg
@@ -178,12 +178,75 @@ def find_pyproject_toml(start_dir: Path) -> Optional[Path]:
     return None
 
 
+def get_dg_project_config(
+    start_dir: Optional[Path] = None,
+) -> tuple[Path, dict[str, Any]] | None:
+    pyproj = find_pyproject_toml(start_dir or Path.cwd())
+    if not pyproj:
+        return None
+    try:
+        data = tomllib.loads(pyproj.read_text())
+    except Exception:
+        log.debug(
+            "Unable to read [tool.dg] metadata from pyproject.toml",
+            exc_info=True,
+        )
+        return None
+
+    dg_config = data.get("tool", {}).get("dg", {})
+    if dg_config.get("directory_type") not in ("project", "workspace"):
+        return None
+
+    project_config = dg_config.get("project", {})
+    if not isinstance(project_config, dict):
+        return None
+    return pyproj, project_config
+
+
+def resolve_project_module_path(
+    pyproject_path: Path,
+    module_name: str,
+) -> Path | None:
+    module_parts = module_name.split(".")
+    module_path = Path(*module_parts)
+    module_file = Path(*module_parts[:-1], f"{module_parts[-1]}.py")
+
+    for base_dir in (pyproject_path.parent, pyproject_path.parent / "src"):
+        candidate_file = base_dir / module_file
+        log.debug(f"candidate_file: {candidate_file}")
+        if candidate_file.is_file():
+            return candidate_file.resolve()
+
+        candidate_pkg = base_dir / module_path
+        log.debug(f"candidate_pkg: {candidate_pkg}")
+        if (
+            candidate_pkg.is_dir()
+            and (candidate_pkg / "__init__.py").is_file()
+        ):
+            return candidate_pkg.resolve()
+
+    try:
+        spec = importlib.util.find_spec(module_name)
+    except (ImportError, ValueError):
+        return None
+    if not spec:
+        return None
+    if spec.submodule_search_locations:
+        return Path(list(spec.submodule_search_locations)[0]).resolve()
+    if spec.origin:
+        origin = Path(spec.origin)
+        if origin.is_file():
+            return origin.resolve()
+    return None
+
+
 def get_defs_target(
     start_dir: Optional[Path] = None,
 ) -> Optional[str]:
     """
-    Return the concrete definitions file resolved from ``[tool.dg]`` metadata
-    in ``pyproject.toml``, or None when there is no ``[tool.dg]`` metadata.
+    Return the definitions file resolved from ``[tool.dg]`` metadata in
+    ``pyproject.toml`` relative to the project root, or None when there is no
+    ``[tool.dg]`` metadata.
 
     The dotted ``defs_module`` is converted to a relative ``.py`` path and
     checked against two layouts:
@@ -220,37 +283,26 @@ def get_defs_target(
         If ``[tool.dg]`` metadata is configured but cannot be resolved to a
         concrete ``.py`` file.
     """
-    pyproj = find_pyproject_toml(start_dir or Path.cwd())
-    if not pyproj:
+    config = get_dg_project_config(start_dir)
+    if not config:
         return None
+    pyproj, project_config = config
     try:
-        data = tomllib.loads(pyproj.read_text())
-        dg_config = data.get("tool", {}).get("dg", {})
-        if dg_config.get("directory_type") not in ("project", "workspace"):
-            return None
-        defs_module = dg_config.get("project", {}).get("defs_module")
-        root_module = dg_config.get("project", {}).get("root_module")
+        defs_module = project_config.get("defs_module")
+        root_module = project_config.get("root_module")
         if not root_module:
             return None
         # dagster's default when no defs_module is configured is
         # <root_module>.definitions, e.g. src/<root_module>/definitions.py
         defs_module = defs_module or f"{root_module}.definitions"
 
-        module_parts = defs_module.split(".")
-        rel_path = Path(*module_parts[:-1], f"{module_parts[-1]}.py")
-        for base_dir in (pyproj.parent, pyproj.parent / "src"):
-            proj_defs_file = base_dir / rel_path
-            log.debug(f"proj_defs_file: {proj_defs_file}")
-            if proj_defs_file.is_file():
-                return str(proj_defs_file)
-
-        module_file = _module_to_defs_file(defs_module)
-        if module_file:
+        module_path = resolve_project_module_path(pyproj, defs_module)
+        if module_path and module_path.is_file():
             log.debug(
                 f"Resolved configured module '{defs_module}' to file:"
-                f" {module_file}"
+                f" {module_path}"
             )
-            return module_file
+            return os.path.relpath(module_path, pyproj.parent)
         raise RuntimeError(
             f"Configured defs module '{defs_module}' does not resolve to an"
             " existing .py file and is not importable in this environment."
@@ -264,24 +316,6 @@ def get_defs_target(
             exc_info=True,
         )
         return None
-
-
-def _module_to_defs_file(module_name: str) -> str | None:
-    """
-    Return the on-disk ``.py`` file backing ``module_name``, or None when
-    the module is not importable, is a namespace package, or its origin
-    is not a regular file (e.g. inside a zip archive).
-    """
-    try:
-        spec = importlib.util.find_spec(module_name)
-    except (ImportError, ValueError):
-        return None
-    if not spec or not spec.origin:
-        return None
-    origin = Path(spec.origin)
-    if not origin.is_file():
-        return None
-    return str(origin)
 
 
 def resolve_defs_file(start_dir: Path | None = None) -> str:

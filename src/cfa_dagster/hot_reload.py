@@ -1,4 +1,3 @@
-import importlib.util
 import logging
 import threading
 import time
@@ -7,15 +6,10 @@ from typing import TYPE_CHECKING, Optional
 
 from dagster_graphql import DagsterGraphQLClient
 
-from .utils import find_pyproject_toml
+from .utils import get_dg_project_config, resolve_project_module_path
 
 if TYPE_CHECKING:
     from watchdog.observers import Observer
-
-try:
-    import tomllib
-except ImportError:
-    import tomli as tomllib  # type: ignore[no-redef]
 
 log = logging.getLogger(__name__)
 
@@ -30,51 +24,6 @@ mutation ReloadWorkspace {
 """
 
 
-def _read_root_module(pyproject_path: Path) -> Optional[str]:
-    try:
-        with open(pyproject_path, "rb") as f:
-            data = tomllib.load(f)
-        return (
-            data.get("tool", {})
-            .get("dg", {})
-            .get("project", {})
-            .get("root_module")
-        )
-    except Exception:
-        return None
-
-
-def _resolve_module_path(
-    module_name: str,
-    search_dir: Optional[Path] = None,
-) -> Optional[Path]:
-    try:
-        spec = importlib.util.find_spec(module_name)
-        if spec is not None:
-            if spec.submodule_search_locations:
-                pkg_dir = list(spec.submodule_search_locations)[0]
-                return Path(pkg_dir)
-            if spec.origin and spec.origin.endswith(".py"):
-                return Path(spec.origin).resolve()
-    except (ImportError, ValueError, AttributeError):
-        pass
-
-    for base in [search_dir, Path.cwd()] if search_dir else [Path.cwd()]:
-        if base is None:
-            continue
-        candidate_file = (base / module_name).with_suffix(".py")
-        if candidate_file.is_file():
-            return candidate_file.resolve()
-        candidate_pkg = base / module_name
-        if (
-            candidate_pkg.is_dir()
-            and (candidate_pkg / "__init__.py").is_file()
-        ):
-            return candidate_pkg.resolve()
-
-    return None
-
-
 def _collect_py_files(directory: Path) -> list[Path]:
     if not directory.is_dir():
         return []
@@ -87,23 +36,16 @@ def resolve_target_paths(
 ) -> list[Path]:
     targets: set[Path] = set()
 
-    if entry_point:
-        ep = Path(entry_point)
-        if ep.is_file():
-            targets.add(ep.resolve())
-            # if the entry point is a file, we just need to watch that file
-            return sorted(targets)
-
-    pyproj = (
-        Path(pyproject_path)
+    config = (
+        get_dg_project_config(Path(pyproject_path).parent)
         if pyproject_path
-        else find_pyproject_toml(Path.cwd())
+        else get_dg_project_config(Path.cwd())
     )
-    root_module = _read_root_module(pyproj) if pyproj else None
+    pyproj, project_config = config if config else (None, {})
+    root_module = project_config.get("root_module")
 
-    if root_module:
-        search_dir = pyproj.parent if pyproj else None
-        module_path = _resolve_module_path(root_module, search_dir=search_dir)
+    if pyproj and root_module:
+        module_path = resolve_project_module_path(pyproj, root_module)
         if module_path:
             if module_path.is_dir():
                 targets.update(_collect_py_files(module_path))
@@ -111,6 +53,11 @@ def resolve_target_paths(
                 targets.add(module_path.resolve())
         else:
             log.warning("Could not resolve root_module '%s'", root_module)
+
+    if not targets and entry_point:
+        ep = Path(entry_point)
+        if ep.is_file():
+            targets.add(ep.resolve())
 
     return sorted(targets)
 

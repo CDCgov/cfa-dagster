@@ -431,7 +431,7 @@ def test_get_defs_target_flat_layout(tmp_path):
 
     defs_file = get_defs_target(project_dir)
 
-    assert defs_file == str(project_dir / "dagster_defs.py")
+    assert defs_file == "dagster_defs.py"
 
 
 def test_get_defs_target_package_layout_dotted_module(tmp_path):
@@ -443,8 +443,7 @@ def test_get_defs_target_package_layout_dotted_module(tmp_path):
 
     defs_file = get_defs_target(project_dir)
 
-    expected = project_dir / "cfa_epinow2_pipeline" / "dg_defs.py"
-    assert defs_file == str(expected)
+    assert defs_file == "cfa_epinow2_pipeline/dg_defs.py"
 
 
 def test_get_defs_target_src_layout_dotted_module(tmp_path):
@@ -456,8 +455,7 @@ def test_get_defs_target_src_layout_dotted_module(tmp_path):
 
     defs_file = get_defs_target(project_dir)
 
-    expected = project_dir / "src" / "cfa_epinow2_pipeline" / "dg_defs.py"
-    assert defs_file == str(expected)
+    assert defs_file == "src/cfa_epinow2_pipeline/dg_defs.py"
 
 
 def test_get_defs_target_prefers_flat_over_src_layout(tmp_path):
@@ -472,8 +470,7 @@ def test_get_defs_target_prefers_flat_over_src_layout(tmp_path):
 
     defs_file = get_defs_target(project_dir)
 
-    expected = project_dir / "cfa_epinow2_pipeline" / "dg_defs.py"
-    assert defs_file == str(expected)
+    assert defs_file == "cfa_epinow2_pipeline/dg_defs.py"
 
 
 def test_get_defs_target_raises_when_no_file_or_importable_module(tmp_path):
@@ -490,9 +487,7 @@ def test_get_defs_target_default_definitions_src_layout(tmp_path):
 
     defs_file = get_defs_target(project_dir)
 
-    assert defs_file == str(
-        project_dir / "src" / "my_project" / "definitions.py"
-    )
+    assert defs_file == "src/my_project/definitions.py"
 
 
 def test_get_defs_target_default_definitions_flat_layout(tmp_path):
@@ -502,7 +497,7 @@ def test_get_defs_target_default_definitions_flat_layout(tmp_path):
 
     defs_file = get_defs_target(project_dir)
 
-    assert defs_file == str(project_dir / "my_project" / "definitions.py")
+    assert defs_file == "my_project/definitions.py"
 
 
 def test_get_defs_target_default_definitions_raises_when_unresolvable(tmp_path):
@@ -525,8 +520,7 @@ def test_get_defs_target_explicit_defs_module_beats_default(tmp_path):
 
     defs_file = get_defs_target(project_dir)
 
-    expected = project_dir / "my_project" / "custom_defs.py"
-    assert defs_file == str(expected)
+    assert defs_file == "my_project/custom_defs.py"
 
 
 def test_get_defs_target_no_tool_dg_metadata(tmp_path):
@@ -567,9 +561,7 @@ def test_resolve_defs_file_returns_configured_file(tmp_path):
         tmp_path, FLAT_LAYOUT_TOML, ["dagster_defs.py"]
     )
 
-    assert resolve_defs_file(project_dir) == str(
-        project_dir / "dagster_defs.py"
-    )
+    assert resolve_defs_file(project_dir) == "dagster_defs.py"
 
 
 def test_resolve_defs_file_resolves_importable_module(tmp_path, monkeypatch):
@@ -583,7 +575,10 @@ def test_resolve_defs_file_resolves_importable_module(tmp_path, monkeypatch):
 
     project_dir = make_project_dir(tmp_path, toml)
 
-    assert resolve_defs_file(project_dir) == str(package_dir / "dg_defs.py")
+    assert (
+        resolve_defs_file(project_dir)
+        == "../modules/fake_pipeline_resolve/dg_defs.py"
+    )
 
 
 def test_get_defs_target_resolves_importable_module(tmp_path, monkeypatch):
@@ -597,7 +592,10 @@ def test_get_defs_target_resolves_importable_module(tmp_path, monkeypatch):
 
     project_dir = make_project_dir(tmp_path, toml)
 
-    assert get_defs_target(project_dir) == str(package_dir / "dg_defs.py")
+    assert (
+        get_defs_target(project_dir)
+        == "../modules/fake_pipeline_target/dg_defs.py"
+    )
 
 
 def test_resolve_defs_file_raises_when_unresolvable(tmp_path):
