@@ -500,7 +500,9 @@ def test_get_defs_target_default_definitions_flat_layout(tmp_path):
     assert defs_file == "my_project/definitions.py"
 
 
-def test_get_defs_target_default_definitions_raises_when_unresolvable(tmp_path):
+def test_get_defs_target_default_definitions_raises_when_unresolvable(
+    tmp_path,
+):
     project_dir = make_project_dir(tmp_path, DEFAULT_DEFS_TOML)
 
     with pytest.raises(RuntimeError, match="my_project.definitions"):
@@ -654,6 +656,96 @@ def test_run_cli_appends_resolved_defs_file_for_code_server():
 
     args = mock_cli.call_args.kwargs["args"]
     assert args[-2:] == ["-f", "/tmp/fake_defs.py"]
+
+
+def test_run_cli_replaces_default_defs_file_for_code_server_with_env():
+    mock_cli = Mock()
+    with (
+        patch.dict(
+            os.environ,
+            {"CFA_DAGSTER_ALLOW_DEFAULT_DEFS_OVERRIDE": "true"},
+        ),
+        patch("cfa_dagster.utils.set_env_vars"),
+        patch("cfa_dagster.utils.configure_dev_db"),
+        patch(
+            "cfa_dagster.utils.resolve_defs_file",
+            return_value="src/my_project/definitions.py",
+        ),
+    ):
+        _run_cli(
+            mock_cli,
+            "TEST",
+            argv=["prog", "code-server", "start", "-f", "dagster_defs.py"],
+        )
+
+    args = mock_cli.call_args.kwargs["args"]
+    assert "dagster_defs.py" not in args
+    assert args[args.index("-f") + 1] == "src/my_project/definitions.py"
+
+
+def test_run_cli_keeps_default_defs_file_without_override_env():
+    mock_cli = Mock()
+    with (
+        patch.dict(os.environ, {}, clear=True),
+        patch("cfa_dagster.utils.set_env_vars"),
+        patch("cfa_dagster.utils.configure_dev_db"),
+        patch("cfa_dagster.utils.resolve_defs_file") as resolve_defs_file_mock,
+    ):
+        _run_cli(
+            mock_cli,
+            "TEST",
+            argv=["prog", "code-server", "start", "-f", "dagster_defs.py"],
+        )
+
+    args = mock_cli.call_args.kwargs["args"]
+    assert args[args.index("-f") + 1] == "dagster_defs.py"
+    resolve_defs_file_mock.assert_not_called()
+
+
+def test_run_cli_keeps_custom_defs_file_with_override_env():
+    mock_cli = Mock()
+    with (
+        patch.dict(
+            os.environ,
+            {"CFA_DAGSTER_ALLOW_DEFAULT_DEFS_OVERRIDE": "true"},
+        ),
+        patch("cfa_dagster.utils.set_env_vars"),
+        patch("cfa_dagster.utils.configure_dev_db"),
+        patch("cfa_dagster.utils.resolve_defs_file") as resolve_defs_file_mock,
+    ):
+        _run_cli(
+            mock_cli,
+            "TEST",
+            argv=["prog", "code-server", "start", "-f", "custom_defs.py"],
+        )
+
+    args = mock_cli.call_args.kwargs["args"]
+    assert args[args.index("-f") + 1] == "custom_defs.py"
+    resolve_defs_file_mock.assert_not_called()
+
+
+def test_run_cli_keeps_default_defs_file_when_override_resolution_fails():
+    mock_cli = Mock()
+    with (
+        patch.dict(
+            os.environ,
+            {"CFA_DAGSTER_ALLOW_DEFAULT_DEFS_OVERRIDE": "true"},
+        ),
+        patch("cfa_dagster.utils.set_env_vars"),
+        patch("cfa_dagster.utils.configure_dev_db"),
+        patch(
+            "cfa_dagster.utils.resolve_defs_file",
+            side_effect=RuntimeError("bad pyproject"),
+        ),
+    ):
+        _run_cli(
+            mock_cli,
+            "TEST",
+            argv=["prog", "code-server", "start", "-f", "dagster_defs.py"],
+        )
+
+    args = mock_cli.call_args.kwargs["args"]
+    assert args[args.index("-f") + 1] == "dagster_defs.py"
 
 
 def test_run_cli_does_not_append_defs_file_with_workspace():

@@ -31,6 +31,7 @@ log = logging.getLogger(__name__)
 LOCAL_HOSTNAME = "127.0.0.1"
 LOCAL_PORT = 4000
 DEFAULT_DEFS_FILE = "dagster_defs.py"
+ALLOW_DEFAULT_DEFS_OVERRIDE_ENV = "CFA_DAGSTER_ALLOW_DEFAULT_DEFS_OVERRIDE"
 PROD_HOSTNAME = os.getenv(
     "DAGSTER_WEBSERVER_URL", "dagster.apps.edav.ext.cdc.gov"
 )
@@ -376,6 +377,39 @@ def _has_target(args: list[str]) -> bool:
     )
 
 
+def _replace_default_defs_target(
+    args: list[str],
+) -> tuple[list[str], str | None]:
+    """
+    Function to override the -f dagster_defs.py flag that is passed by `dagster code-server start`
+    This can be removed once all code locations are using cfa-dagster >= 1.4.4
+    """
+    next_args = list(args)
+    for i, arg in enumerate(next_args[:-1]):
+        if arg not in ("-f", "--python-file"):
+            continue
+        if next_args[i + 1] != DEFAULT_DEFS_FILE:
+            continue
+        try:
+            defs_file = resolve_defs_file()
+        except Exception:
+            log.debug(
+                "Unable to resolve definitions file; keeping %s",
+                DEFAULT_DEFS_FILE,
+                exc_info=True,
+            )
+            return next_args, DEFAULT_DEFS_FILE
+        if defs_file != DEFAULT_DEFS_FILE:
+            log.info(
+                "Replacing default definitions file %s with %s",
+                DEFAULT_DEFS_FILE,
+                defs_file,
+            )
+            next_args[i + 1] = defs_file
+        return next_args, next_args[i + 1]
+    return next_args, None
+
+
 def _run_cli(
     cli,
     env_prefix: str,
@@ -410,6 +444,17 @@ def _run_cli(
         host = LOCAL_HOSTNAME
         port = LOCAL_PORT
     log.debug(f"args: {args}")
+
+    # need to explicitly pass the -f flag for code locations that don't have
+    # the fallback behavior for dagster code-server start yet
+    # using an env var to override the -f flag with the fallback behavior
+    # for code locations that have the latest cfa-dagster code
+    if (
+        first_subcommand == "code-server"
+        and os.getenv(ALLOW_DEFAULT_DEFS_OVERRIDE_ENV) == "true"
+    ):
+        args, replaced_defs_file = _replace_default_defs_target(args)
+        defs_file = replaced_defs_file or defs_file
 
     if (
         first_subcommand in ("dev", "launch", "code-server")
