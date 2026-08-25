@@ -228,7 +228,7 @@ defs = dg.Definitions(
 
 A [run launcher](https://docs.dagster.io/deployment/execution/run-launchers) allocates the necessary computational resources to carry out a run execution and then starts the execution. In the cookie example, this would be like clearing off the counters, getting all of your necessary components (mixing bowl, whisk, ingredients, etc.) out on the counter before you start making the cookie dough. Then, once you have everything set up, you begin making cookies. In `cfa-dagster`, the run launcher is a [`DynamicRunLauncher`](../api.md#cfa_dagster.DynamicRunLauncher), which instantiates a concrete launcher at runtime (`DefaultRunLauncher`, `DockerRunLauncher`, or [`AzureContainerAppJobLauncher`](../api.md#cfa_dagster.AzureContainerAppJobRunLauncher)) based on configuration found on the run, run tags, or repository metadata, then delegates launch/resume/health/terminate operations to that concrete launcher.
 
-In most cases, you will not need to configure a run launcher and instead use an [executor](#executors) to configure your run environment. The `DynamicRunLauncher` will automatically choose the `DefaultRunLauncher` when running locally and the `AzureContainerAppJobRunLauncher` when running in production.
+In most cases, you will not need to configure a run launcher - you will inherit the default. The `DynamicRunLauncher` will automatically choose the `DefaultRunLauncher` when running locally and the `AzureContainerAppJobRunLauncher` when running in production.
 
 ## Schedules
 
