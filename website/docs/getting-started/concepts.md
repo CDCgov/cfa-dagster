@@ -44,6 +44,8 @@ defs = dg.Definitions(
 )
 ```
 
+This enables you to simply reference `**collected_defs` instead of having to reference each definition manually in `dg.Definitions`, as vanilla dagster would have you do.
+
 ## Dynamic Graph Assets
 
 [Dynamic graph assets](../api.md#cfa_dagster.dynamic_graph_asset.dynamic_graph_asset) combine two existing Dagster concepts, [graph assets](https://docs.dagster.io/guides/build/assets/graph-backed-assets#defining-graph-backed-assets) and [dynamic outputs](https://docs.dagster.io/guides/build/ops/dynamic-graphs#a-dynamic-job), into one decorator to provide easy, runtime-configurable parallelism. Unlike normal Dagster partitions, dynamic graph assets allows you to parallelize logic against more than two dimensions.
@@ -72,17 +74,25 @@ defs = dg.Definitions(
 )
 ```
 
+Dynamic Graph Assets are partially motivated by limitations on Partitioned assets - currently, dagster only supports up to two [Partitions](#partitions). A Dynamic Graph Asset can have these two partition dimensions in addition to any number of Graph Dimensions.
+
 ## Executors
 
 [Executors](https://docs.dagster.io/guides/operate/run-executors) manage how each step or asset in a job is executed. In the cookie example, this would be the head baker deciding who should be performing what tasks and making sure those tasks get done in the proper order. The specific head baker in the bakery that day could be the head baker who likes to have multiple bakers to assemble the cookie dough at the same time or the head baker who wants one baker to make the dough.
 
 Some of the most common executors used in CFA are:
 
-- `in_process_executor` or `multiprocess_executor` for running workflow through Dagster locally.
-- `docker_executor` for running workflow using Docker containers.
+- `in_process_executor` or `multiprocess_executor` for running workflows through Dagster locally. 
+    
+    - These are used for simple jobs and tasks.
+
+- `docker_executor` for running workflows locally, but within docker containers.
+    
+    - These are used for prototyping something you will eventually send to production in Azure.
+
 - [`azure_batch_executor`](../api.md#cfa_dagster.azure_batch_executor) or [`azure_container_app_job_executor`](../api.md#cfa_dagster.azure_container_app_job_executor) for running workflow through Azure.
 
-You can create an executor via [`SelectorConfig`](../api.md#cfa_dagster.SelectorConfig):
+You can create an executor for your definitions file via [`SelectorConfig`](../api.md#cfa_dagster.SelectorConfig):
 
 ```python
 docker_execution_config = ExecutionConfig(
@@ -199,7 +209,7 @@ Resources often represent:
 - Credentials and secrets
 - Logging systems
 - I/O managers
-- Configuration dictionaries
+- Configuration dictionaries shared between multiple assets
 
 ```python
 from dagster_azure.blob import (
