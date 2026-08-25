@@ -2,7 +2,11 @@
 
 The purpose of this page is to provide a high-level overview of the tools commonly used in CFA Dagster projects. This is not a comprehensive list of all Dagster capabilities. For additional information on Dagster concepts, click on [this link](https://docs.dagster.io/getting-started/concepts).
 
-Dagster is an **asset-centric workflow orchestration tool** versus a task-centric workflow tool. An asset-centric workflow focuses on outputs and has upstream assets that are used as inputs to create their downstream [dependencies](https://docs.dagster.io/dagster-basics-tutorial/dependencies). A task-centric tool focuses on steps taken in a workflow. For example, if we were baking cookies, a task-centric workflow would include steps like gathering ingredients, combining ingredients, adding chocolate chips, baking in the oven, and eating the cookies. On the other hand, with the cookie example, an asset-centric workflow approach would look like the following: to create cookie dough, combine the wet ingredients with the dry ingredients; to create chocolate chip cookie dough, mix in the chocolate chips into the cookie dough; bake the chocolate chip cookie dough to eat freshly baked chocolate chip cookies. (Cookie example from [Dagster University Dagster Essentials course](https://courses.dagster.io/courses/dagster-essentials))
+Dagster is an **asset-centric workflow orchestration tool** versus a task-centric workflow tool. An asset-centric workflow focuses on outputs and has upstream assets that are used as inputs to create their downstream [dependencies](https://docs.dagster.io/dagster-basics-tutorial/dependencies). 
+
+A task-centric tool focuses on steps taken in a workflow. For example, if we were baking cookies, a task-centric workflow would include steps like gathering ingredients, combining ingredients, adding chocolate chips, baking in the oven, and eating the cookies. 
+
+On the other hand, with the cookie example, an asset-centric workflow approach would look like the following: to create cookie dough, combine the wet ingredients with the dry ingredients; to create chocolate chip cookie dough, mix in the chocolate chips into the cookie dough; bake the chocolate chip cookie dough to eat freshly baked chocolate chip cookies. (Cookie example from [Dagster University Dagster Essentials course](https://courses.dagster.io/courses/dagster-essentials))
 
 ## Assets
 
