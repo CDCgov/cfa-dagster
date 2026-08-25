@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Literal, Optional
 
 import dagster as dg
@@ -46,7 +46,7 @@ class ADLS2FilesystemIOManagerMetadata:
     on_input_conflict: Optional[OnInputConflict] = (
         None  # overrides IOManager-level on_input_conflict if set
     )
-    synthetic_partition_keys: list[str] = ([],)
+    synthetic_partition_keys: list[str] = field(default_factory=list)
     asset_partition_keys: Optional[list] = None
     asset_key_path: Optional[list[str]] = None
 

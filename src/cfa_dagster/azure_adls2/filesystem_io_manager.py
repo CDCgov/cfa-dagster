@@ -22,6 +22,9 @@ from dagster_azure.adls2 import ADLS2DefaultAzureCredential, ADLS2Resource
 from pydantic import Field
 from upath import UPath
 
+from ..dynamic_graph_asset_metadata import (
+    get_inherited_graph_dimension_input_metadata,
+)
 from ..utils import is_production, require_dagster_user
 from .filesystem_metadata import (
     ADLS2FilesystemIOManagerMetadata,
@@ -227,15 +230,21 @@ class FilesystemADLS2IOManager(UPathIOManager):
         input_metadata = context.definition_metadata
         log.debug(f"input_metadata: '{input_metadata}'")
         meta = ADLS2FilesystemIOManagerMetadata.from_metadata(input_metadata)
+        inherited = get_inherited_graph_dimension_input_metadata(context)
+
+        if inherited:
+            if meta is None:
+                meta = ADLS2FilesystemIOManagerMetadata()
+            meta.asset_key_path = inherited.asset_key_path
+            meta.asset_partition_keys = inherited.asset_partition_keys
+            meta.synthetic_partition_keys = inherited.synthetic_partition_keys
 
         if meta:
             if meta.skip_input:
                 log.debug("load_input: skip_input=True, returning None")
                 return
 
-            # TODO: is this needed?
-            # if meta.synthetic_partition_keys:
-            #     self._patch_context(context, meta)
+            self._patch_context(context, meta)
 
         return super().load_input(context)
 

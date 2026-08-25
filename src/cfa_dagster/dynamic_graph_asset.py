@@ -2,7 +2,6 @@ import ast
 import inspect
 import itertools
 import logging
-import re
 import sys
 import textwrap
 import warnings
@@ -37,6 +36,10 @@ from typing_extensions import Unpack
 
 from .azure_adls2.filesystem_metadata import ADLS2FilesystemIOManagerMetadata
 from .azure_adls2.pickle_io_manager import ADLS2PickleIOManager
+from .dynamic_graph_asset_metadata import (
+    _decode_mapping_key,
+    _encode_mapping_key,
+)
 from .execution.utils import ExecutionConfig, SelectorConfig
 
 log = logging.getLogger(__name__)
@@ -283,47 +286,6 @@ _multiprocess_config = ExecutionConfig(
 _in_process_config = ExecutionConfig(
     executor=SelectorConfig(class_name="in_process_executor")
 )
-
-#  Choosing a lesser-used alpha char as a prefix to prevent Dagster/python keyword errors
-# DagsterInvalidDefinitionError: "in" is not a valid name in Dagster. It conflicts with a Dagster or python reserved keyword.
-_SEGMENT_PREFIX = "x_"
-# Using triple underscore as a separator since a single underscore could be an
-# encoded character and a double underscore could be two consecutive encoded character
-_SEGMENT_SEPARATOR = "___"
-
-
-# -- Mapping key encoding --
-def _encode_segment(value: str) -> str:
-    """Encode forbidden characters as _XX_ (hex), leave [a-zA-Z0-9] as-is."""
-    encoded = re.sub(
-        r"[^a-zA-Z0-9]|_",
-        lambda m: f"_{ord(m.group()):02X}_",
-        str(value),
-    )
-    return f"{_SEGMENT_PREFIX}{encoded}"
-
-
-def _decode_segment(encoded: str) -> str:
-    """Decode _XX_ sequences back to original characters."""
-    encoded = encoded.removeprefix(_SEGMENT_PREFIX)
-
-    return re.sub(
-        r"_([0-9A-F]{2})_",
-        lambda m: chr(int(m.group(1), 16)),
-        encoded,
-    )
-
-
-def _encode_mapping_key(values: tuple) -> str:
-    return _SEGMENT_SEPARATOR.join(_encode_segment(v) for v in values)
-
-
-def _decode_mapping_key(mapping_key: str) -> list:
-    return [
-        _decode_segment(segment)
-        for segment in mapping_key.split(_SEGMENT_SEPARATOR)
-    ]
-
 
 def _in_to_asset_in(name: str, op_in: dg.In) -> dg.AssetIn:
     """
