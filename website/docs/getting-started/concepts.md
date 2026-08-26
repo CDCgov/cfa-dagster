@@ -2,7 +2,11 @@
 
 The purpose of this page is to provide a high-level overview of the tools commonly used in CFA Dagster projects. This is not a comprehensive list of all Dagster capabilities. For additional information on Dagster concepts, click on [this link](https://docs.dagster.io/getting-started/concepts).
 
-Dagster is an **asset-centric workflow orchestration tool** versus a task-centric workflow tool. An asset-centric workflow focuses on outputs and has upstream assets that are used as inputs to create their downstream [dependencies](https://docs.dagster.io/dagster-basics-tutorial/dependencies). A task-centric tool focuses on steps taken in a workflow. For example, if we were baking cookies, a task-centric workflow would include steps like gathering ingredients, combining ingredients, adding chocolate chips, baking in the oven, and eating the cookies. On the other hand, with the cookie example, an asset-centric workflow approach would look like the following: to create cookie dough, combine the wet ingredients with the dry ingredients; to create chocolate chip cookie dough, mix in the chocolate chips into the cookie dough; bake the chocolate chip cookie dough to eat freshly baked chocolate chip cookies. (Cookie example from [Dagster University Dagster Essentials course](https://courses.dagster.io/courses/dagster-essentials))
+Dagster is an **asset-centric workflow orchestration tool** versus a task-centric workflow tool. An asset-centric workflow focuses on outputs and has upstream assets that are used as inputs to create their downstream [dependencies](https://docs.dagster.io/dagster-basics-tutorial/dependencies). 
+
+A task-centric tool focuses on steps taken in a workflow. For example, if we were baking cookies, a task-centric workflow would include steps like gathering ingredients, combining ingredients, adding chocolate chips, baking in the oven, and eating the cookies. 
+
+On the other hand, with the cookie example, an asset-centric workflow approach would look like the following: to create cookie dough, combine the wet ingredients with the dry ingredients; to create chocolate chip cookie dough, mix in the chocolate chips into the cookie dough; bake the chocolate chip cookie dough to eat freshly baked chocolate chip cookies. (Cookie example from [Dagster University Dagster Essentials course](https://courses.dagster.io/courses/dagster-essentials))
 
 ## Assets
 
@@ -40,6 +44,8 @@ defs = dg.Definitions(
 )
 ```
 
+This enables you to simply reference `**collected_defs` instead of having to reference each definition manually in `dg.Definitions`, as vanilla dagster would have you do.
+
 ## Dynamic Graph Assets
 
 [Dynamic graph assets](../api.md#cfa_dagster.dynamic_graph_asset.dynamic_graph_asset) combine two existing Dagster concepts, [graph assets](https://docs.dagster.io/guides/build/assets/graph-backed-assets#defining-graph-backed-assets) and [dynamic outputs](https://docs.dagster.io/guides/build/ops/dynamic-graphs#a-dynamic-job), into one decorator to provide easy, runtime-configurable parallelism. Unlike normal Dagster partitions, dynamic graph assets allows you to parallelize logic against more than two dimensions.
@@ -68,17 +74,25 @@ defs = dg.Definitions(
 )
 ```
 
+Dynamic Graph Assets are partially motivated by limitations on Partitioned assets - currently, dagster only supports up to two [Partitions](#partitions). A Dynamic Graph Asset can have these two partition dimensions in addition to any number of Graph Dimensions.
+
 ## Executors
 
 [Executors](https://docs.dagster.io/guides/operate/run-executors) manage how each step or asset in a job is executed. In the cookie example, this would be the head baker deciding who should be performing what tasks and making sure those tasks get done in the proper order. The specific head baker in the bakery that day could be the head baker who likes to have multiple bakers to assemble the cookie dough at the same time or the head baker who wants one baker to make the dough.
 
 Some of the most common executors used in CFA are:
 
-- `in_process_executor` or `multiprocess_executor` for running workflow through Dagster locally.
-- `docker_executor` for running workflow using Docker containers.
+- `in_process_executor` or `multiprocess_executor` for running workflows through Dagster locally. 
+    
+    - These are used for simple jobs and tasks.
+
+- `docker_executor` for running workflows locally, but within docker containers.
+    
+    - These are used for prototyping something you will eventually send to production in Azure.
+
 - [`azure_batch_executor`](../api.md#cfa_dagster.azure_batch_executor) or [`azure_container_app_job_executor`](../api.md#cfa_dagster.azure_container_app_job_executor) for running workflow through Azure.
 
-You can create an executor via [`SelectorConfig`](../api.md#cfa_dagster.SelectorConfig):
+You can create an executor for your definitions file via [`SelectorConfig`](../api.md#cfa_dagster.SelectorConfig):
 
 ```python
 docker_execution_config = ExecutionConfig(
@@ -195,7 +209,7 @@ Resources often represent:
 - Credentials and secrets
 - Logging systems
 - I/O managers
-- Configuration dictionaries
+- Configuration dictionaries shared between multiple assets
 
 ```python
 from dagster_azure.blob import (
@@ -226,9 +240,9 @@ defs = dg.Definitions(
 
 ## Run Launchers
 
-A [run launcher](https://docs.dagster.io/deployment/execution/run-launchers) allocates the necessary computational resources to carry out a run execution and then starts the execution. In the cookie example, this would be like clearing off the counters, getting all of your necessary components (mixing bowl, whisk, ingredients, etc.) out on the counter before you start making the cookie dough. Then, once you have everything set up, you begin making cookies. In `cfa-dagster`, the run launcher is a [`DynamicRunLauncher`](../api.md#cfa_dagster.DynamicRunLauncher), which instantiates a concrete launcher at runtime (`DefaultRunLauncher`, `DockerRunLauncher`, or [`AzureContainerAppJobLauncher`](../api.md#cfa_dagster.AzureContainerAppJobRunLauncher)) based on configuration found on the run, run tags, or repository metadata, then delegates launch/resume/health/terminate operations to that concrete launcher.
+A [run launcher](https://docs.dagster.io/deployment/execution/run-launchers) allocates the necessary computational resources to carry out a run execution and then starts the execution. In the cookie example, this would be like clearing off the counters, getting all of your necessary components (mixing bowl, whisk, ingredients, etc.) out on the counter before you start making the cookie dough. Then, once you have everything set up, you begin making cookies. In `cfa-dagster`, the run launcher used is typically the [`DynamicRunLauncher`](../api.md#cfa_dagster.DynamicRunLauncher), which instantiates a concrete launcher at runtime (`DefaultRunLauncher`, `DockerRunLauncher`, or [`AzureContainerAppJobLauncher`](../api.md#cfa_dagster.AzureContainerAppJobRunLauncher)) based on configuration found on the run, run tags, or repository metadata, then delegates launch/resume/health/terminate operations to that concrete launcher.
 
-In most cases, you will not need to configure a run launcher and instead use an [executor](#executors) to configure your run environment. The `DynamicRunLauncher` will automatically choose the `DefaultRunLauncher` when running locally and the `AzureContainerAppJobRunLauncher` when running in production.
+In most cases, you will not need to configure a run launcher - you will inherit the default. The `DynamicRunLauncher` will automatically choose the `DefaultRunLauncher` when running locally and the `AzureContainerAppJobRunLauncher` when running in production.
 
 ## Schedules
 
