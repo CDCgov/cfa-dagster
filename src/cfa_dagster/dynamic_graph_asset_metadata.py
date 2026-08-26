@@ -10,7 +10,8 @@ from dagster._core.definitions.partitions.utils.multi import (
 SHOULD_INPUT_MANAGER_INHERIT_GRAPH_DIMENSIONS = (
     "should_input_manager_inherit_graph_dimensions"
 )
-DYNAMIC_GRAPH_IO_MANAGER_METADATA_KEY = "cfa_dagster_dynamic_graph"
+DYNAMIC_GRAPH_IO_MANAGER_METADATA_KEY = "cfa_dagster/dynamic_graph_asset_io_metadata"
+DYNAMIC_GRAPH_ASSET_METADATA_KEY = "cfa_dagster/dynamic_graph_asset_metadata"
 
 # Choosing a lesser-used alpha char as a prefix to prevent Dagster/python keyword errors.
 _SEGMENT_PREFIX = "x_"
@@ -111,6 +112,42 @@ def _get_asset_partition_keys(context: dg.InputContext) -> list[Any]:
     return []
 
 
+def _get_upstream_dynamic_graph_output_mode(
+    context: dg.InputContext,
+) -> Optional[str]:
+    try:
+        upstream_output = context.upstream_output
+    except Exception:
+        return None
+
+    if upstream_output is None:
+        return None
+
+    try:
+        raw = upstream_output.definition_metadata.get(
+            DYNAMIC_GRAPH_ASSET_METADATA_KEY
+        )
+    except Exception:
+        return None
+
+    if isinstance(raw, dg.MetadataValue):
+        raw = raw.value
+    if not isinstance(raw, dict):
+        return None
+    return raw.get("output_mode")
+
+
+def _should_inherit_graph_dimensions(context: dg.InputContext) -> bool:
+    explicit = context.definition_metadata.get(
+        SHOULD_INPUT_MANAGER_INHERIT_GRAPH_DIMENSIONS,
+        None,
+    )
+    if explicit is not None:
+        return explicit is True
+
+    return _get_upstream_dynamic_graph_output_mode(context) == "all"
+
+
 def _normalize_partition_key(key: Any) -> str:
     return str(key).replace(MULTIPARTITION_KEY_DELIMITER, "/")
 
@@ -163,22 +200,23 @@ def get_inherited_graph_dimension_input_metadata(
     context: dg.InputContext,
 ) -> Optional[DynamicGraphIOManagerMetadata]:
     """
-    Build dynamic graph IO metadata for a @dynamic_graph_asset input that opts into graph dimension inheritance.
+    Build dynamic graph IO metadata for a @dynamic_graph_asset input that should inherit upstream graph dimensions.
 
     ``dg.In.metadata`` is static, so it cannot contain the current mapped graph
-    dimension values. When the user sets
-    ``should_input_manager_inherit_graph_dimensions=True``, derive those values
-    from the mapped input context at load time instead.
+    dimension values. When inheritance is enabled, derive those values from the
+    mapped input context at load time instead.
+
+    Inheritance is enabled when the user explicitly sets
+    ``should_input_manager_inherit_graph_dimensions=True``, or by default when
+    the upstream asset is a dynamic graph asset with ``output_mode="all"``.
+    Explicit ``False`` disables inheritance.
 
     This metadata is more specific than static ``DynamicGraphIOManagerMetadata``
     on the input because it comes from the current mapped step and upstream
     asset context, so IO managers should let it take precedence when both are
     present.
     """
-    if not context.definition_metadata.get(
-        SHOULD_INPUT_MANAGER_INHERIT_GRAPH_DIMENSIONS,
-        False,
-    ):
+    if not _should_inherit_graph_dimensions(context):
         return None
 
     mapping_key = _get_mapping_key(context)

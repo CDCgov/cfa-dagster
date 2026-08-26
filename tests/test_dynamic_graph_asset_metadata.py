@@ -6,6 +6,7 @@ from cfa_dagster.azure_adls2.filesystem_io_manager import (
 )
 from cfa_dagster.azure_adls2.pickle_io_manager import ADLS2PickleIOManager
 from cfa_dagster.dynamic_graph_asset_metadata import (
+    DYNAMIC_GRAPH_ASSET_METADATA_KEY,
     SHOULD_INPUT_MANAGER_INHERIT_GRAPH_DIMENSIONS,
     DynamicGraphIOManagerMetadata,
     _decode_mapping_key,
@@ -36,6 +37,7 @@ class _FakeInputContext:
         mapping_key,
         asset_key=dg.AssetKey(["upstream"]),
         asset_partition_keys=None,
+        upstream_definition_metadata=None,
     ):
         self.definition_metadata = definition_metadata
         self.step_context = _FakeStepContext(mapping_key)
@@ -43,6 +45,9 @@ class _FakeInputContext:
         self.has_asset_key = asset_key is not None
         self._asset_partition_keys = asset_partition_keys or []
         self.has_asset_partitions = bool(asset_partition_keys)
+        self.upstream_output = _FakeUpstreamOutput(
+            upstream_definition_metadata or {}
+        )
 
     @property
     def asset_partition_keys(self):
@@ -52,6 +57,12 @@ class _FakeInputContext:
 class _FakeLog:
     def debug(self, message):
         pass
+
+
+class _FakeUpstreamOutput:
+    def __init__(self, definition_metadata):
+        self.definition_metadata = definition_metadata
+        self.has_asset_key = False
 
 
 def test_mapping_key_round_trips_special_characters():
@@ -64,6 +75,47 @@ def test_inherited_graph_dimension_metadata_requires_opt_in():
     context = _FakeInputContext(
         definition_metadata={},
         mapping_key=_encode_mapping_key(("A",)),
+    )
+
+    assert get_inherited_graph_dimension_input_metadata(context) is None
+
+
+def test_inherited_graph_dimension_metadata_defaults_for_upstream_output_mode_all():
+    context = _FakeInputContext(
+        definition_metadata={},
+        mapping_key=_encode_mapping_key(("A",)),
+        upstream_definition_metadata={
+            DYNAMIC_GRAPH_ASSET_METADATA_KEY: {"output_mode": "all"},
+        },
+    )
+
+    metadata = get_inherited_graph_dimension_input_metadata(context)
+
+    assert metadata is not None
+    assert metadata.synthetic_partition_keys == ["A"]
+
+
+def test_inherited_graph_dimension_metadata_does_not_default_for_output_mode_first():
+    context = _FakeInputContext(
+        definition_metadata={},
+        mapping_key=_encode_mapping_key(("A",)),
+        upstream_definition_metadata={
+            DYNAMIC_GRAPH_ASSET_METADATA_KEY: {"output_mode": "first"},
+        },
+    )
+
+    assert get_inherited_graph_dimension_input_metadata(context) is None
+
+
+def test_inherited_graph_dimension_metadata_false_overrides_output_mode_all():
+    context = _FakeInputContext(
+        definition_metadata={
+            SHOULD_INPUT_MANAGER_INHERIT_GRAPH_DIMENSIONS: False,
+        },
+        mapping_key=_encode_mapping_key(("A",)),
+        upstream_definition_metadata={
+            DYNAMIC_GRAPH_ASSET_METADATA_KEY: {"output_mode": "all"},
+        },
     )
 
     assert get_inherited_graph_dimension_input_metadata(context) is None
