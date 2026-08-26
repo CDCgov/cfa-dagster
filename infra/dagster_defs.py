@@ -229,7 +229,7 @@ def create_or_update_code_location_aca(
                             "memory": "1Gi",
                         },
                         "command": [
-                            "dagster",
+                            "cfa-dagster",
                             "code-server",
                             "start",
                             "-h",
@@ -244,6 +244,10 @@ def create_or_update_code_location_aca(
                         "env": [
                             {"name": "DAGSTER_USER", "value": "prod"},
                             {"name": "CFA_DAGSTER_ENV", "value": "prod"},
+                            {
+                                "name": "CFA_DAGSTER_ALLOW_DEFAULT_DEFS_OVERRIDE",
+                                "value": "true",
+                            },
                             {"name": "DEPLOY_DATE", "value": deploy_date},
                             {
                                 "name": "AZURE_CLIENT_ID",
