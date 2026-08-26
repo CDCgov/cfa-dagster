@@ -845,13 +845,11 @@ def dynamic_graph_asset(
                             else {}
                         ),
                         metadata=(
-                            (
-                                DynamicGraphIOManagerMetadata(
-                                    skip_input=True
-                                ).to_dict()
-                                if should_return_all
-                                else {}
-                            )
+                            DynamicGraphIOManagerMetadata(
+                                skip_input=True
+                            ).to_dict()
+                            if should_return_all
+                            else {}
                         ),
                     )
                     if does_return_value

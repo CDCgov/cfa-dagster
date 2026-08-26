@@ -143,9 +143,9 @@ def test_dynamic_graph_asset_without_return_runs_all_dimensions():
 
 
 def test_dynamic_graph_asset_metadata_records_output_mode():
-    assert dynamic_asset_no_return.metadata_by_key[dynamic_asset_no_return.key][
-        DYNAMIC_GRAPH_ASSET_METADATA_KEY
-    ] == {"output_mode": "all"}
+    assert dynamic_asset_no_return.metadata_by_key[
+        dynamic_asset_no_return.key
+    ][DYNAMIC_GRAPH_ASSET_METADATA_KEY] == {"output_mode": "all"}
     assert dynamic_asset_returns_objects.metadata_by_key[
         dynamic_asset_returns_objects.key
     ][DYNAMIC_GRAPH_ASSET_METADATA_KEY] == {"output_mode": "all"}

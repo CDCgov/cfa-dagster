@@ -10,7 +10,9 @@ from dagster._core.definitions.partitions.utils.multi import (
 SHOULD_INPUT_MANAGER_INHERIT_GRAPH_DIMENSIONS = (
     "should_input_manager_inherit_graph_dimensions"
 )
-DYNAMIC_GRAPH_IO_MANAGER_METADATA_KEY = "cfa_dagster/dynamic_graph_asset_io_metadata"
+DYNAMIC_GRAPH_IO_MANAGER_METADATA_KEY = (
+    "cfa_dagster/dynamic_graph_asset_io_metadata"
+)
 DYNAMIC_GRAPH_ASSET_METADATA_KEY = "cfa_dagster/dynamic_graph_asset_metadata"
 
 # Choosing a lesser-used alpha char as a prefix to prevent Dagster/python keyword errors.
