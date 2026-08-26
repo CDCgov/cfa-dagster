@@ -34,9 +34,9 @@ from dagster._utils.warnings import BetaWarning
 from pydantic import PrivateAttr
 from typing_extensions import Unpack
 
-from .azure_adls2.filesystem_metadata import ADLS2FilesystemIOManagerMetadata
 from .azure_adls2.pickle_io_manager import ADLS2PickleIOManager
 from .dynamic_graph_asset_metadata import (
+    DynamicGraphIOManagerMetadata,
     _decode_mapping_key,
     _encode_mapping_key,
 )
@@ -286,6 +286,7 @@ _multiprocess_config = ExecutionConfig(
 _in_process_config = ExecutionConfig(
     executor=SelectorConfig(class_name="in_process_executor")
 )
+
 
 def _in_to_asset_in(name: str, op_in: dg.In) -> dg.AssetIn:
     """
@@ -769,7 +770,7 @@ def dynamic_graph_asset(
                 # Merge our graph_dimensions metadata
                 merged_metadata = {
                     **dict(metadata),
-                    **ADLS2FilesystemIOManagerMetadata(
+                    **DynamicGraphIOManagerMetadata(
                         asset_key_path=final_asset_key.path,
                         asset_partition_keys=context.partition_keys
                         if context.has_partition_key
@@ -795,7 +796,7 @@ def dynamic_graph_asset(
                             else {}
                         ),
                         metadata=(
-                            ADLS2FilesystemIOManagerMetadata(
+                            DynamicGraphIOManagerMetadata(
                                 skip_input=True
                             ).to_dict()
                         ),
@@ -838,7 +839,7 @@ def dynamic_graph_asset(
                 # Merge our graph_dimensions metadata
                 merged_metadata = {
                     **dict(metadata),
-                    **ADLS2FilesystemIOManagerMetadata(
+                    **DynamicGraphIOManagerMetadata(
                         skip_output=True
                     ).to_dict(),
                 }

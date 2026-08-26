@@ -1,12 +1,16 @@
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
 import dagster as dg
+from dagster._core.definitions.partitions.utils.multi import (
+    MULTIPARTITION_KEY_DELIMITER,
+)
 
 SHOULD_INPUT_MANAGER_INHERIT_GRAPH_DIMENSIONS = (
     "should_input_manager_inherit_graph_dimensions"
 )
+DYNAMIC_GRAPH_IO_MANAGER_METADATA_KEY = "cfa_dagster_dynamic_graph"
 
 # Choosing a lesser-used alpha char as a prefix to prevent Dagster/python keyword errors.
 _SEGMENT_PREFIX = "x_"
@@ -16,10 +20,38 @@ _SEGMENT_SEPARATOR = "___"
 
 
 @dataclass
-class InheritedGraphDimensionInputMetadata:
-    asset_key_path: list[str]
-    asset_partition_keys: list[Any]
-    synthetic_partition_keys: list[str]
+class DynamicGraphIOManagerMetadata:
+    asset_key_path: list[str] = field(default_factory=list)
+    asset_partition_keys: list[Any] = field(default_factory=list)
+    synthetic_partition_keys: list[str] = field(default_factory=list)
+    skip_input: bool = False
+    skip_output: bool = False
+
+    @classmethod
+    def from_metadata(
+        cls,
+        metadata: dict,
+    ) -> Optional["DynamicGraphIOManagerMetadata"]:
+        raw = metadata.get(DYNAMIC_GRAPH_IO_MANAGER_METADATA_KEY)
+        if raw is None:
+            return None
+        if isinstance(raw, dg.MetadataValue):
+            raw = raw.value
+        if not isinstance(raw, dict):
+            raise TypeError(
+                f"Expected '{DYNAMIC_GRAPH_IO_MANAGER_METADATA_KEY}' metadata "
+                f"to be a dict, got {type(raw)}"
+            )
+        return cls(
+            asset_key_path=raw.get("asset_key_path", []),
+            asset_partition_keys=raw.get("asset_partition_keys", []),
+            synthetic_partition_keys=raw.get("synthetic_partition_keys", []),
+            skip_input=raw.get("skip_input", False),
+            skip_output=raw.get("skip_output", False),
+        )
+
+    def to_dict(self) -> dict:
+        return {DYNAMIC_GRAPH_IO_MANAGER_METADATA_KEY: asdict(self)}
 
 
 def _encode_segment(value: str) -> str:
@@ -79,9 +111,70 @@ def _get_asset_partition_keys(context: dg.InputContext) -> list[Any]:
     return []
 
 
+def _normalize_partition_key(key: Any) -> str:
+    return str(key).replace(MULTIPARTITION_KEY_DELIMITER, "/")
+
+
+def expand_and_combine_partition_keys(
+    real_keys: list[Any],
+    synthetic_partition_keys: list[str],
+) -> list[str]:
+    expanded = [_normalize_partition_key(key) for key in real_keys]
+    dim_suffix = "/".join(synthetic_partition_keys)
+
+    if expanded and dim_suffix:
+        return [f"{key}/{dim_suffix}" for key in expanded]
+    if dim_suffix:
+        return [dim_suffix]
+    return expanded
+
+
+def patch_context_with_dynamic_graph_metadata(
+    context: dg.InputContext | dg.OutputContext,
+    metadata: DynamicGraphIOManagerMetadata,
+) -> None:
+    if metadata.synthetic_partition_keys:
+        real_keys = (
+            context.asset_partition_keys
+            if context.has_asset_partitions
+            else metadata.asset_partition_keys or []
+        )
+        synthetic_keys = expand_and_combine_partition_keys(
+            real_keys=list(real_keys),
+            synthetic_partition_keys=metadata.synthetic_partition_keys,
+        )
+        has_partitions = bool(synthetic_keys)
+
+        context.__class__.asset_partition_keys = property(
+            lambda self: synthetic_keys
+        )
+        context.__class__.has_asset_partitions = property(
+            lambda self: has_partitions
+        )
+
+    if metadata.asset_key_path:
+        context.__class__.asset_key = property(
+            lambda self: dg.AssetKey(metadata.asset_key_path)
+        )
+        context.__class__.has_asset_key = property(lambda self: True)
+
+
 def get_inherited_graph_dimension_input_metadata(
     context: dg.InputContext,
-) -> Optional[InheritedGraphDimensionInputMetadata]:
+) -> Optional[DynamicGraphIOManagerMetadata]:
+    """
+    Build dynamic graph IO metadata for a @dynamic_graph_asset input that opts into graph dimension inheritance.
+
+    ``dg.In.metadata`` is static, so it cannot contain the current mapped graph
+    dimension values. When the user sets
+    ``should_input_manager_inherit_graph_dimensions=True``, derive those values
+    from the mapped input context at load time instead.
+
+    This metadata is more specific than static ``DynamicGraphIOManagerMetadata``
+    on the input because it comes from the current mapped step and upstream
+    asset context, so IO managers should let it take precedence when both are
+    present.
+    """
     if not context.definition_metadata.get(
         SHOULD_INPUT_MANAGER_INHERIT_GRAPH_DIMENSIONS,
         False,
@@ -96,7 +189,7 @@ def get_inherited_graph_dimension_input_metadata(
     if asset_key_path is None:
         return None
 
-    return InheritedGraphDimensionInputMetadata(
+    return DynamicGraphIOManagerMetadata(
         asset_key_path=asset_key_path,
         asset_partition_keys=_get_asset_partition_keys(context),
         synthetic_partition_keys=_decode_mapping_key(mapping_key),

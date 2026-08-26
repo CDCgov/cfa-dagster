@@ -14,6 +14,11 @@ from dagster_azure.adls2 import (
 from dagster_azure.adls2.resources import ADLS2Resource
 from pydantic import Field
 
+from ..dynamic_graph_asset_metadata import (
+    DynamicGraphIOManagerMetadata,
+    get_inherited_graph_dimension_input_metadata,
+    patch_context_with_dynamic_graph_metadata,
+)
 from ..utils import is_production, require_dagster_user
 
 
@@ -121,7 +126,36 @@ class ADLS2PickleIOManager(ConfigurableIOManager):
                     f"found key: {upstream_key} returning override: {override}"
                 )
                 return override
+
+        dynamic_graph_metadata = DynamicGraphIOManagerMetadata.from_metadata(
+            context.definition_metadata
+        )
+        if dynamic_graph_metadata and dynamic_graph_metadata.skip_input:
+            context.log.debug("load_input: skip_input=True, returning None")
+            return
+
+        # check if this was configured to inherit upstream graph dimensions
+        inherited_dimension_metadata = get_inherited_graph_dimension_input_metadata(context)
+        # Inherited metadata is derived from the mapped input context and takes
+        # precedence over static DynamicGraphIOManagerMetadata on the input.
+        if inherited_dimension_metadata:
+            patch_context_with_dynamic_graph_metadata(context, inherited_dimension_metadata)
+        elif dynamic_graph_metadata:
+            patch_context_with_dynamic_graph_metadata(context, dynamic_graph_metadata)
+
         return self._internal_io_manager.load_input(context)
 
     def handle_output(self, context: "OutputContext", obj: Any) -> None:
+        dynamic_graph_metadata = DynamicGraphIOManagerMetadata.from_metadata(
+            context.output_metadata or {}
+        )
+        if dynamic_graph_metadata:
+            if dynamic_graph_metadata.skip_output:
+                context.log.debug(
+                    "handle_output: skip_output=True, skipping upload"
+                )
+                return
+
+            patch_context_with_dynamic_graph_metadata(context, dynamic_graph_metadata)
+
         self._internal_io_manager.handle_output(context, obj)
