@@ -135,13 +135,19 @@ class ADLS2PickleIOManager(ConfigurableIOManager):
             return
 
         # check if this was configured to inherit upstream graph dimensions
-        inherited_dimension_metadata = get_inherited_graph_dimension_input_metadata(context)
+        inherited_dimension_metadata = (
+            get_inherited_graph_dimension_input_metadata(context)
+        )
         # Inherited metadata is derived from the mapped input context and takes
         # precedence over static DynamicGraphIOManagerMetadata on the input.
         if inherited_dimension_metadata:
-            patch_context_with_dynamic_graph_metadata(context, inherited_dimension_metadata)
+            patch_context_with_dynamic_graph_metadata(
+                context, inherited_dimension_metadata
+            )
         elif dynamic_graph_metadata:
-            patch_context_with_dynamic_graph_metadata(context, dynamic_graph_metadata)
+            patch_context_with_dynamic_graph_metadata(
+                context, dynamic_graph_metadata
+            )
 
         return self._internal_io_manager.load_input(context)
 
@@ -156,6 +162,8 @@ class ADLS2PickleIOManager(ConfigurableIOManager):
                 )
                 return
 
-            patch_context_with_dynamic_graph_metadata(context, dynamic_graph_metadata)
+            patch_context_with_dynamic_graph_metadata(
+                context, dynamic_graph_metadata
+            )
 
         self._internal_io_manager.handle_output(context, obj)

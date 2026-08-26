@@ -135,7 +135,9 @@ class FilesystemADLS2IOManager(UPathIOManager):
             return
 
         if dynamic_graph_metadata:
-            patch_context_with_dynamic_graph_metadata(context, dynamic_graph_metadata)
+            patch_context_with_dynamic_graph_metadata(
+                context, dynamic_graph_metadata
+            )
             log.debug(
                 f"Patched context with dynamic graph metadata: {dynamic_graph_metadata}"
             )
@@ -151,7 +153,9 @@ class FilesystemADLS2IOManager(UPathIOManager):
             input_metadata
         )
         # check if this was configured to inherit upstream graph dimensions
-        inherited_dimension_metadata = get_inherited_graph_dimension_input_metadata(context)
+        inherited_dimension_metadata = (
+            get_inherited_graph_dimension_input_metadata(context)
+        )
 
         if dynamic_graph_metadata and dynamic_graph_metadata.skip_input:
             log.debug("load_input: skip_input=True, returning None")
@@ -160,9 +164,13 @@ class FilesystemADLS2IOManager(UPathIOManager):
         # Inherited metadata is derived from the mapped input context and takes
         # precedence over static DynamicGraphIOManagerMetadata on the input.
         if inherited_dimension_metadata:
-            patch_context_with_dynamic_graph_metadata(context, inherited_dimension_metadata)
+            patch_context_with_dynamic_graph_metadata(
+                context, inherited_dimension_metadata
+            )
         elif dynamic_graph_metadata:
-            patch_context_with_dynamic_graph_metadata(context, dynamic_graph_metadata)
+            patch_context_with_dynamic_graph_metadata(
+                context, dynamic_graph_metadata
+            )
 
         return super().load_input(context)
 
