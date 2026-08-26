@@ -2,7 +2,6 @@ import ast
 import inspect
 import itertools
 import logging
-import re
 import sys
 import textwrap
 import warnings
@@ -35,8 +34,13 @@ from dagster._utils.warnings import BetaWarning
 from pydantic import PrivateAttr
 from typing_extensions import Unpack
 
-from .azure_adls2.filesystem_metadata import ADLS2FilesystemIOManagerMetadata
 from .azure_adls2.pickle_io_manager import ADLS2PickleIOManager
+from .dynamic_graph_asset_metadata import (
+    DYNAMIC_GRAPH_ASSET_METADATA_KEY,
+    DynamicGraphIOManagerMetadata,
+    _decode_mapping_key,
+    _encode_mapping_key,
+)
 from .execution.utils import ExecutionConfig, SelectorConfig
 
 log = logging.getLogger(__name__)
@@ -284,46 +288,6 @@ _in_process_config = ExecutionConfig(
     executor=SelectorConfig(class_name="in_process_executor")
 )
 
-#  Choosing a lesser-used alpha char as a prefix to prevent Dagster/python keyword errors
-# DagsterInvalidDefinitionError: "in" is not a valid name in Dagster. It conflicts with a Dagster or python reserved keyword.
-_SEGMENT_PREFIX = "x_"
-# Using triple underscore as a separator since a single underscore could be an
-# encoded character and a double underscore could be two consecutive encoded character
-_SEGMENT_SEPARATOR = "___"
-
-
-# -- Mapping key encoding --
-def _encode_segment(value: str) -> str:
-    """Encode forbidden characters as _XX_ (hex), leave [a-zA-Z0-9] as-is."""
-    encoded = re.sub(
-        r"[^a-zA-Z0-9]|_",
-        lambda m: f"_{ord(m.group()):02X}_",
-        str(value),
-    )
-    return f"{_SEGMENT_PREFIX}{encoded}"
-
-
-def _decode_segment(encoded: str) -> str:
-    """Decode _XX_ sequences back to original characters."""
-    encoded = encoded.removeprefix(_SEGMENT_PREFIX)
-
-    return re.sub(
-        r"_([0-9A-F]{2})_",
-        lambda m: chr(int(m.group(1), 16)),
-        encoded,
-    )
-
-
-def _encode_mapping_key(values: tuple) -> str:
-    return _SEGMENT_SEPARATOR.join(_encode_segment(v) for v in values)
-
-
-def _decode_mapping_key(mapping_key: str) -> list:
-    return [
-        _decode_segment(segment)
-        for segment in mapping_key.split(_SEGMENT_SEPARATOR)
-    ]
-
 
 def _in_to_asset_in(name: str, op_in: dg.In) -> dg.AssetIn:
     """
@@ -413,7 +377,7 @@ def dynamic_graph_asset(
     ins: dict[str, dg.In] | None = None,
     io_manager_key: str | None = None,
     retry_policy: dg.RetryPolicy | None = None,
-    output_mode: Literal["first", "all"] = "first",
+    output_mode: Literal["first", "all"] = "all",
     **graph_asset_kwargs: Unpack[GraphAssetKwargs],
 ) -> dg.AssetsDefinition | Callable[[Callable[..., Any]], dg.AssetsDefinition]:
     """
@@ -443,6 +407,12 @@ def dynamic_graph_asset(
         ins (Optional[Dict[str, In]]):
             Information about the inputs to the op. Information provided here will be combined
             with what can be inferred from the function signature.
+            Inputs can set ``metadata={"should_input_manager_inherit_graph_dimensions": True}``
+            to force dynamic graph IO managers to load the upstream value for the current
+            mapped graph dimension. Set the value to ``False`` to opt out. When the key is
+            absent, inheritance is enabled automatically only if the upstream asset is a
+            ``dynamic_graph_asset`` with ``output_mode="all"``. The value is expected to be
+            a boolean; string values such as ``"True"`` or ``"False"`` are not supported.
         config (Optional[Union[ConfigMapping], Mapping[str, Any]):
             Describes how the graph underlying the asset is configured at runtime.
 
@@ -490,7 +460,7 @@ def dynamic_graph_asset(
             single dimension (``"first"``, the default) or collected across all dimensions
             (``"all"``). Use ``"all"`` when each dimension should independently produce an
             output, e.g. with the ADLS2FilesystemIOManager where each dimension uploads
-            files. Defaults to ``"first"``.
+            files. Defaults to ``"all"``.
         key (Optional[CoeercibleToAssetKey]): The key for this asset. If provided, cannot specify key_prefix or name.
 
 
@@ -539,6 +509,38 @@ def dynamic_graph_asset(
                 metadata={"container": config.base_output_prefix},
             )
         Returns: [result_1, result_2, ... result_n]
+
+        Dynamic graph input inheritance:
+
+        @dynamic_graph_asset(
+            partitions_def=daily_partitions,
+            io_manager_key="ADLS2PickleIOManager",
+            output_mode="all",
+        )
+        def upstream_by_dimension(context: dg.OpExecutionContext, my_config: MyConfig):
+            return {"disease": my_config.disease.current_value}
+
+        @dynamic_graph_asset(
+            partitions_def=daily_partitions,
+            ins={
+                "upstream_by_dimension": dg.In(
+                    input_manager_key="ADLS2PickleIOManager",
+                    metadata={
+                        # Optional: this is the default for upstream dynamic_graph_asset(output_mode="all").
+                        "should_input_manager_inherit_graph_dimensions": True,
+                    },
+                ),
+            },
+        )
+        def downstream_by_dimension(
+            context: dg.OpExecutionContext,
+            my_config: MyConfig,
+            upstream_by_dimension: dict,
+        ):
+            assert upstream_by_dimension["disease"] == my_config.disease.current_value
+
+        To force a downstream input to load the upstream asset without graph-dimension
+        inheritance, set ``metadata={"should_input_manager_inherit_graph_dimensions": False}``.
 
         File from each graph dimension:
 
@@ -600,6 +602,12 @@ def dynamic_graph_asset(
         log.debug(f"decorated_fn_kwargs: {decorated_fn_kwargs}")
 
         final_asset_key = _get_asset_key(asset_name, graph_asset_kwargs)
+        graph_asset_metadata = {
+            **dict(graph_asset_kwargs.get("metadata") or {}),
+            DYNAMIC_GRAPH_ASSET_METADATA_KEY: {
+                "output_mode": output_mode,
+            },
+        }
 
         # -- Locate Resource parameters --
         resource_params = _get_resource_params(hints)
@@ -807,15 +815,19 @@ def dynamic_graph_asset(
                 # Merge our graph_dimensions metadata
                 merged_metadata = {
                     **dict(metadata),
-                    **ADLS2FilesystemIOManagerMetadata(
-                        asset_key_path=final_asset_key.path,
-                        asset_partition_keys=context.partition_keys
-                        if context.has_partition_key
-                        else [],
-                        synthetic_partition_keys=list(
-                            graph_dimensions.values()
-                        ),
-                    ).to_dict(),
+                    **(
+                        DynamicGraphIOManagerMetadata(
+                            asset_key_path=final_asset_key.path,
+                            asset_partition_keys=context.partition_keys
+                            if context.has_partition_key
+                            else [],
+                            synthetic_partition_keys=list(
+                                graph_dimensions.values()
+                            ),
+                        ).to_dict()
+                        if should_return_all
+                        else {}
+                    ),
                 }
                 log.debug(f"merged_metadata: '{merged_metadata}'")
 
@@ -833,9 +845,11 @@ def dynamic_graph_asset(
                             else {}
                         ),
                         metadata=(
-                            ADLS2FilesystemIOManagerMetadata(
+                            DynamicGraphIOManagerMetadata(
                                 skip_input=True
                             ).to_dict()
+                            if should_return_all
+                            else {}
                         ),
                     )
                     if does_return_value
@@ -876,9 +890,13 @@ def dynamic_graph_asset(
                 # Merge our graph_dimensions metadata
                 merged_metadata = {
                     **dict(metadata),
-                    **ADLS2FilesystemIOManagerMetadata(
-                        skip_output=True
-                    ).to_dict(),
+                    **(
+                        DynamicGraphIOManagerMetadata(
+                            skip_output=True
+                        ).to_dict()
+                        if should_return_all
+                        else {}
+                    ),
                 }
                 log.debug(f"merged_metadata: '{merged_metadata}'")
 
@@ -920,11 +938,12 @@ def dynamic_graph_asset(
                 name=asset_name,
                 **({} if config_cls is None else {"config": _config_mapping}),
                 ins={k: v for k, v in asset_ins.items()},
+                metadata=graph_asset_metadata,
                 resource_defs=merged_resource_defs,
                 **{
                     k: v
                     for k, v in graph_asset_kwargs.items()
-                    if k != "resource_defs"
+                    if k not in ["metadata", "resource_defs"]
                 },
             )
             def _asset(**ins_kwargs):

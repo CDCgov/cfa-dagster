@@ -9,11 +9,12 @@ from azure.storage.filedatalake import (
     FileSystemClient,
 )
 
+from .filesystem_types import OnInputConflict
+
 log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .filesystem_io_manager import FilesystemADLS2IOManager
-    from .filesystem_metadata import OnInputConflict
 
 
 @dataclass(frozen=True)

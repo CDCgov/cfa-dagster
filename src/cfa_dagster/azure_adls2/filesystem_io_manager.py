@@ -6,15 +6,10 @@ from typing import Any, Union, cast
 from azure.core.exceptions import ResourceNotFoundError
 from azure.storage.filedatalake import DataLakeServiceClient
 from dagster import (
-    AssetKey,
     ConfigurableIOManager,
     InputContext,
     OutputContext,
     ResourceDependency,
-)
-from dagster._core.definitions.partitions.utils import MultiPartitionKey
-from dagster._core.definitions.partitions.utils.multi import (
-    MULTIPARTITION_KEY_DELIMITER,
 )
 from dagster._core.storage.upath_io_manager import UPathIOManager
 from dagster._utils.cached_method import cached_method
@@ -22,13 +17,14 @@ from dagster_azure.adls2 import ADLS2DefaultAzureCredential, ADLS2Resource
 from pydantic import Field
 from upath import UPath
 
-from ..utils import is_production, require_dagster_user
-from .filesystem_metadata import (
-    ADLS2FilesystemIOManagerMetadata,
-    InputMode,
-    OnInputConflict,
+from ..dynamic_graph_asset_metadata import (
+    DynamicGraphIOManagerMetadata,
+    get_inherited_graph_dimension_input_metadata,
+    patch_context_with_dynamic_graph_metadata,
 )
+from ..utils import is_production, require_dagster_user
 from .filesystem_path import ADLS2Path
+from .filesystem_types import InputMode, OnInputConflict
 
 log = logging.getLogger(__name__)
 
@@ -127,97 +123,24 @@ class FilesystemADLS2IOManager(UPathIOManager):
         # and load_from_path to use the Azure SDK directly)
         super().__init__(base_path=UPath(self._prefix))
 
-    @staticmethod
-    def _expand_and_combine(
-        real_keys: list[str | MultiPartitionKey],
-        synthetic_partition_keys: list[str],
-    ) -> list[str]:
-        """
-        Normalize partition keys to slash-separated path segments and append
-        graph dimensions.
-
-        MultiPartitionKey already sorts dimensions by name in its __new__,
-        so the pipe-separated string is already in the correct order — we
-        just replace the delimiter.
-        """
-
-        def normalize(key: str) -> str:
-            return key.replace(MULTIPARTITION_KEY_DELIMITER, "/")
-
-        expanded = [normalize(k) for k in real_keys]
-        dim_suffix = "/".join(synthetic_partition_keys)
-
-        if expanded and dim_suffix:
-            return [f"{key}/{dim_suffix}" for key in expanded]
-        elif dim_suffix:
-            return [dim_suffix]
-        else:
-            return expanded
-
-    @staticmethod
-    def _patch_context(
-        context: InputContext | OutputContext,
-        meta: ADLS2FilesystemIOManagerMetadata,
-    ):
-        """
-        Monkey-patch context class properties so the parent UPathIOManager
-        sees the synthetic keys as if they were real Dagster partition keys.
-
-        Patching at the class level is required because Dagster context
-        properties are defined as class-level descriptors.
-        """
-        if meta.synthetic_partition_keys:
-            real_keys = (
-                context.asset_partition_keys
-                if context.has_asset_partitions
-                else meta.asset_partition_keys or []
-            )
-            synthetic_keys = FilesystemADLS2IOManager._expand_and_combine(
-                real_keys=real_keys,
-                synthetic_partition_keys=meta.synthetic_partition_keys,
-            )
-            has_partitions = bool(synthetic_keys)
-
-            context.__class__.asset_partition_keys = property(
-                lambda self: synthetic_keys
-            )
-            context.__class__.has_asset_partitions = property(
-                lambda self: has_partitions
-            )
-            log.debug(
-                f"Patched context: synthetic_partition_keys={synthetic_keys}"
-            )
-
-        if meta.asset_key_path:
-            context.__class__.asset_key = property(
-                lambda self: AssetKey(meta.asset_key_path)
-            )
-            context.__class__.has_asset_key = property(lambda self: True)
-            log.debug(f"Patched context: asset_key={meta.asset_key_path}")
-
     def handle_output(self, context: OutputContext, obj: Any):
-        meta = ADLS2FilesystemIOManagerMetadata.from_metadata(
-            context.output_metadata or {}
+        output_metadata = context.output_metadata or {}
+        log.debug(f"output_metadata: '{output_metadata}'")
+        dynamic_graph_metadata = DynamicGraphIOManagerMetadata.from_metadata(
+            output_metadata
         )
 
-        output_metadata = context.output_metadata
-        log.debug(f"output_metadata: '{output_metadata}'")
-        meta = ADLS2FilesystemIOManagerMetadata.from_metadata(output_metadata)
-
-        if meta and meta.skip_output:
+        if dynamic_graph_metadata and dynamic_graph_metadata.skip_output:
             log.info("dump_to_path: skip_output=True, skipping upload")
             return
 
-        if meta:
-            if meta.skip_output:
-                log.debug(
-                    f"handle_output found output metadata, patching context: {meta}"
-                )
-
-            log.debug(
-                f"handle_output found output metadata, patching context: {meta}"
+        if dynamic_graph_metadata:
+            patch_context_with_dynamic_graph_metadata(
+                context, dynamic_graph_metadata
             )
-            self._patch_context(context, meta)
+            log.debug(
+                f"Patched context with dynamic graph metadata: {dynamic_graph_metadata}"
+            )
         else:
             log.debug("handle_output no metadata found.")
 
@@ -226,16 +149,28 @@ class FilesystemADLS2IOManager(UPathIOManager):
     def load_input(self, context: InputContext) -> Union[Any, dict[str, Any]]:
         input_metadata = context.definition_metadata
         log.debug(f"input_metadata: '{input_metadata}'")
-        meta = ADLS2FilesystemIOManagerMetadata.from_metadata(input_metadata)
+        dynamic_graph_metadata = DynamicGraphIOManagerMetadata.from_metadata(
+            input_metadata
+        )
+        # check if this was configured to inherit upstream graph dimensions
+        inherited_dimension_metadata = (
+            get_inherited_graph_dimension_input_metadata(context)
+        )
 
-        if meta:
-            if meta.skip_input:
-                log.debug("load_input: skip_input=True, returning None")
-                return
+        if dynamic_graph_metadata and dynamic_graph_metadata.skip_input:
+            log.debug("load_input: skip_input=True, returning None")
+            return
 
-            # TODO: is this needed?
-            # if meta.synthetic_partition_keys:
-            #     self._patch_context(context, meta)
+        # Inherited metadata is derived from the mapped input context and takes
+        # precedence over static DynamicGraphIOManagerMetadata on the input.
+        if inherited_dimension_metadata:
+            patch_context_with_dynamic_graph_metadata(
+                context, inherited_dimension_metadata
+            )
+        elif dynamic_graph_metadata:
+            patch_context_with_dynamic_graph_metadata(
+                context, dynamic_graph_metadata
+            )
 
         return super().load_input(context)
 
@@ -358,16 +293,7 @@ class FilesystemADLS2IOManager(UPathIOManager):
         else:
             local_dir = Path(input_name)
 
-        # Extract per-asset metadata override for on_input_conflict
-        meta = ADLS2FilesystemIOManagerMetadata.from_metadata(
-            context.definition_metadata
-        )
-        effective_conflict = cast(
-            OnInputConflict,
-            meta.on_input_conflict
-            if meta and meta.on_input_conflict
-            else self._on_input_conflict,
-        )
+        effective_conflict = cast(OnInputConflict, self._on_input_conflict)
         log.debug(f"effective_conflict: {effective_conflict}")
 
         # ------------------------------------------------------------
