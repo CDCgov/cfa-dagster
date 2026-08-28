@@ -11,6 +11,7 @@ from .azure_batch.executor import azure_batch_executor
 from .azure_container_app_job.executor import azure_container_app_job_executor
 from .azure_container_app_job.launcher import AzureContainerAppJobRunLauncher
 from .azure_keyvault import AzureKeyVaultResource
+from .cli import start_dev_env
 from .docker.executor import docker_executor
 from .dynamic_graph_asset import (
     GraphDimension,
@@ -33,7 +34,6 @@ from .utils import (
     is_production,
     launch_asset_backfill,
     require_dagster_user,
-    start_dev_env,
 )
 
 # Create a logger for the package

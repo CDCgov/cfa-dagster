@@ -7,13 +7,15 @@ from click.exceptions import Abort, NoArgsIsHelpError, UsageError
 from dagster import MetadataValue
 from dagster_shared.check.functions import CheckError
 
-from cfa_dagster.execution.utils import ExecutionConfig, SelectorConfig
-from cfa_dagster.utils import (
+from cfa_dagster.cli import (
     DEFAULT_DEFS_FILE,
     _run_cli,
     get_defs_target,
     resolve_defs_file,
+    run_dagster_webserver,
+    start_dev_env,
 )
+from cfa_dagster.execution.utils import ExecutionConfig, SelectorConfig
 
 
 def test_selector_config_from_run_config():
@@ -314,8 +316,8 @@ def test_execution_config_from_executor_config():
 def test_run_cli_system_exit_propagates():
     mock_cli = Mock(side_effect=SystemExit(42))
     with (
-        patch("cfa_dagster.utils.set_env_vars"),
-        patch("cfa_dagster.utils.configure_dev_db"),
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
     ):
         with pytest.raises(SystemExit) as excinfo:
             _run_cli(mock_cli, "TEST", argv=["prog", "subcommand"])
@@ -325,8 +327,8 @@ def test_run_cli_system_exit_propagates():
 def test_run_cli_check_error_propagates():
     mock_cli = Mock(side_effect=CheckError("check failed"))
     with (
-        patch("cfa_dagster.utils.set_env_vars"),
-        patch("cfa_dagster.utils.configure_dev_db"),
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
     ):
         with pytest.raises(CheckError, match="check failed"):
             _run_cli(mock_cli, "TEST", argv=["prog", "subcommand"])
@@ -335,8 +337,8 @@ def test_run_cli_check_error_propagates():
 def test_run_cli_usage_error_propagates():
     mock_cli = Mock(side_effect=UsageError("bad usage"))
     with (
-        patch("cfa_dagster.utils.set_env_vars"),
-        patch("cfa_dagster.utils.configure_dev_db"),
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
     ):
         with pytest.raises(UsageError, match="bad usage"):
             _run_cli(mock_cli, "TEST", argv=["prog", "subcommand"])
@@ -345,8 +347,8 @@ def test_run_cli_usage_error_propagates():
 def test_run_cli_no_args_is_help():
     help_cli = Mock(side_effect=[NoArgsIsHelpError(Mock()), None])
     with (
-        patch("cfa_dagster.utils.set_env_vars"),
-        patch("cfa_dagster.utils.configure_dev_db"),
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
     ):
         with pytest.raises(SystemExit) as excinfo:
             _run_cli(help_cli, "TEST", argv=["prog", "subcommand"])
@@ -361,8 +363,8 @@ def test_run_cli_no_args_is_help():
 def test_run_cli_keyboard_interrupt():
     mock_cli = Mock(side_effect=KeyboardInterrupt())
     with (
-        patch("cfa_dagster.utils.set_env_vars"),
-        patch("cfa_dagster.utils.configure_dev_db"),
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
     ):
         with pytest.raises(SystemExit) as excinfo:
             _run_cli(mock_cli, "TEST", argv=["prog", "subcommand"])
@@ -372,12 +374,24 @@ def test_run_cli_keyboard_interrupt():
 def test_run_cli_click_abort():
     mock_cli = Mock(side_effect=Abort())
     with (
-        patch("cfa_dagster.utils.set_env_vars"),
-        patch("cfa_dagster.utils.configure_dev_db"),
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
     ):
         with pytest.raises(SystemExit) as excinfo:
             _run_cli(mock_cli, "TEST", argv=["prog", "subcommand"])
         assert excinfo.value.code == 0
+
+
+def test_start_dev_env_passes_defs_file_through_argv():
+    with (
+        patch("cfa_dagster.cli.sys.argv", ["example_defs.py", "-p", "4001"]),
+        patch("cfa_dagster.cli.run_dg") as run_dg_mock,
+    ):
+        start_dev_env("__main__")
+
+    run_dg_mock.assert_called_once_with(
+        argv=[None, "dev", "-f", "example_defs.py", "-p", "4001"]
+    )
 
 
 FLAT_LAYOUT_TOML = """
@@ -624,31 +638,95 @@ def test_resolve_defs_file_defaults_without_tool_dg_metadata(tmp_path):
 def test_run_cli_appends_resolved_defs_file_for_launch():
     mock_cli = Mock()
     with (
-        patch("cfa_dagster.utils.set_env_vars"),
-        patch("cfa_dagster.utils.configure_dev_db"),
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
         patch(
-            "cfa_dagster.utils.resolve_defs_file",
+            "cfa_dagster.cli.get_defs_target",
             return_value="/tmp/fake_defs.py",
         ),
     ):
-        _run_cli(
-            mock_cli,
-            "TEST",
-            argv=["prog", "launch"],
-            add_defs_file_if_missing=True,
-        )
+        _run_cli(mock_cli, "TEST", argv=["prog", "launch"])
 
     args = mock_cli.call_args.kwargs["args"]
     assert args[-2:] == ["-f", "/tmp/fake_defs.py"]
 
 
+def test_run_dagster_webserver_adds_host_port_and_defs_file():
+    mock_cli = Mock()
+    with (
+        patch("cfa_dagster.cli.sys.argv", ["prog"]),
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
+        patch("cfa_dagster.cli.get_defs_target", return_value="defs.py"),
+        patch("dagster_webserver.cli.cli", mock_cli),
+        patch(
+            "cfa_dagster.hot_reload.start_hot_reloader_for_dev"
+        ) as start_hot_reloader,
+    ):
+        run_dagster_webserver()
+
+    assert mock_cli.call_args.kwargs["args"] == [
+        "-h",
+        "127.0.0.1",
+        "-p",
+        "4000",
+        "-f",
+        "defs.py",
+    ]
+    start_hot_reloader.assert_not_called()
+
+
+def test_run_dagster_webserver_uses_existing_default_defs_file(tmp_path):
+    mock_cli = Mock()
+    (tmp_path / DEFAULT_DEFS_FILE).write_text("defs = None\n")
+    with (
+        patch("cfa_dagster.cli.sys.argv", ["prog"]),
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
+        patch("cfa_dagster.cli.Path.cwd", return_value=tmp_path),
+        patch("cfa_dagster.cli.get_defs_target", return_value=None),
+        patch("dagster_webserver.cli.cli", mock_cli),
+    ):
+        run_dagster_webserver()
+
+    assert mock_cli.call_args.kwargs["args"] == [
+        "-h",
+        "127.0.0.1",
+        "-p",
+        "4000",
+        "-f",
+        DEFAULT_DEFS_FILE,
+    ]
+
+
+def test_run_dagster_webserver_uses_empty_workspace_without_target(tmp_path):
+    mock_cli = Mock()
+    with (
+        patch("cfa_dagster.cli.sys.argv", ["prog"]),
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
+        patch("cfa_dagster.cli.Path.cwd", return_value=tmp_path),
+        patch("cfa_dagster.cli.get_defs_target", return_value=None),
+        patch("dagster_webserver.cli.cli", mock_cli),
+    ):
+        run_dagster_webserver()
+
+    assert mock_cli.call_args.kwargs["args"] == [
+        "-h",
+        "127.0.0.1",
+        "-p",
+        "4000",
+        "--empty-workspace",
+    ]
+
+
 def test_run_cli_appends_resolved_defs_file_for_code_server():
     mock_cli = Mock()
     with (
-        patch("cfa_dagster.utils.set_env_vars"),
-        patch("cfa_dagster.utils.configure_dev_db"),
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
         patch(
-            "cfa_dagster.utils.resolve_defs_file",
+            "cfa_dagster.cli.get_defs_target",
             return_value="/tmp/fake_defs.py",
         ),
     ):
@@ -665,10 +743,10 @@ def test_run_cli_replaces_default_defs_file_for_code_server_with_env():
             os.environ,
             {"CFA_DAGSTER_ALLOW_DEFAULT_DEFS_OVERRIDE": "true"},
         ),
-        patch("cfa_dagster.utils.set_env_vars"),
-        patch("cfa_dagster.utils.configure_dev_db"),
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
         patch(
-            "cfa_dagster.utils.resolve_defs_file",
+            "cfa_dagster.cli.resolve_defs_file",
             return_value="src/my_project/definitions.py",
         ),
     ):
@@ -687,9 +765,9 @@ def test_run_cli_keeps_default_defs_file_without_override_env():
     mock_cli = Mock()
     with (
         patch.dict(os.environ, {}, clear=True),
-        patch("cfa_dagster.utils.set_env_vars"),
-        patch("cfa_dagster.utils.configure_dev_db"),
-        patch("cfa_dagster.utils.resolve_defs_file") as resolve_defs_file_mock,
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
+        patch("cfa_dagster.cli.resolve_defs_file") as resolve_defs_file_mock,
     ):
         _run_cli(
             mock_cli,
@@ -709,9 +787,9 @@ def test_run_cli_keeps_custom_defs_file_with_override_env():
             os.environ,
             {"CFA_DAGSTER_ALLOW_DEFAULT_DEFS_OVERRIDE": "true"},
         ),
-        patch("cfa_dagster.utils.set_env_vars"),
-        patch("cfa_dagster.utils.configure_dev_db"),
-        patch("cfa_dagster.utils.resolve_defs_file") as resolve_defs_file_mock,
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
+        patch("cfa_dagster.cli.resolve_defs_file") as resolve_defs_file_mock,
     ):
         _run_cli(
             mock_cli,
@@ -731,10 +809,10 @@ def test_run_cli_keeps_default_defs_file_when_override_resolution_fails():
             os.environ,
             {"CFA_DAGSTER_ALLOW_DEFAULT_DEFS_OVERRIDE": "true"},
         ),
-        patch("cfa_dagster.utils.set_env_vars"),
-        patch("cfa_dagster.utils.configure_dev_db"),
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
         patch(
-            "cfa_dagster.utils.resolve_defs_file",
+            "cfa_dagster.cli.resolve_defs_file",
             side_effect=RuntimeError("bad pyproject"),
         ),
     ):
@@ -748,12 +826,118 @@ def test_run_cli_keeps_default_defs_file_when_override_resolution_fails():
     assert args[args.index("-f") + 1] == "dagster_defs.py"
 
 
-def test_run_cli_does_not_append_defs_file_with_workspace():
+def test_run_cli_starts_hot_reloader_for_explicit_dev_defs_file():
     mock_cli = Mock()
     with (
-        patch("cfa_dagster.utils.set_env_vars"),
-        patch("cfa_dagster.utils.configure_dev_db"),
-        patch("cfa_dagster.utils.resolve_defs_file") as resolve_defs_file_mock,
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
+        patch(
+            "cfa_dagster.hot_reload.start_hot_reloader_for_dev"
+        ) as start_hot_reloader,
+    ):
+        _run_cli(
+            mock_cli,
+            "TEST",
+            argv=["prog", "dev", "-f", "kitchen_sink_defs.py"],
+        )
+
+    args = mock_cli.call_args.kwargs["args"]
+    assert args[args.index("-f") + 1] == "kitchen_sink_defs.py"
+    start_hot_reloader.assert_called_once_with(
+        args=args,
+        defs_file="kitchen_sink_defs.py",
+        host="127.0.0.1",
+        port=4000,
+    )
+
+
+def test_run_cli_starts_hot_reloader_for_appended_dev_defs_file():
+    mock_cli = Mock()
+    with (
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
+        patch(
+            "cfa_dagster.cli.get_defs_target",
+            return_value="src/my_project/definitions.py",
+        ),
+        patch(
+            "cfa_dagster.hot_reload.start_hot_reloader_for_dev"
+        ) as start_hot_reloader,
+    ):
+        _run_cli(mock_cli, "TEST", argv=["prog", "dev"])
+
+    args = mock_cli.call_args.kwargs["args"]
+    assert args[args.index("-f") + 1] == "src/my_project/definitions.py"
+    start_hot_reloader.assert_called_once_with(
+        args=args,
+        defs_file="src/my_project/definitions.py",
+        host="127.0.0.1",
+        port=4000,
+    )
+
+
+def test_run_cli_starts_hot_reloader_for_resolved_module_target(tmp_path):
+    mock_cli = Mock()
+    project_dir = make_project_dir(
+        tmp_path,
+        '[project]\nname = "x"\n',
+        ["my_project/defs.py"],
+    )
+    with (
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
+        patch("cfa_dagster.cli.Path.cwd", return_value=project_dir),
+        patch(
+            "cfa_dagster.hot_reload.start_hot_reloader_for_dev"
+        ) as start_hot_reloader,
+    ):
+        _run_cli(
+            mock_cli, "TEST", argv=["prog", "dev", "-m", "my_project.defs"]
+        )
+
+    args = mock_cli.call_args.kwargs["args"]
+    assert args[args.index("-m") + 1] == "my_project.defs"
+    start_hot_reloader.assert_called_once_with(
+        args=args,
+        defs_file="my_project/defs.py",
+        host="127.0.0.1",
+        port=4000,
+    )
+
+
+def test_run_cli_skips_hot_reloader_for_package_module_target(
+    tmp_path,
+    caplog,
+):
+    mock_cli = Mock()
+    project_dir = make_project_dir(
+        tmp_path,
+        '[project]\nname = "x"\n',
+        ["my_project/__init__.py"],
+    )
+    with (
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
+        patch("cfa_dagster.cli.Path.cwd", return_value=project_dir),
+        patch(
+            "cfa_dagster.hot_reload.start_hot_reloader_for_dev"
+        ) as start_hot_reloader,
+    ):
+        _run_cli(mock_cli, "TEST", argv=["prog", "dev", "-m", "my_project"])
+
+    start_hot_reloader.assert_not_called()
+    assert "could not resolve to a Python file" in caplog.text
+
+
+def test_run_cli_does_not_append_defs_file_with_workspace(caplog):
+    mock_cli = Mock()
+    with (
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
+        patch("cfa_dagster.cli.get_defs_target") as get_defs_target_mock,
+        patch(
+            "cfa_dagster.hot_reload.start_hot_reloader_for_dev"
+        ) as start_hot_reloader,
     ):
         _run_cli(
             mock_cli,
@@ -764,15 +948,66 @@ def test_run_cli_does_not_append_defs_file_with_workspace():
     args = mock_cli.call_args.kwargs["args"]
     assert "-f" not in args
     assert "--python-file" not in args
-    resolve_defs_file_mock.assert_not_called()
+    get_defs_target_mock.assert_not_called()
+    start_hot_reloader.assert_not_called()
+    assert "Hot reloading is disabled for workspace targets" in caplog.text
+
+
+def test_run_cli_uses_workspace_file_before_default_defs_without_pyproject(
+    tmp_path,
+    caplog,
+):
+    mock_cli = Mock()
+    (tmp_path / "workspace.yaml").write_text("load_from: []\n")
+    with (
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
+        patch("cfa_dagster.cli.Path.cwd", return_value=tmp_path),
+        patch("cfa_dagster.cli.get_defs_target", return_value=None),
+        patch(
+            "cfa_dagster.hot_reload.start_hot_reloader_for_dev"
+        ) as start_hot_reloader,
+    ):
+        _run_cli(mock_cli, "TEST", argv=["prog", "dev"])
+
+    args = mock_cli.call_args.kwargs["args"]
+    assert args[args.index("-w") + 1] == "workspace.yaml"
+    assert "-f" not in args
+    start_hot_reloader.assert_not_called()
+    assert "Hot reloading is disabled for workspace targets" in caplog.text
+
+
+def test_run_cli_defaults_to_defs_file_without_pyproject_or_workspace(
+    tmp_path,
+):
+    mock_cli = Mock()
+    with (
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
+        patch("cfa_dagster.cli.Path.cwd", return_value=tmp_path),
+        patch("cfa_dagster.cli.get_defs_target", return_value=None),
+        patch(
+            "cfa_dagster.hot_reload.start_hot_reloader_for_dev"
+        ) as start_hot_reloader,
+    ):
+        _run_cli(mock_cli, "TEST", argv=["prog", "dev"])
+
+    args = mock_cli.call_args.kwargs["args"]
+    assert args[args.index("-f") + 1] == DEFAULT_DEFS_FILE
+    start_hot_reloader.assert_called_once_with(
+        args=args,
+        defs_file=DEFAULT_DEFS_FILE,
+        host="127.0.0.1",
+        port=4000,
+    )
 
 
 def test_run_cli_does_not_append_defs_file_with_short_workspace():
     mock_cli = Mock()
     with (
-        patch("cfa_dagster.utils.set_env_vars"),
-        patch("cfa_dagster.utils.configure_dev_db"),
-        patch("cfa_dagster.utils.resolve_defs_file") as resolve_defs_file_mock,
+        patch("cfa_dagster.cli.set_env_vars"),
+        patch("cfa_dagster.cli.configure_dev_db"),
+        patch("cfa_dagster.cli.resolve_defs_file") as resolve_defs_file_mock,
     ):
         _run_cli(
             mock_cli,

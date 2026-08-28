@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Optional
 
 from dagster_graphql import DagsterGraphQLClient
 
-from .utils import get_dg_project_config, resolve_project_module_path
+from .cli import get_dg_project_config, resolve_project_module_path
 
 if TYPE_CHECKING:
     from watchdog.observers import Observer
@@ -54,7 +54,7 @@ def resolve_target_paths(
         else:
             log.warning("Could not resolve root_module '%s'", root_module)
 
-    if not targets and entry_point:
+    if entry_point:
         ep = Path(entry_point)
         if ep.is_file():
             targets.add(ep.resolve())

@@ -27,9 +27,9 @@ dependencies = [
 ]
 
 [project.scripts]
-cfa-dagster = "cfa_dagster.utils:run_dagster"
-cfa-dg = "cfa_dagster.utils:run_dg"
-cfa-dagster-webserver = "cfa_dagster.utils:run_dagster_webserver"
+cfa-dagster = "cfa_dagster.cli:run_dagster"
+cfa-dg = "cfa_dagster.cli:run_dg"
+cfa-dagster-webserver = "cfa_dagster.cli:run_dagster_webserver"
 
 [project.optional-dependencies]
 test = [
