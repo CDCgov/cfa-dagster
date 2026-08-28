@@ -14,7 +14,7 @@ from dagster_azure.adls2 import (
 from dagster_azure.adls2.resources import ADLS2Resource
 from pydantic import Field
 
-from ..dynamic_graph_asset_metadata import (
+from ..dynamic_graph.metadata import (
     DynamicGraphIOManagerMetadata,
     get_inherited_graph_dimension_input_metadata,
     patch_context_with_dynamic_graph_metadata,
@@ -130,9 +130,6 @@ class ADLS2PickleIOManager(ConfigurableIOManager):
         dynamic_graph_metadata = DynamicGraphIOManagerMetadata.from_metadata(
             context.definition_metadata
         )
-        if dynamic_graph_metadata and dynamic_graph_metadata.skip_input:
-            context.log.debug("load_input: skip_input=True, returning None")
-            return
 
         # check if this was configured to inherit upstream graph dimensions
         inherited_dimension_metadata = (
@@ -156,12 +153,6 @@ class ADLS2PickleIOManager(ConfigurableIOManager):
             context.output_metadata or {}
         )
         if dynamic_graph_metadata:
-            if dynamic_graph_metadata.skip_output:
-                context.log.debug(
-                    "handle_output: skip_output=True, skipping upload"
-                )
-                return
-
             patch_context_with_dynamic_graph_metadata(
                 context, dynamic_graph_metadata
             )

@@ -5,7 +5,7 @@ from cfa_dagster.azure_adls2.filesystem_io_manager import (
     FilesystemADLS2IOManager,
 )
 from cfa_dagster.azure_adls2.pickle_io_manager import ADLS2PickleIOManager
-from cfa_dagster.dynamic_graph_asset_metadata import (
+from cfa_dagster.dynamic_graph.metadata import (
     DYNAMIC_GRAPH_ASSET_METADATA_KEY,
     SHOULD_INPUT_MANAGER_INHERIT_GRAPH_DIMENSIONS,
     DynamicGraphIOManagerMetadata,
@@ -144,8 +144,6 @@ def test_dynamic_graph_io_manager_metadata_round_trips():
         asset_key_path=["upstream"],
         asset_partition_keys=["2026-08-25"],
         synthetic_partition_keys=["A", "B"],
-        skip_input=True,
-        skip_output=True,
     )
 
     parsed = DynamicGraphIOManagerMetadata.from_metadata(metadata.to_dict())
@@ -197,44 +195,6 @@ def test_filesystem_load_input_patches_inherited_graph_dimensions(monkeypatch):
     )
 
     assert manager.load_input(context) == "loaded"
-
-
-def test_filesystem_load_input_honors_generic_skip(monkeypatch):
-    def fake_load_input(self, context):
-        raise AssertionError("skip_input should return before internal load")
-
-    monkeypatch.setattr(UPathIOManager, "load_input", fake_load_input)
-
-    class FakeInputContext(_FakeInputContext):
-        pass
-
-    manager = object.__new__(FilesystemADLS2IOManager)
-    context = FakeInputContext(
-        definition_metadata=DynamicGraphIOManagerMetadata(
-            skip_input=True
-        ).to_dict(),
-        mapping_key=_encode_mapping_key(("A",)),
-    )
-
-    assert manager.load_input(context) is None
-
-
-def test_filesystem_handle_output_honors_generic_skip(monkeypatch):
-    def fake_handle_output(self, context, obj):
-        raise AssertionError(
-            "skip_output should return before internal output"
-        )
-
-    class FakeOutputContext:
-        output_metadata = DynamicGraphIOManagerMetadata(
-            skip_output=True
-        ).to_dict()
-        log = _FakeLog()
-
-    monkeypatch.setattr(UPathIOManager, "handle_output", fake_handle_output)
-
-    manager = object.__new__(FilesystemADLS2IOManager)
-    assert manager.handle_output(FakeOutputContext(), object()) is None
 
 
 def test_pickle_handle_output_patches_context_before_delegating(monkeypatch):
@@ -303,57 +263,6 @@ def test_pickle_load_input_patches_context_before_delegating(monkeypatch):
     assert manager.load_input(context) == {"loaded": True}
     assert captured["asset_key"] == dg.AssetKey(["pickle_upstream"])
     assert captured["asset_partition_keys"] == ["2026-08-25/A"]
-
-
-def test_pickle_load_input_honors_generic_skip(monkeypatch):
-    class FakeInternalIOManager:
-        def load_input(self, context):
-            raise AssertionError(
-                "skip_input should return before internal load"
-            )
-
-    class FakeInputContext(_FakeInputContext):
-        upstream_output = None
-        log = _FakeLog()
-
-    monkeypatch.setattr(
-        ADLS2PickleIOManager,
-        "_internal_io_manager",
-        property(lambda self: FakeInternalIOManager()),
-    )
-
-    context = FakeInputContext(
-        definition_metadata=DynamicGraphIOManagerMetadata(
-            skip_input=True
-        ).to_dict(),
-        mapping_key=_encode_mapping_key(("A",)),
-    )
-    manager = ADLS2PickleIOManager(overrides={})
-
-    assert manager.load_input(context) is None
-
-
-def test_pickle_handle_output_honors_generic_skip(monkeypatch):
-    class FakeInternalIOManager:
-        def handle_output(self, context, obj):
-            raise AssertionError(
-                "skip_output should return before internal output"
-            )
-
-    class FakeOutputContext:
-        output_metadata = DynamicGraphIOManagerMetadata(
-            skip_output=True
-        ).to_dict()
-        log = _FakeLog()
-
-    monkeypatch.setattr(
-        ADLS2PickleIOManager,
-        "_internal_io_manager",
-        property(lambda self: FakeInternalIOManager()),
-    )
-
-    manager = ADLS2PickleIOManager(overrides={})
-    assert manager.handle_output(FakeOutputContext(), object()) is None
 
 
 def test_pickle_load_input_overrides_short_circuit(monkeypatch):

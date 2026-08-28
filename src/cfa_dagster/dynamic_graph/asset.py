@@ -5,21 +5,17 @@ import logging
 import sys
 import textwrap
 import warnings
-from dataclasses import dataclass
 from types import GeneratorType
 from typing import (
     AbstractSet,
     Any,
     Callable,
-    Generic,
     Literal,
     Mapping,
     Optional,
     TypedDict,
-    TypeVar,
     Union,
     cast,
-    get_origin,
     get_type_hints,
 )
 from typing import Sequence as TypeSequence
@@ -31,17 +27,32 @@ from dagster._core.definitions.events import (
 )
 from dagster._core.definitions.metadata import RawMetadataMapping
 from dagster._utils.warnings import BetaWarning
-from pydantic import PrivateAttr
 from typing_extensions import Unpack
 
-from .azure_adls2.pickle_io_manager import ADLS2PickleIOManager
-from .dynamic_graph_asset_metadata import (
+from ..azure_adls2.pickle_io_manager import ADLS2PickleIOManager
+from ..execution.utils import ExecutionConfig, SelectorConfig
+from .config_inheritance import (
+    inherit_graph_dimension_axes_from_upstream_materializations,
+)
+from .metadata import (
     DYNAMIC_GRAPH_ASSET_METADATA_KEY,
     DynamicGraphIOManagerMetadata,
     _decode_mapping_key,
     _encode_mapping_key,
 )
-from .execution.utils import ExecutionConfig, SelectorConfig
+from .materialization_metadata import (
+    _get_graph_dimension_axes,
+    _get_graph_dimension_combinations,
+    _get_materialized_graph_dimensions_metadata,
+)
+from .types import (
+    GraphDimension,
+    GraphDimensionExclusion,
+    _DimensionResourceInfo,
+    _ExclusionResourceInfo,
+    _is_dimension_annotation,
+    _is_exclusion_annotation,
+)
 
 log = logging.getLogger(__name__)
 
@@ -67,45 +78,6 @@ class GraphAssetKwargs(TypedDict, total=False):
     code_version: Optional[str] = (None,)
     key: Optional[CoercibleToAssetKey] = (None,)
     kinds: Optional[AbstractSet[str]] = (None,)
-
-
-@dataclass
-class _DimensionResourceInfo:
-    param_name: str
-    resource_cls: type
-    dimension_fields: list[str]
-
-
-T = TypeVar("T", default=str)
-
-
-class GraphDimension(dg.Config, Generic[T]):
-    values: list[T]
-    _current_value: Optional[T] = PrivateAttr(default=None)
-
-    def __init__(self, values: list[str], current_value: Optional[str] = None):
-        super().__init__(values=values, _current_value=current_value)
-
-    def set_current_value(self, value: T) -> None:
-        self._current_value = value
-
-    @property
-    def current_value(self) -> Optional[T]:
-        return self._current_value
-
-
-class GraphDimensionExclusion(dg.Config, Generic[T]):
-    values: list[T] = []
-
-    def __init__(self, values: list[str]):
-        super().__init__(values=values)
-
-
-@dataclass
-class _ExclusionResourceInfo:
-    param_name: str
-    resource_cls: type
-    exclusion_fields: list[str]
 
 
 def _get_resource_params(hints) -> dict[str, type]:
@@ -236,35 +208,6 @@ def _get_asset_key(
         final_asset_key = dg.AssetKey(base_key)
     log.debug(f"final_asset_key: '{final_asset_key}'")
     return final_asset_key
-
-
-def _is_dimension_annotation(annotation) -> bool:
-    if get_origin(annotation) is GraphDimension:
-        return True
-
-    metadata = getattr(
-        annotation,
-        "__pydantic_generic_metadata__",
-        None,
-    )
-
-    return metadata is not None and metadata.get("origin") is GraphDimension
-
-
-def _is_exclusion_annotation(annotation) -> bool:
-    if get_origin(annotation) is GraphDimensionExclusion:
-        return True
-
-    metadata = getattr(
-        annotation,
-        "__pydantic_generic_metadata__",
-        None,
-    )
-
-    return (
-        metadata is not None
-        and metadata.get("origin") is GraphDimensionExclusion
-    )
 
 
 def _has_return_value(fn) -> bool:
@@ -585,6 +528,9 @@ def dynamic_graph_asset(
         log.debug(f"does_return_value: '{does_return_value}'")
 
         should_return_all = output_mode == "all"
+        should_load_compute_result = (
+            does_return_value and not should_return_all
+        )
 
         # -- Locate the Config parameter --
         config_cls = _get_config_cls(hints)
@@ -602,12 +548,6 @@ def dynamic_graph_asset(
         log.debug(f"decorated_fn_kwargs: {decorated_fn_kwargs}")
 
         final_asset_key = _get_asset_key(asset_name, graph_asset_kwargs)
-        graph_asset_metadata = {
-            **dict(graph_asset_kwargs.get("metadata") or {}),
-            DYNAMIC_GRAPH_ASSET_METADATA_KEY: {
-                "output_mode": output_mode,
-            },
-        }
 
         # -- Locate Resource parameters --
         resource_params = _get_resource_params(hints)
@@ -621,6 +561,12 @@ def dynamic_graph_asset(
         dimension_resource_info = _get_dimension_resource_info(
             asset_name, resource_params
         )
+        graph_asset_metadata = {
+            **dict(graph_asset_kwargs.get("metadata") or {}),
+            DYNAMIC_GRAPH_ASSET_METADATA_KEY: {
+                "output_mode": output_mode,
+            },
+        }
 
         # -- Locate resources containing GraphDimensionExclusion fields --
         exclusion_resources_info = _get_exclusion_resource_info(
@@ -655,6 +601,9 @@ def dynamic_graph_asset(
             out={
                 # Cheap fanout signal
                 "dga_internal_fanout": dg.DynamicOut(dg.Nothing),
+                "dga_internal_graph_dimensions": dg.Out(
+                    io_manager_key=INTERNAL_CONFIG_IO_MANAGER_KEY,
+                ),
                 **(
                     {
                         # Persisted ONCE and loaded by every mapped compute op
@@ -680,39 +629,25 @@ def dynamic_graph_asset(
                     output_name="dga_internal_shared_config",
                 )
 
-            dimension_resource = getattr(
-                context.resources,
-                dimension_resource_info.param_name,
+            axes = _get_graph_dimension_axes(
+                context,
+                dimension_resource_info,
+                exclusion_resources_info,
             )
-
-            axes = []
-
-            for dimension_field in dimension_resource_info.dimension_fields:
-                graph_dimension = getattr(
-                    dimension_resource,
-                    dimension_field,
-                )
-
-                values = graph_dimension.values
-
-                # filter out excluded dimension values across all exclusion resources
-                if exclusion_resources_info:
-                    excluded_values: set = set()
-                    for excl_info in exclusion_resources_info:
-                        excl_resource = getattr(
-                            context.resources, excl_info.param_name
-                        )
-                        exclusion_obj = getattr(
-                            excl_resource, dimension_field, None
-                        )
-                        if exclusion_obj is not None and exclusion_obj.values:
-                            excluded_values.update(set(exclusion_obj.values))
-                    if excluded_values:
-                        values = [
-                            v for v in values if v not in excluded_values
-                        ]
-
-                axes.append(values)
+            axes = inherit_graph_dimension_axes_from_upstream_materializations(
+                context,
+                axes,
+                dimension_resource_info,
+                op_ins,
+            )
+            graph_dimensions = _get_graph_dimension_combinations(
+                dimension_resource_info.dimension_fields,
+                axes,
+            )
+            yield dg.Output(
+                value=graph_dimensions,
+                output_name="dga_internal_graph_dimensions",
+            )
 
             for combo in itertools.product(*axes):
                 mapping_key = _encode_mapping_key(combo)
@@ -844,16 +779,12 @@ def dynamic_graph_asset(
                             if io_manager_key
                             else {}
                         ),
-                        metadata=(
-                            DynamicGraphIOManagerMetadata(
-                                skip_input=True
-                            ).to_dict()
-                            if should_return_all
-                            else {}
-                        ),
                     )
-                    if does_return_value
+                    if should_load_compute_result
                     else dg.In(dg.Nothing)
+                ),
+                "dga_internal_graph_dimensions": dg.In(
+                    input_manager_key=INTERNAL_CONFIG_IO_MANAGER_KEY,
                 ),
             },
             config_schema=config_cls.to_config_schema()
@@ -869,39 +800,63 @@ def dynamic_graph_asset(
                         ),
                     )
                 }
-                if does_return_value
+                if should_load_compute_result
                 else {"out": dg.Out(dg.Nothing)}
             ),
+            required_resource_keys=required_resource_keys,
             tags=_in_process_config.to_run_tags(),
         )
         def output_op(context, **kwargs):
             compute_result = kwargs.get("compute_result")
-            if does_return_value:
+            graph_dimensions = kwargs.get("dga_internal_graph_dimensions")
+            if should_load_compute_result:
                 result = compute_result
                 # handle yielded Output
                 if isinstance(result, GeneratorType):
                     result = next(result)
 
-                # handle sequences
-                result = result if should_return_all else result[0]
+                # output_mode="first" collects a single emitted compute value.
+                result = result[0]
 
                 result, metadata = _unpack_output(result)
 
                 # Merge our graph_dimensions metadata
                 merged_metadata = {
                     **dict(metadata),
-                    **(
-                        DynamicGraphIOManagerMetadata(
-                            skip_output=True
-                        ).to_dict()
-                        if should_return_all
-                        else {}
+                    **_get_materialized_graph_dimensions_metadata(
+                        context,
+                        dimension_resource_info,
+                        exclusion_resources_info,
+                        should_return_all,
+                        graph_dimensions,
                     ),
                 }
                 log.debug(f"merged_metadata: '{merged_metadata}'")
 
                 # Yield a new Output object with merged metadata
                 yield dg.Output(value=result, metadata=merged_metadata)
+            elif does_return_value:
+                yield dg.Output(
+                    value=None,
+                    metadata=_get_materialized_graph_dimensions_metadata(
+                        context,
+                        dimension_resource_info,
+                        exclusion_resources_info,
+                        should_return_all,
+                        graph_dimensions,
+                    ),
+                )
+            else:
+                yield dg.Output(
+                    value=None,
+                    metadata=_get_materialized_graph_dimensions_metadata(
+                        context,
+                        dimension_resource_info,
+                        exclusion_resources_info,
+                        should_return_all,
+                        graph_dimensions,
+                    ),
+                )
 
         # -- config mapping --
         if config_cls is not None:
@@ -950,11 +905,15 @@ def dynamic_graph_asset(
                 gen_result = gen_config(**ins_kwargs)
 
                 if config_cls is not None:
-                    dga_internal_fanout, dga_internal_shared_config = (
+                    (
+                        dga_internal_fanout,
+                        dga_internal_graph_dimensions,
+                        dga_internal_shared_config,
+                    ) = gen_result
+                else:
+                    dga_internal_fanout, dga_internal_graph_dimensions = (
                         gen_result
                     )
-                else:
-                    dga_internal_fanout = gen_result
                     dga_internal_shared_config = None
 
                 # Map fanout while passing shared config to every isolated compute worker
@@ -970,7 +929,10 @@ def dynamic_graph_asset(
                         **ins_kwargs,
                     )
                 )
-                return output_op(compute_result=res.collect())
+                return output_op(
+                    compute_result=res.collect(),
+                    dga_internal_graph_dimensions=dga_internal_graph_dimensions,
+                )
 
             return _asset
 
