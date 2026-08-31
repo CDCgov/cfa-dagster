@@ -149,3 +149,58 @@ def test_hot_reloader_schedules_followup_reload_for_changes_during_reload(
     FakeTimer.instances[-1].fire()
 
     assert reloads == [("localhost", 3000), ("localhost", 3000)]
+
+
+def test_hot_reloader_can_schedule_after_stop_and_restart(monkeypatch):
+    FakeTimer.instances.clear()
+    reloads = []
+
+    monkeypatch.setattr(hot_reload.threading, "Timer", FakeTimer)
+    monkeypatch.setattr(hot_reload, "wait_for_server", lambda host, port: True)
+    monkeypatch.setattr(
+        hot_reload,
+        "reload_via_graphql",
+        lambda host, port: reloads.append((host, port)) or True,
+    )
+
+    reloader = HotReloader([], "localhost", 3000, debounce_seconds=0.5)
+    reloader.stop()
+    reloader.start()
+    reloader._schedule_reload("a.py")
+    FakeTimer.instances[-1].fire()
+
+    assert reloads == [("localhost", 3000)]
+
+
+def test_hot_reloader_start_observes_python_file_changes(
+    monkeypatch,
+    tmp_path,
+):
+    reloads = []
+    watched_file = tmp_path / "defs.py"
+    watched_file.write_text("defs = None\n")
+
+    monkeypatch.setattr(hot_reload, "wait_for_server", lambda host, port: True)
+    monkeypatch.setattr(
+        hot_reload,
+        "reload_via_graphql",
+        lambda host, port: reloads.append((host, port)) or True,
+    )
+
+    reloader = HotReloader(
+        [watched_file],
+        "localhost",
+        3000,
+        debounce_seconds=0.05,
+    )
+    reloader.start()
+    try:
+        watched_file.write_text("defs = 1\n")
+        for _ in range(50):
+            if reloads:
+                break
+            hot_reload.time.sleep(0.05)
+    finally:
+        reloader.stop()
+
+    assert reloads == [("localhost", 3000)]

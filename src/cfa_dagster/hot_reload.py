@@ -135,6 +135,7 @@ class HotReloader:
         self._stopped = False
 
     def start(self):
+        self._stopped = False
         try:
             from watchdog.events import FileSystemEventHandler
             from watchdog.observers import Observer
@@ -179,11 +180,7 @@ class HotReloader:
             def _on_event(self, event):
                 if event.is_directory:
                     return
-                src_path = (
-                    event.dest_path
-                    if hasattr(event, "dest_path")
-                    else event.src_path
-                )
+                src_path = getattr(event, "dest_path", None) or event.src_path
                 if not src_path.endswith(".py"):
                     return
                 callback(src_path)
@@ -267,6 +264,9 @@ class HotReloader:
             self._schedule_reload()
 
     def _on_files_changed(self, changed_paths: set[str]):
+        if not changed_paths:
+            log.debug("Hot-reloader: skipping reload with no changed paths")
+            return
         if not self._server_ready:
             self._server_ready = wait_for_server(self._host, self._port)
             if not self._server_ready:
