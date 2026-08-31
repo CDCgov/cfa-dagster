@@ -834,17 +834,6 @@ def dynamic_graph_asset(
 
                 # Yield a new Output object with merged metadata
                 yield dg.Output(value=result, metadata=merged_metadata)
-            elif does_return_value:
-                yield dg.Output(
-                    value=None,
-                    metadata=_get_materialized_graph_dimensions_metadata(
-                        context,
-                        dimension_resource_info,
-                        exclusion_resources_info,
-                        should_return_all,
-                        graph_dimensions,
-                    ),
-                )
             else:
                 yield dg.Output(
                     value=None,
