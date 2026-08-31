@@ -34,20 +34,19 @@ from ..execution.utils import ExecutionConfig, SelectorConfig
 from .config_inheritance import (
     inherit_graph_dimension_axes_from_upstream_materializations,
 )
+from .materialization_metadata import (
+    _get_graph_dimension_axes,
+    _get_graph_dimension_combinations,
+    _get_materialized_graph_dimensions_metadata,
+)
 from .metadata import (
     DYNAMIC_GRAPH_ASSET_METADATA_KEY,
     DynamicGraphIOManagerMetadata,
     _decode_mapping_key,
     _encode_mapping_key,
 )
-from .materialization_metadata import (
-    _get_graph_dimension_axes,
-    _get_graph_dimension_combinations,
-    _get_materialized_graph_dimensions_metadata,
-)
 from .types import (
     GraphDimension,
-    GraphDimensionExclusion,
     _DimensionResourceInfo,
     _ExclusionResourceInfo,
     _is_dimension_annotation,
