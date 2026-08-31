@@ -17,7 +17,7 @@ from dagster_azure.adls2 import ADLS2DefaultAzureCredential, ADLS2Resource
 from pydantic import Field
 from upath import UPath
 
-from ..dynamic_graph_asset_metadata import (
+from ..dynamic_graph.metadata import (
     DynamicGraphIOManagerMetadata,
     get_inherited_graph_dimension_input_metadata,
     patch_context_with_dynamic_graph_metadata,
@@ -130,10 +130,6 @@ class FilesystemADLS2IOManager(UPathIOManager):
             output_metadata
         )
 
-        if dynamic_graph_metadata and dynamic_graph_metadata.skip_output:
-            log.info("dump_to_path: skip_output=True, skipping upload")
-            return
-
         if dynamic_graph_metadata:
             patch_context_with_dynamic_graph_metadata(
                 context, dynamic_graph_metadata
@@ -156,10 +152,6 @@ class FilesystemADLS2IOManager(UPathIOManager):
         inherited_dimension_metadata = (
             get_inherited_graph_dimension_input_metadata(context)
         )
-
-        if dynamic_graph_metadata and dynamic_graph_metadata.skip_input:
-            log.debug("load_input: skip_input=True, returning None")
-            return
 
         # Inherited metadata is derived from the mapped input context and takes
         # precedence over static DynamicGraphIOManagerMetadata on the input.

@@ -27,8 +27,6 @@ class DynamicGraphIOManagerMetadata:
     asset_key_path: list[str] = field(default_factory=list)
     asset_partition_keys: list[Any] = field(default_factory=list)
     synthetic_partition_keys: list[str] = field(default_factory=list)
-    skip_input: bool = False
-    skip_output: bool = False
 
     @classmethod
     def from_metadata(
@@ -49,8 +47,6 @@ class DynamicGraphIOManagerMetadata:
             asset_key_path=raw.get("asset_key_path", []),
             asset_partition_keys=raw.get("asset_partition_keys", []),
             synthetic_partition_keys=raw.get("synthetic_partition_keys", []),
-            skip_input=raw.get("skip_input", False),
-            skip_output=raw.get("skip_output", False),
         )
 
     def to_dict(self) -> dict:
