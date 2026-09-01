@@ -188,6 +188,15 @@ def _asset_materialization_metadata(result, asset_key: dg.AssetKey):
     raise AssertionError(f"No materialization found for {asset_key}")
 
 
+def _engine_event(instance: dg.DagsterInstance, run_id: str, message: str):
+    for record in instance.all_logs(run_id):
+        event = record.dagster_event
+        if event and event.event_type_value == "ENGINE_EVENT":
+            if event.message == message:
+                return event
+    raise AssertionError(f"No engine event found: {message}")
+
+
 def _graph_dimensions_metadata(metadata):
     return metadata[_GRAPH_DIMENSIONS_METADATA_KEY].value
 
@@ -427,10 +436,12 @@ def normal_asset_consumes_first_object(
 
 def test_dynamic_graph_asset_without_return_runs_all_dimensions():
     _NO_RETURN_VALUES.clear()
+    instance = dg.DagsterInstance.ephemeral()
 
     result = dg.materialize(
         [dynamic_asset_no_return],
         resources={"no_return_dims": NoReturnDims()},
+        instance=instance,
     )
 
     assert result.success
@@ -439,6 +450,16 @@ def test_dynamic_graph_asset_without_return_runs_all_dimensions():
         result,
         dynamic_asset_no_return.key,
     )
+    event = _engine_event(
+        instance,
+        result.run_id,
+        "Dynamic graph asset 'dynamic_asset_no_return' using configured "
+        "graph dimensions: 2 total combinations.",
+    )
+    assert list(event.event_specific_data.metadata) == ["graph_dimensions"]
+    assert event.event_specific_data.metadata["graph_dimensions"].value == {
+        "letter": ["a", "b"],
+    }
     graph_dimensions = _graph_dimensions_metadata(metadata)
     assert graph_dimensions["signature"]["dimension_fields"] == ["letter"]
     assert graph_dimensions["materialized"] == [
@@ -616,6 +637,16 @@ def test_dynamic_graph_asset_inherits_upstream_dimension_values_by_default():
         downstream_result,
         inheritance_downstream.key,
     )
+    event = _engine_event(
+        instance,
+        downstream_result.run_id,
+        "Dynamic graph asset 'inheritance_downstream' using inherited "
+        "graph dimensions: 1 total combinations.",
+    )
+    assert list(event.event_specific_data.metadata) == ["graph_dimensions"]
+    assert event.event_specific_data.metadata["graph_dimensions"].value == {
+        "letter": ["a"],
+    }
     assert _graph_dimensions_metadata(metadata)["materialized"] == [
         {"letter": "a"},
     ]
