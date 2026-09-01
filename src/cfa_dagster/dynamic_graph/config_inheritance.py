@@ -79,13 +79,14 @@ def _get_inheritable_dimension_fields(
     return inheritable_fields
 
 
-def _narrow_axes_from_inherited_values(
+def _get_axes_from_inherited_values(
     axes: list[list[Any]],
     dimension_fields: list[str],
     inherited_values_by_field: dict[str, set[str]],
-) -> list[list[Any]]:
+) -> list[list[Any]] | None:
     """Narrow axes to inherited values while preserving configured value order."""
     narrowed_axes = []
+    did_narrow = False
     for dimension_field, axis in zip(dimension_fields, axes):
         inherited_values = inherited_values_by_field.get(dimension_field)
         if not inherited_values:
@@ -97,6 +98,7 @@ def _narrow_axes_from_inherited_values(
         ]
         if narrowed_axis:
             narrowed_axes.append(narrowed_axis)
+            did_narrow = True
             continue
 
         log.warning(
@@ -106,22 +108,22 @@ def _narrow_axes_from_inherited_values(
         )
         narrowed_axes.append(axis)
 
-    return narrowed_axes
+    return narrowed_axes if did_narrow else None
 
 
-def inherit_graph_dimension_axes_from_upstream_materializations(
+def get_inherited_graph_dimension_axes(
     context: dg.OpExecutionContext,
-    axes: list[list[Any]],
+    configured_axes: list[list[Any]],
     dimension_resource_info: _DimensionResourceInfo,
     op_ins: dict[str, dg.In],
-) -> list[list[Any]]:
-    """Capture graph dimensions using matching upstream dynamic graph materializations."""
+) -> list[list[Any]] | None:
+    """Return inherited graph-dimension axes from matching upstream materializations."""
     inheritable_fields = _get_inheritable_dimension_fields(
         context,
         dimension_resource_info,
     )
     if not inheritable_fields:
-        return axes
+        return None
 
     inherited_values_by_field: dict[str, set[str]] = {}
 
@@ -163,10 +165,10 @@ def inherit_graph_dimension_axes_from_upstream_materializations(
                     )
 
     if not inherited_values_by_field:
-        return axes
+        return None
 
-    return _narrow_axes_from_inherited_values(
-        axes,
+    return _get_axes_from_inherited_values(
+        configured_axes,
         dimension_resource_info.dimension_fields,
         inherited_values_by_field,
     )

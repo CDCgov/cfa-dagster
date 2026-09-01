@@ -119,14 +119,23 @@ class HotReloader:
         paths: list[str | Path],
         host: str,
         port: int,
+        debounce_seconds: float = 0.5,
     ):
         self._paths = [Path(p).resolve() for p in paths]
         self._host = host
         self._port = port
+        self._debounce_seconds = debounce_seconds
         self._observer: Optional[Observer] = None  # type: ignore[reportInvalidTypeForm]
         self._server_ready = False
+        self._debounce_timer: Optional[threading.Timer] = None
+        self._debounce_lock = threading.Lock()
+        self._reload_lock = threading.Lock()
+        self._pending_changed_paths: set[str] = set()
+        self._pending_reload = False
+        self._stopped = False
 
     def start(self):
+        self._stopped = False
         try:
             from watchdog.events import FileSystemEventHandler
             from watchdog.observers import Observer
@@ -153,38 +162,39 @@ class HotReloader:
             log.info("No valid paths to watch, skipping hot-reloader")
             return
 
-        callback = self._on_files_changed
-        debounce = 0.5
+        callback = self._schedule_reload
 
         class _Handler(FileSystemEventHandler):
-            def __init__(self):
-                self._timer: Optional[threading.Timer] = None
-                self._lock = threading.Lock()
-
             def on_modified(self, event):
-                self._on_event(event.src_path)
+                self._on_event(event)
 
             def on_created(self, event):
-                self._on_event(event.src_path)
+                self._on_event(event)
 
-            def _on_event(self, src_path: str):
+            def on_deleted(self, event):
+                self._on_event(event)
+
+            def on_moved(self, event):
+                self._on_event(event)
+
+            def _on_event(self, event):
+                if event.is_directory:
+                    return
+                src_path = getattr(event, "dest_path", None) or event.src_path
                 if not src_path.endswith(".py"):
                     return
-                with self._lock:
-                    if self._timer and self._timer.is_alive():
-                        self._timer.cancel()
-                    self._timer = threading.Timer(debounce, callback)
-                    self._timer.daemon = True
-                    self._timer.start()
+                callback(src_path)
+
+        handler = _Handler()
 
         self._observer = Observer()
         for path in resolved:
             if path.is_file():
                 self._observer.schedule(
-                    _Handler(), str(path.parent), recursive=False
+                    handler, str(path.parent), recursive=False
                 )
             else:
-                self._observer.schedule(_Handler(), str(path), recursive=True)
+                self._observer.schedule(handler, str(path), recursive=True)
 
         self._observer.daemon = True
         self._observer.start()
@@ -202,17 +212,73 @@ class HotReloader:
             )
 
     def stop(self):
+        self._stopped = True
+        with self._debounce_lock:
+            if self._debounce_timer and self._debounce_timer.is_alive():
+                self._debounce_timer.cancel()
+            self._debounce_timer = None
         if self._observer:
             self._observer.stop()
             self._observer.join(timeout=5)
             self._observer = None
 
-    def _on_files_changed(self):
+    def _schedule_reload(self, src_path: str | None = None):
+        with self._debounce_lock:
+            if self._stopped:
+                return
+            if src_path:
+                self._pending_changed_paths.add(src_path)
+            if self._debounce_timer and self._debounce_timer.is_alive():
+                self._debounce_timer.cancel()
+            self._debounce_timer = threading.Timer(
+                self._debounce_seconds,
+                self._on_debounce_complete,
+            )
+            self._debounce_timer.daemon = True
+            self._debounce_timer.start()
+
+    def _on_debounce_complete(self):
+        with self._debounce_lock:
+            if self._stopped:
+                return
+            changed_paths = self._pending_changed_paths
+            self._pending_changed_paths = set()
+            self._debounce_timer = None
+
+        if not self._reload_lock.acquire(blocking=False):
+            with self._debounce_lock:
+                self._pending_changed_paths.update(changed_paths)
+                self._pending_reload = True
+            return
+
+        should_reschedule = False
+        try:
+            self._on_files_changed(changed_paths)
+        finally:
+            self._reload_lock.release()
+            with self._debounce_lock:
+                should_reschedule = self._pending_reload and not self._stopped
+                self._pending_reload = False
+
+        if should_reschedule:
+            self._schedule_reload()
+
+    def _on_files_changed(self, changed_paths: set[str]):
+        if not changed_paths:
+            log.debug("Hot-reloader: skipping reload with no changed paths")
+            return
         if not self._server_ready:
             self._server_ready = wait_for_server(self._host, self._port)
             if not self._server_ready:
                 return
-        log.info("Hot-reloader: Change detected, reloading workspace...")
+        change_count = len(changed_paths)
+        log.info(
+            "Hot-reloader: %d Python file change%s detected, reloading workspace...",
+            change_count,
+            "" if change_count == 1 else "s",
+        )
+        if changed_paths:
+            log.debug("Hot-reloader changed paths: %s", sorted(changed_paths))
         reload_via_graphql(host=self._host, port=self._port)
 
 

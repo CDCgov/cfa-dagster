@@ -26,13 +26,14 @@ from dagster._core.definitions.events import (
     CoercibleToAssetKeyPrefix,
 )
 from dagster._core.definitions.metadata import RawMetadataMapping
+from dagster._core.events import EngineEventData
 from dagster._utils.warnings import BetaWarning
 from typing_extensions import Unpack
 
 from ..azure_adls2.pickle_io_manager import ADLS2PickleIOManager
 from ..execution.utils import ExecutionConfig, SelectorConfig
 from .config_inheritance import (
-    inherit_graph_dimension_axes_from_upstream_materializations,
+    get_inherited_graph_dimension_axes,
 )
 from .materialization_metadata import (
     _get_graph_dimension_axes,
@@ -310,6 +311,34 @@ def _apply_graph_dimensions(
         )
         graph_dim_obj.set_current_value(value)
     return dimension_resource
+
+
+def _report_graph_dimension_fanout(
+    context: dg.OpExecutionContext,
+    asset_name: str,
+    source: Literal["configured", "inherited"],
+    dimension_fields: list[str],
+    axes: list[list[Any]],
+    graph_dimensions: list[dict[str, str]],
+) -> None:
+    context.instance.report_engine_event(
+        message=(
+            f"Dynamic graph asset '{asset_name}' using {source} graph "
+            f"dimensions: {len(graph_dimensions)} total combinations."
+        ),
+        dagster_run=context.run,
+        step_key=context.get_step_execution_context().step.key,
+        engine_event_data=EngineEventData(
+            metadata={
+                "graph_dimensions": dg.MetadataValue.json(
+                    {
+                        field: [str(value) for value in axis]
+                        for field, axis in zip(dimension_fields, axes)
+                    }
+                ),
+            },
+        ),
+    )
 
 
 # -- Decorator --
@@ -628,20 +657,35 @@ def dynamic_graph_asset(
                     output_name="dga_internal_shared_config",
                 )
 
-            axes = _get_graph_dimension_axes(
+            configured_axes = _get_graph_dimension_axes(
                 context,
                 dimension_resource_info,
                 exclusion_resources_info,
             )
-            axes = inherit_graph_dimension_axes_from_upstream_materializations(
+            inherited_axes = get_inherited_graph_dimension_axes(
                 context,
-                axes,
+                configured_axes,
                 dimension_resource_info,
                 op_ins,
             )
+            if inherited_axes is None:
+                axes = configured_axes
+                graph_dimension_source = "configured"
+            else:
+                axes = inherited_axes
+                graph_dimension_source = "inherited"
+
             graph_dimensions = _get_graph_dimension_combinations(
                 dimension_resource_info.dimension_fields,
                 axes,
+            )
+            _report_graph_dimension_fanout(
+                context,
+                asset_name,
+                graph_dimension_source,
+                dimension_resource_info.dimension_fields,
+                axes,
+                graph_dimensions,
             )
             yield dg.Output(
                 value=graph_dimensions,
