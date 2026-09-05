@@ -3,7 +3,7 @@
 # /// script
 # requires-python = ">=3.13,<3.14"
 # dependencies = [
-#    "cfa-dagster[dev] @ git+https://github.com/cdcgov/cfa-dagster.git",
+#    "cfa-dagster[dev] @ git+https://github.com/cdcgov/cfa-dagster.git@dev-initialize_aci_executor",
 # ]
 # ///
 
@@ -25,6 +25,7 @@ from cfa_dagster import (
     SelectorConfig,
     azure_batch_executor,
     azure_container_app_job_executor,
+    azure_container_instance_executor,
     collect_definitions,
     docker_executor,
     dynamic_executor,
@@ -117,6 +118,21 @@ azure_batch_config = ExecutionConfig(
                 #     "nssp-etl:nssp-etl",
                 # ]
             },
+        },
+    ),
+)
+
+# configuring an executor to run an Azure Container Instance
+# add this to a job or the Definitions class to use it
+azure_container_instance_config = ExecutionConfig(
+    executor=SelectorConfig(
+        class_name=azure_container_instance_executor.__name__,
+        config={
+            # specify a default image
+            "image": image,
+            # set env vars here
+            "env_vars": [],
+            "identity_name": "dagster-daemon-mi",
         },
     ),
 )
@@ -247,16 +263,18 @@ defs = dg.Definitions(
     },
     executor=dynamic_executor(
         # try switching to Azure compute after pushing your image
-        default_config=default_config,
+        default_config=azure_container_instance_config,
         # default_config=docker_config,
         # default_config=azure_caj_config,
         # default_config=azure_batch_config,
+        # default_config=azure_container_instance_config,
         # alternate configs show you default values in the Launchpad on hover
         alternate_configs=[
             default_config,
             docker_config,
             azure_caj_config,
             azure_batch_config,
+            azure_container_instance_config,
         ],
     ),
 )
