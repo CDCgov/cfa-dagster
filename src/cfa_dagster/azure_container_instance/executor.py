@@ -72,26 +72,26 @@ if TYPE_CHECKING:
                 Float,
                 is_required=False,
                 default_value=1.0,
-                description="Number of CPU cores requested for the ACPI container.",
+                description="Number of CPU cores requested for the ACI container.",
             ),
             "memory": Field(
                 Float,
                 is_required=False,
                 default_value=2.0,
-                description="Memory requested for the ACPI container, in GB.",
+                description="Memory requested for the ACI container, in GB.",
             ),
             "max_concurrent": Field(
                 Int,
                 is_required=False,
                 default_value=1,
-                description="Maximum number of ACPI step containers running concurrently.",
+                description="Maximum number of ACI step containers running concurrently.",
             ),
             "identity_name": Field(
                 String,
                 is_required=True,
                 description=(
                     "Name of the user-assigned managed identity "
-                    "to attach to the ACPI container group."
+                    "to attach to the ACI container group."
                 ),
             ),
         },
@@ -343,7 +343,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
         self, step_handler_context: StepHandlerContext
     ):
         """
-        Create a unique, deterministic ACPI container-group name for a Dagster step.
+        Create a unique, deterministic ACI container-group name for a Dagster step.
 
         The name contains the Dagster user and step key for readability. A short
         hash derived from the Dagster run ID, step key, and retry attempt prevents
@@ -369,10 +369,10 @@ class AzureContainerInstanceStepHandler(StepHandler):
         unique_value = f"{run.run_id}:{step_key}:{retry_count}"
         unique_hash = hashlib.sha1(unique_value.encode()).hexdigest()[:10]
 
-        full_id = f"dagster-acpi-{readable_name}-r{retry_count}-{unique_hash}"
+        full_id = f"dagster-aci-{readable_name}-r{retry_count}-{unique_hash}"
         full_id = self._clamp_with_hash(full_id, max_len=63)
 
-        log.debug("ACPI container group ID: %r", full_id)
+        log.debug("ACI container group ID: %r", full_id)
 
         return full_id
 
@@ -396,7 +396,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
             step_handler_context
         )
 
-        acpi_env_vars = [
+        aci_env_vars = [
             EnvironmentVariable(name=name, value=value)
             for name, value in env_vars.items()
         ]
@@ -404,7 +404,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
         execute_step_args = step_handler_context.execute_step_args
 
         command = execute_step_args.get_command_args()
-        log.warning("ACPI COMMAND: %r", command)
+        log.warning("ACI COMMAND: %r", command)
 
         container = Container(
             name=self._get_container_group_id(step_handler_context),
@@ -415,7 +415,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
                 )
             ),
             command=command,
-            environment_variables=acpi_env_vars,
+            environment_variables=aci_env_vars,
         )
 
         vnet_name = "EXT_EDAV_CFA_VNET_PRD"
