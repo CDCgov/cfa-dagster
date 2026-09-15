@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 from collections.abc import Iterator
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional, cast
 
 import dagster._check as check
@@ -48,6 +49,7 @@ from dagster_docker.utils import (
 from cfa_dagster.utils import require_dagster_user
 
 log = logging.getLogger(__name__)
+ACI_START_TIMEOUT_SECONDS = 600
 
 azure_logger = logging.getLogger("azure.mgmt.containerinstance")
 azure_logger.setLevel(logging.DEBUG)
@@ -531,7 +533,39 @@ class AzureContainerInstanceStepHandler(StepHandler):
         exit_code = current_state.exit_code
         detail_status = current_state.detail_status
 
-        if state in ("Waiting", "Running"):
+        if state == "Waiting":
+            run_record = step_handler_context.instance.get_run_record_by_id(
+                step_handler_context.dagster_run.run_id
+            )
+
+            if not run_record:
+                return CheckStepHealthResult.unhealthy(
+                    reason=(
+                        f"Unable to find Dagster run record for "
+                        f"{step_handler_context.dagster_run.run_id!r}."
+                    )
+                )
+
+            elapsed_seconds = (
+                datetime.now(timezone.utc) - run_record.create_timestamp
+            ).total_seconds()
+
+            if elapsed_seconds > ACI_START_TIMEOUT_SECONDS:
+                return CheckStepHealthResult.unhealthy(
+                    reason=(
+                        f"Azure Container Instance group "
+                        f"{container_group_name!r} did not start within "
+                        f"{ACI_START_TIMEOUT_SECONDS} seconds. "
+                        f"Current state: {state!r}. "
+                        f"Detail: {detail_status or 'No detail supplied.'} "
+                        f"Provisioning state: "
+                        f"{container_group.provisioning_state or 'Unknown'}."
+                    )
+                )
+
+            return CheckStepHealthResult.healthy()
+
+        if state == "Running":
             return CheckStepHealthResult.healthy()
 
         if state == "Terminated":
