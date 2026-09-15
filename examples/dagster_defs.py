@@ -3,7 +3,7 @@
 # /// script
 # requires-python = ">=3.13,<3.14"
 # dependencies = [
-#    "cfa-dagster[dev] @ git+https://github.com/cdcgov/cfa-dagster.git@dev-initialize_aci_executor",
+#    "cfa-dagster[dev] @ git+https://github.com/cdcgov/cfa-dagster.git@dev-initialize_acpi_executor",
 # ]
 # ///
 
@@ -151,6 +151,7 @@ def basic_blob_asset(azure_blob_storage: AzureBlobStorageResource):
     """
     An asset that downloads a config file from Azure Blob
     """
+    print("Starting basic_blob_asset", flush=True)
     container_name = "cfadagsterdev"
     with azure_blob_storage.get_client() as blob_storage_client:
         container_client = blob_storage_client.get_container_client(

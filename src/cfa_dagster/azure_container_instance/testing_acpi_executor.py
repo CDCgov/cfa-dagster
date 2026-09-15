@@ -15,9 +15,10 @@ from cfa_dagster.azure_container_instance.executor import (
 
 DOCKER_IMAGE = "cfaprdbatchcr.azurecr.io/cfa-county-rt:latest"
 
-# Optional: attach this managed identity to the ACI container group.
+# Optional: attach this managed identity to the ACPI container group.
 # Set to None to test without a managed identity.
 IDENTITY_NAME = "ext-edav-cfa-batch-account"
+# dagster-daemon-mi should work
 
 os.environ["DAGSTER_USER"] = "zqm6"
 
@@ -64,15 +65,13 @@ ctx.execute_step_args.step_keys_to_execute = [
 
 ctx.dagster_run.remote_job_origin = None
 ctx.dagster_run.job_name = "interactive-test-job"
-ctx.dagster_run.run_id = (
-    "11111111-2222-3333-4444-555555555555"
-)
+ctx.dagster_run.run_id = "11111111-2222-3333-4444-555555555555"
 ctx.dagster_run.tags = {
     "cfa_dagster/run_ts": "2026-08-07T12:00:00+00:00",
 }
 
 # ---------------------------------------------------------------------
-# Build the ACI model only
+# Build the ACPI model only
 # ---------------------------------------------------------------------
 
 group = handler._build_container_group(ctx)
