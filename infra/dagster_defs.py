@@ -100,7 +100,7 @@ def find_stale_dagster_container_groups(
     )
 
     for container_group in container_groups:
-        if not container_group.names.startswith("dagster-aci-"):
+        if not container_group.name.startswith("dagster-aci-"):
             continue
 
         if not container_group.containers:
