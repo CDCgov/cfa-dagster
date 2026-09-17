@@ -11,7 +11,11 @@ from dagster._core.execution.context.system import PlanOrchestrationContext
 from dagster._core.execution.plan.plan import ExecutionPlan
 from dagster._core.executor.init import InitExecutorContext
 
-from cfa_dagster import azure_container_app_job_executor, docker_executor
+from cfa_dagster import (
+    azure_container_app_job_executor,
+    azure_container_instance_executor,
+    docker_executor,
+)
 from cfa_dagster.execution.executor import (
     DynamicExecutor,
     create_executor,
@@ -177,6 +181,53 @@ def test_create_executor_azure_container_app():
     except Exception:
         # Skip this test if we can't properly mock the dependencies
         pytest.skip("Skipping test due to complex executor dependencies")
+
+
+def test_create_executor_azure_container_instance(monkeypatch):
+    monkeypatch.setenv("DAGSTER_USER", "test-user")
+
+    init_context = Mock(spec=InitExecutorContext)
+    init_context.executor_config = {}
+    init_context._replace = lambda **kwargs: Mock(
+        executor_config=kwargs.get("executor_config", {})
+    )
+
+    config = {
+        "image": "mcr.microsoft.com/azuredocs/aci-helloworld",
+        "identity_name": None,
+        "cpu": 1.0,
+        "memory": 2.0,
+        "env_vars": [],
+        "retries": {
+            "enabled": {},
+        },
+        "max_concurrent": 1,
+    }
+
+    execution_config = ExecutionConfig.__new__(ExecutionConfig)
+    object.__setattr__(execution_config, "launcher", None)
+    object.__setattr__(
+        execution_config,
+        "executor",
+        SelectorConfig(
+            class_name=azure_container_instance_executor.__name__,
+            config=config,
+        ),
+    )
+
+    with patch(
+        "cfa_dagster.azure_container_instance.executor."
+        "AzureContainerInstanceStepHandler"
+    ) as mock_handler:
+        mock_handler.return_value = Mock()
+
+        executor = create_executor(
+            init_context,
+            execution_config,
+        )
+
+    assert executor is not None
+    mock_handler.assert_called_once()
 
 
 def test_create_executor_invalid_class():

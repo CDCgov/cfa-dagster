@@ -3,7 +3,7 @@
 # /// script
 # requires-python = ">=3.13,<3.14"
 # dependencies = [
-#    "cfa-dagster[dev] @ git+https://github.com/cdcgov/cfa-dagster.git",
+#    "cfa-dagster[dev] @ git+https://github.com/cdcgov/cfa-dagster.git@dev-initialize_aci_executor",
 # ]
 # ///
 
@@ -25,6 +25,7 @@ from cfa_dagster import (
     SelectorConfig,
     azure_batch_executor,
     azure_container_app_job_executor,
+    azure_container_instance_executor,
     collect_definitions,
     docker_executor,
     dynamic_executor,
@@ -121,6 +122,21 @@ azure_batch_config = ExecutionConfig(
     ),
 )
 
+# configuring an executor to run an Azure Container Instance
+# add this to a job or the Definitions class to use it
+azure_container_instance_config = ExecutionConfig(
+    executor=SelectorConfig(
+        class_name=azure_container_instance_executor.__name__,
+        config={
+            # specify a default image
+            "image": image,
+            # set env vars here
+            "env_vars": [],
+            "identity_name": "dagster-daemon-mi",
+        },
+    ),
+)
+
 
 # ----------------
 # Assets - operations that produce tracked artifacts
@@ -135,6 +151,7 @@ def basic_blob_asset(azure_blob_storage: AzureBlobStorageResource):
     """
     An asset that downloads a config file from Azure Blob
     """
+    print("Starting basic_blob_asset", flush=True)
     container_name = "cfadagsterdev"
     with azure_blob_storage.get_client() as blob_storage_client:
         container_client = blob_storage_client.get_container_client(
@@ -251,12 +268,14 @@ defs = dg.Definitions(
         # default_config=docker_config,
         # default_config=azure_caj_config,
         # default_config=azure_batch_config,
+        # default_config=azure_container_instance_config,
         # alternate configs show you default values in the Launchpad on hover
         alternate_configs=[
             default_config,
             docker_config,
             azure_caj_config,
             azure_batch_config,
+            azure_container_instance_config,
         ],
     ),
 )
