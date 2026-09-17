@@ -264,7 +264,7 @@ defs = dg.Definitions(
     },
     executor=dynamic_executor(
         # try switching to Azure compute after pushing your image
-        default_config=azure_container_instance_config,
+        default_config=default_config,
         # default_config=docker_config,
         # default_config=azure_caj_config,
         # default_config=azure_batch_config,
