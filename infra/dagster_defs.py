@@ -11,6 +11,7 @@ from azure.batch.models._models import BatchJobTerminateOptions
 from azure.core.exceptions import HttpResponseError
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
+from azure.mgmt.containerinstance import ContainerInstanceManagementClient
 from azure.mgmt.msi import ManagedServiceIdentityClient
 from azure.mgmt.subscription import SubscriptionClient
 
@@ -86,6 +87,50 @@ def find_stale_dagster_jobs(
 
     return stale_job_ids
 
+def find_stale_dagster_container_groups(
+    aci_client: ContainerInstanceManagementClient,
+    resource_group: str,
+    retention_threshold: timedelta,
+) -> list[str]:
+    stale_container_groups: list[str] = []
+    cutoff = datetime.now(timezone.utc) - retention_threshold
+
+    container_groups = aci_client.container_groups.list_by_resource_group(
+        resource_group_name=resource_group,
+    )
+
+    for container_group in container_groups:
+        if not container_group.names.startswith("dagster-aci-"):
+            continue
+
+        if not container_group.containers:
+            continue
+
+        # One Dagster step = one ACI container in your executor.
+        container = container_group.containers[0]
+
+        if (
+            container.instance_view is None
+            or container.instance_view.current_state is None
+        ):
+            continue
+
+        current_state = container.instance_view.current_state
+
+        # Never clean up containers that may still be doing work.
+        if current_state.state != "Terminated":
+            continue
+
+        finish_time = current_state.finish_time
+
+        if finish_time is None:
+            continue
+
+        if finish_time < cutoff:
+            stale_container_groups.append(container_group.name)
+
+    return stale_container_groups
+
 
 @dg.op(required_resource_keys={"batch_client"})
 def cleanup_stale_batch_jobs(
@@ -116,6 +161,52 @@ def cleanup_stale_batch_jobs(
                 f"{err.error.code if err.error else err}"
             )
 
+@dg.op(required_resource_keys={"aci_client"})
+def cleanup_stale_aci_container_groups(
+    context: dg.OpExecutionContext,
+):
+    resource_group_name = "ext-edav-cfa-prd"
+
+    aci_client = context.resources.aci_client
+
+    # Keep completed ACIs around for one day so logs/state remain
+    # available for debugging.
+    retention_threshold = timedelta(hours=24)
+
+    stale_container_groups = find_stale_dagster_container_groups(
+        aci_client=aci_client,
+        resource_group=resource_group_name,
+        retention_threshold=retention_threshold,
+    )
+
+    if not stale_container_groups:
+        context.log.info("No stale Dagster ACI container groups found.")
+        return
+
+    context.log.info(
+        "Found %d stale Dagster ACI container group(s).",
+        len(stale_container_groups),
+    )
+
+    for container_group_name in stale_container_groups:
+        try:
+            context.log.info(
+                "Deleting stale ACI container group: %s",
+                container_group_name,
+            )
+
+            aci_client.container_groups.begin_delete(
+                resource_group_name=resource_group_name,
+                container_group_name=container_group_name,
+            ).result()
+
+        except HttpResponseError as err:
+            context.log.warning(
+                "Failed to delete ACI container group %s: %s",
+                container_group_name,
+                err,
+            )
+
 
 @dg.resource
 def batch_client_resource():
@@ -126,10 +217,27 @@ def batch_client_resource():
         credential=credential,
     )
 
+@dg.resource
+def aci_client_resource():
+    credential = DefaultAzureCredential()
+
+    subscription_id = next(
+        SubscriptionClient(credential).subscriptions.list()
+    ).subscription_id
+
+    return ContainerInstanceManagementClient(
+        credential=credential,
+        subscription_id=subscription_id,
+    )
+
 
 @dg.job(resource_defs={"batch_client": batch_client_resource})
 def cleanup_dagster_batch_jobs():
     cleanup_stale_batch_jobs()
+
+@dg.job(resource_defs={"aci_client": aci_client_resource})
+def cleanup_dagster_aci_container_groups():
+    cleanup_stale_aci_container_groups()
 
 
 @dg.op(out={"registry_image": dg.Out(str), "code_location_name": dg.Out(str)})
@@ -614,6 +722,12 @@ def fetch_latest_release_tag():
 cleanup_batch_schedule = dg.ScheduleDefinition(
     job=cleanup_dagster_batch_jobs,
     cron_schedule="0 */3 * * *",
+    execution_timezone="America/Los_Angeles",
+)
+
+cleanup_aci_schedule = dg.ScheduleDefinition(
+    job=cleanup_dagster_aci_container_groups,
+    cron_schedule="30 */3 * * *",
     execution_timezone="America/Los_Angeles",
 )
 
