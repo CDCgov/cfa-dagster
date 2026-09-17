@@ -25,7 +25,6 @@ dependencies = [
     # used by dagster clis, just importing an error
     "click",
     "azure-mgmt-containerinstance>=10.1.0",
-    "pre-commit>=4.6.1",
     "azure-mgmt-msi>=7.1.0",
 ]
 
