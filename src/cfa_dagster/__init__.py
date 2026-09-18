@@ -52,3 +52,22 @@ if not log.handlers:
     )
     handler.setFormatter(formatter)
     log.addHandler(handler)
+
+
+# below is required to suppress the warnings emitted when calling `cfa-dg dev` and using `dg.load_from_defs_folder` due to the way cfa-dagster always calls `dg dev -f some_file.py`. We need the `-f` flag specifically so Dagster can find the local python file when running in docker/Azure Batch.
+class IgnoreCodeLocationWarning(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+
+        return not (
+            record.name == "dagster.components.core.component_tree"
+            and record.levelno == logging.WARNING
+            and message.startswith("The code location name ")
+            and " configured on this project does not match the name "
+            in message
+            and " this code location is registered under." in message
+        )
+
+
+logger = logging.getLogger("dagster.components.core.component_tree")
+logger.addFilter(IgnoreCodeLocationWarning())
