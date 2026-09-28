@@ -3,7 +3,7 @@
 # /// script
 # requires-python = ">=3.13,<3.14"
 # dependencies = [
-#    "cfa-dagster[dev] @ git+https://github.com/cdcgov/cfa-dagster.git@dev-initialize_acpi_executor",
+#    "cfa-dagster[dev] @ git+https://github.com/cdcgov/cfa-dagster.git@dev-initialize_aci_executor",
 # ]
 # ///
 
