@@ -1,0 +1,9 @@
+[default.extend-words]
+# Azure Container Instance
+aci = "aci"
+ACI = "ACI"
+
+[default.extend-identifiers]
+# Azure Container Instance
+aci = "aci"
+ACI = "ACI"
