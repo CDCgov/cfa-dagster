@@ -49,7 +49,7 @@ from dagster_docker.utils import (
 from cfa_dagster.utils import require_dagster_user
 
 log = logging.getLogger(__name__)
-ACI_START_TIMEOUT_SECONDS = 600
+ACPI_START_TIMEOUT_SECONDS = 600
 
 azure_logger = logging.getLogger("azure.mgmt.containerinstance")
 azure_logger.setLevel(logging.INFO)
@@ -74,26 +74,26 @@ if TYPE_CHECKING:
                 Float,
                 is_required=False,
                 default_value=1.0,
-                description="Number of CPU cores requested for the ACI container.",
+                description="Number of CPU cores requested for the ACPI container.",
             ),
             "memory": Field(
                 Float,
                 is_required=False,
                 default_value=2.0,
-                description="Memory requested for the ACI container, in GB.",
+                description="Memory requested for the ACPI container, in GB.",
             ),
             "max_concurrent": Field(
                 Int,
                 is_required=False,
                 default_value=1,
-                description="Maximum number of ACI step containers running concurrently.",
+                description="Maximum number of ACPI step containers running concurrently.",
             ),
             "identity_name": Field(
                 String,
                 is_required=True,
                 description=(
                     "Name of the user-assigned managed identity "
-                    "to attach to the ACI container group."
+                    "to attach to the ACPI container group."
                 ),
             ),
         },
@@ -344,7 +344,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
         self, step_handler_context: StepHandlerContext
     ):
         """
-        Create a unique, deterministic ACI container-group name for a Dagster step.
+        Create a unique, deterministic ACPI container-group name for a Dagster step.
 
         The name contains the Dagster user and step key for readability. A short
         hash derived from the Dagster run ID, step key, and retry attempt prevents
@@ -370,10 +370,10 @@ class AzureContainerInstanceStepHandler(StepHandler):
         unique_value = f"{run.run_id}:{step_key}:{retry_count}"
         unique_hash = hashlib.sha1(unique_value.encode()).hexdigest()[:10]
 
-        full_id = f"dagster-aci-{readable_name}-r{retry_count}-{unique_hash}"
+        full_id = f"dagster-acpi-{readable_name}-r{retry_count}-{unique_hash}"
         full_id = self._clamp_with_hash(full_id, max_len=63)
 
-        log.debug("ACI container group ID: %r", full_id)
+        log.debug("ACPI container group ID: %r", full_id)
 
         return full_id
 
@@ -397,7 +397,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
             step_handler_context
         )
 
-        aci_env_vars = [
+        acpi_env_vars = [
             EnvironmentVariable(name=name, value=value)
             for name, value in env_vars.items()
         ]
@@ -405,7 +405,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
         execute_step_args = step_handler_context.execute_step_args
 
         command = execute_step_args.get_command_args()
-        log.warning("ACI COMMAND: %r", command)
+        log.warning("ACPI COMMAND: %r", command)
 
         container = Container(
             name=self._get_container_group_id(step_handler_context),
@@ -416,7 +416,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
                 )
             ),
             command=command,
-            environment_variables=aci_env_vars,
+            environment_variables=acpi_env_vars,
         )
 
         vnet_name = "EXT_EDAV_CFA_VNET_PRD"
@@ -549,12 +549,12 @@ class AzureContainerInstanceStepHandler(StepHandler):
                 datetime.now(timezone.utc) - run_record.create_timestamp
             ).total_seconds()
 
-            if elapsed_seconds > ACI_START_TIMEOUT_SECONDS:
+            if elapsed_seconds > ACPI_START_TIMEOUT_SECONDS:
                 return CheckStepHealthResult.unhealthy(
                     reason=(
                         f"Azure Container Instance group "
                         f"{container_group_name!r} did not start within "
-                        f"{ACI_START_TIMEOUT_SECONDS} seconds. "
+                        f"{ACPI_START_TIMEOUT_SECONDS} seconds. "
                         f"Current state: {state!r}. "
                         f"Detail: {detail_status or 'No detail supplied.'} "
                         f"Provisioning state: "
