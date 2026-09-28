@@ -52,7 +52,7 @@ log = logging.getLogger(__name__)
 ACI_START_TIMEOUT_SECONDS = 600
 
 azure_logger = logging.getLogger("azure.mgmt.containerinstance")
-azure_logger.setLevel(logging.DEBUG)
+azure_logger.setLevel(logging.INFO)
 
 if not azure_logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
