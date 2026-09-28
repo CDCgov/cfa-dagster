@@ -278,27 +278,16 @@ class AzureContainerInstanceStepHandler(StepHandler):
             logging_enable=True,
         )
 
-        identities = list(
-            client.user_assigned_identities.list_by_subscription()
-        )
-
-        matches = [
-            identity
-            for identity in identities
-            if identity.name == identity_name
-        ]
-
-        if not matches:
-            raise RuntimeError(
-                f"Managed identity '{identity_name}' not found."
+        try:
+            return client.user_assigned_identities.get(
+                self._resource_group,
+                identity_name,
             )
-
-        if len(matches) > 1:
+        except ResourceNotFoundError as exc:
             raise RuntimeError(
-                f"Multiple managed identities named '{identity_name}' found."
-            )
-
-        return matches[0]
+                f"Managed identity '{identity_name}' not found in resource "
+                f"group '{self._resource_group}'."
+            ) from exc
 
     def _get_docker_container_context(
         self, step_handler_context: StepHandlerContext
