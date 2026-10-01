@@ -8,7 +8,6 @@ from dagster import (
     DagsterEvent,
     ExecutorDefinition,
     InitExecutorContext,
-    MetadataValue,
     in_process_executor,
     multiprocess_executor,
 )
@@ -22,13 +21,18 @@ from dagster._core.executor.step_delegating import (
 
 # used via globals()[executor_class_name]
 # ruff: noqa: F401
-from dagster_docker import docker_executor
-
 from ..azure_batch import azure_batch_executor
 from ..azure_container_app_job import azure_container_app_job_executor
 from ..azure_container_instance import azure_container_instance_executor
+from ..docker import docker_executor
 
 # using relative import to avoid circular dependency
+from ..profiling import (
+    PROFILER_SOURCE_ENV,
+    PROFILER_SOURCE_PSUTIL,
+    ProfilingConfig,
+    wrap_command_for_profiling,
+)
 from ..utils import require_dagster_user
 from .utils import (
     ExecutionConfig,
@@ -46,9 +50,26 @@ class SynchronousStepHandler(StepHandler):
     not run concurrently with their dependents.
     """
 
+    def __init__(self, profiling: ProfilingConfig | None = None):
+        self._profiling = profiling or ProfilingConfig()
+
     @property
     def name(self) -> str:
         return "SynchronousStepHandler"
+
+    def _get_env(
+        self, step_handler_context: StepHandlerContext
+    ) -> dict[str, str]:
+        step_key = step_handler_context.execute_step_args.step_keys_to_execute[
+            0
+        ]
+        return {
+            **os.environ,
+            "DAGSTER_RUN_JOB_NAME": step_handler_context.dagster_run.job_name,
+            "DAGSTER_RUN_ID": step_handler_context.dagster_run.run_id,
+            "DAGSTER_RUN_STEP_KEY": step_key,
+            PROFILER_SOURCE_ENV: PROFILER_SOURCE_PSUTIL,
+        }
 
     def launch_step(
         self, step_handler_context: StepHandlerContext
@@ -64,8 +85,12 @@ class SynchronousStepHandler(StepHandler):
             metadata={},
         )
 
+        command = wrap_command_for_profiling(
+            step_handler_context.execute_step_args.get_command_args(),
+            self._profiling,
+        )
         result = subprocess.run(
-            step_handler_context.execute_step_args.get_command_args()
+            command, env=self._get_env(step_handler_context), check=False
         )
 
         if result.returncode != 0:
@@ -95,8 +120,9 @@ class SubprocessStepHandler(StepHandler):
     StepDelegatingExecutor level and cannot be enforced per StepHandler.
     """
 
-    def __init__(self):
+    def __init__(self, profiling: ProfilingConfig | None = None):
         self._processes: dict[str, subprocess.Popen] = {}
+        self._profiling = profiling or ProfilingConfig()
 
     @property
     def name(self) -> str:
@@ -116,9 +142,18 @@ class SubprocessStepHandler(StepHandler):
             metadata={},
         )
 
-        process = subprocess.Popen(
-            step_handler_context.execute_step_args.get_command_args()
+        env = {
+            **os.environ,
+            "DAGSTER_RUN_JOB_NAME": step_handler_context.dagster_run.job_name,
+            "DAGSTER_RUN_ID": step_handler_context.dagster_run.run_id,
+            "DAGSTER_RUN_STEP_KEY": step_key,
+            PROFILER_SOURCE_ENV: PROFILER_SOURCE_PSUTIL,
+        }
+        command = wrap_command_for_profiling(
+            step_handler_context.execute_step_args.get_command_args(),
+            self._profiling,
         )
+        process = subprocess.Popen(command, env=env)
         self._processes[step_key] = process
 
     def check_step_health(
@@ -154,6 +189,7 @@ def create_executor_step_handler(
 ) -> StepDelegatingExecutor:
     executor_class_name = execution_config.executor.class_name
     executor_config = execution_config.executor.config
+    profiling = ProfilingConfig.from_config(executor_config)
 
     try:
         executor_class: ExecutorDefinition = globals()[executor_class_name]
@@ -163,9 +199,9 @@ def create_executor_step_handler(
         )
 
     if executor_class_name == in_process_executor.__name__:
-        return SynchronousStepHandler()
+        return SynchronousStepHandler(profiling)
     if executor_class_name == multiprocess_executor.__name__:
-        return SubprocessStepHandler()
+        return SubprocessStepHandler(profiling)
 
     env_vars = executor_config.get("env_vars", [])
     log.debug(f"env_vars before req: '{env_vars}'")

@@ -21,6 +21,7 @@ dependencies = [
     "dagster-postgres~=0.29.2",
     "aiofiles~=24.1.0",
     "azure-keyvault-secrets",
+    "psutil",
     "psycopg2-binary",
     # used by dagster clis, just importing an error
     "click",

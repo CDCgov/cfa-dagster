@@ -15,7 +15,53 @@ from cfa_dagster.cli import (
     run_dagster_webserver,
     start_dev_env,
 )
-from cfa_dagster.execution.utils import ExecutionConfig, SelectorConfig
+from cfa_dagster.execution.utils import (
+    ExecutionConfig,
+    Executor,
+    SelectorConfig,
+)
+from cfa_dagster.utils import (
+    AZURE_SUBSCRIPTION_ID_ENV,
+    get_subscription_id,
+)
+
+
+def test_get_subscription_id_uses_env_override(monkeypatch):
+    monkeypatch.setenv(AZURE_SUBSCRIPTION_ID_ENV, "override-subscription-id")
+
+    assert get_subscription_id(Mock()) == "override-subscription-id"
+
+
+def test_get_subscription_id_matches_display_name_case_insensitive(
+    monkeypatch,
+):
+    monkeypatch.delenv(AZURE_SUBSCRIPTION_ID_ENV, raising=False)
+    subscriptions = [
+        Mock(display_name="other", subscription_id="wrong-id"),
+        Mock(display_name="ext-edav-cfa-prd", subscription_id="expected-id"),
+    ]
+    subscription_client = Mock()
+    subscription_client.subscriptions.list.return_value = subscriptions
+
+    with patch("cfa_dagster.utils.SubscriptionClient") as client_cls:
+        client_cls.return_value = subscription_client
+
+        assert get_subscription_id(Mock()) == "expected-id"
+
+
+def test_get_subscription_id_raises_with_available_subscriptions(monkeypatch):
+    monkeypatch.delenv(AZURE_SUBSCRIPTION_ID_ENV, raising=False)
+    subscriptions = [Mock(display_name="other", subscription_id="other-id")]
+    subscription_client = Mock()
+    subscription_client.subscriptions.list.return_value = subscriptions
+
+    with patch("cfa_dagster.utils.SubscriptionClient") as client_cls:
+        client_cls.return_value = subscription_client
+        with pytest.raises(
+            RuntimeError,
+            match="Azure subscription 'EXT-EDAV-CFA-PRD' not found",
+        ):
+            get_subscription_id(Mock())
 
 
 def test_selector_config_from_run_config():
@@ -88,6 +134,66 @@ def test_execution_config_from_run_config():
 
     assert execution_config.launcher.class_name == "DefaultRunLauncher"
     assert execution_config.executor.class_name == "in_process_executor"
+
+
+def test_executor_docker_returns_execution_config():
+    config = Executor.docker(
+        {"image": "test-image", "profiling": {"enabled": True}}
+    )
+
+    assert isinstance(config, ExecutionConfig)
+    assert config.executor.class_name == "docker_executor"
+    assert config.executor.config["image"] == "test-image"
+    assert config.executor.config["profiling"] == {
+        "enabled": True,
+        "sample_interval_seconds": 1.0,
+    }
+    assert config.to_dict() == {
+        "executor": {
+            "docker_executor": {
+                "image": "test-image",
+                "max_concurrent": 5,
+                "profiling": {
+                    "enabled": True,
+                    "sample_interval_seconds": 1.0,
+                },
+                "retries": {"enabled": {}},
+            }
+        }
+    }
+
+
+def test_executor_helpers_return_expected_executor_names():
+    assert (
+        Executor.azure_batch(
+            {
+                "pool_name": "test-pool",
+                "container_kwargs": {"working_dir": "/app"},
+            }
+        ).executor.class_name
+        == "azure_batch_executor"
+    )
+    assert (
+        Executor.azure_container_app_job().executor.class_name
+        == "azure_container_app_job_executor"
+    )
+    assert (
+        Executor.azure_container_instance(
+            {"identity_name": "test-identity"}
+        ).executor.class_name
+        == "azure_container_instance_executor"
+    )
+    assert (
+        Executor.multiprocess().executor.class_name == "multiprocess_executor"
+    )
+    assert Executor.in_process().executor.class_name == "in_process_executor"
+
+
+def test_executor_helper_to_run_tags_round_trips():
+    config = Executor.multiprocess({"profiling": {"enabled": True}})
+    tags = config.to_run_tags()
+
+    assert ExecutionConfig.from_run_tags(tags) == config
 
 
 def test_execution_config_from_run_config_none():

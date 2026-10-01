@@ -16,7 +16,6 @@ from dagster import (
 )
 from dagster._config import process_config
 from dagster._utils.merger import merge_dicts
-from dagster_docker import docker_executor
 from dagster_docker.utils import DOCKER_CONFIG_SCHEMA
 
 from ..azure_batch.executor import azure_batch_executor
@@ -24,6 +23,8 @@ from ..azure_container_app_job.executor import azure_container_app_job_executor
 from ..azure_container_instance.executor import (
     azure_container_instance_executor,
 )
+from ..docker import docker_executor
+from ..profiling import PROFILING_CONFIG_SCHEMA
 from ..utils import is_production
 
 log = logging.getLogger(__name__)
@@ -242,6 +243,62 @@ class ExecutionConfig:
         return {"config": self.to_dict()}
 
 
+class Executor:
+    """User-facing helpers for selecting a dynamic executor."""
+
+    @staticmethod
+    def _execution_config(
+        class_name: str,
+        config: Optional[Mapping[str, Any]] = None,
+    ) -> ExecutionConfig:
+        return ExecutionConfig(
+            executor=SelectorConfig(
+                class_name=class_name,
+                config=dict(config or {}),
+            )
+        )
+
+    @classmethod
+    def docker(
+        cls, config: Optional[Mapping[str, Any]] = None
+    ) -> ExecutionConfig:
+        return cls._execution_config(docker_executor.__name__, config)
+
+    @classmethod
+    def azure_batch(
+        cls, config: Optional[Mapping[str, Any]] = None
+    ) -> ExecutionConfig:
+        return cls._execution_config(azure_batch_executor.__name__, config)
+
+    @classmethod
+    def azure_container_app_job(
+        cls, config: Optional[Mapping[str, Any]] = None
+    ) -> ExecutionConfig:
+        return cls._execution_config(
+            azure_container_app_job_executor.__name__, config
+        )
+
+    @classmethod
+    def azure_container_instance(
+        cls, config: Optional[Mapping[str, Any]] = None
+    ) -> ExecutionConfig:
+        return cls._execution_config(
+            azure_container_instance_executor.__name__, config
+        )
+
+    @classmethod
+    def multiprocess(
+        cls, config: Optional[Mapping[str, Any]] = None
+    ) -> ExecutionConfig:
+        return cls._execution_config(multiprocess_executor.__name__, config)
+
+    @classmethod
+    def in_process(
+        cls, config: Optional[Mapping[str, Any]] = None
+    ) -> ExecutionConfig:
+        return cls._execution_config(in_process_executor.__name__, config)
+
+
 def with_alternate_default(fields: dict, alternates: dict[str, dict]) -> dict:
     """
     Takes a Dagster config schema and returns a copy with alternate default values
@@ -331,6 +388,11 @@ def get_dynamic_executor_config_schema(
         alternate_launchers,
     )
 
+    in_process_executor_schema = merge_dicts(
+        in_process_executor.config_schema.config_type.fields,
+        PROFILING_CONFIG_SCHEMA,
+    )
+
     multiprocess_executor_schema = merge_dicts(
         multiprocess_executor.config_schema.config_type.fields,
         {
@@ -343,6 +405,7 @@ def get_dynamic_executor_config_schema(
                 ),
                 default_value=5,
             ),
+            **PROFILING_CONFIG_SCHEMA,
         },
     )
 
@@ -363,7 +426,7 @@ def get_dynamic_executor_config_schema(
 
     executor_fields = with_alternate_default(
         {
-            "in_process_executor": in_process_executor.config_schema.config_type.fields,
+            "in_process_executor": in_process_executor_schema,
             "multiprocess_executor": multiprocess_executor_schema,
             "azure_batch_executor": azure_batch_executor.config_schema.config_type.fields,
             "azure_container_app_job_executor": azure_container_app_job_executor.config_schema.config_type.fields,

@@ -20,9 +20,8 @@ from dagster_azure.blob import (
 # ruff: noqa: F401
 from cfa_dagster import (
     ADLS2PickleIOManager,
-    ExecutionConfig,
+    Executor,
     GraphDimension,
-    SelectorConfig,
     azure_batch_executor,
     azure_container_app_job_executor,
     azure_container_instance_executor,
@@ -52,89 +51,75 @@ workdir = "/app"
 
 # this is the default run config that launches the job in your local shell
 # and executes each step in a separate system process
-default_config = ExecutionConfig(
-    executor=SelectorConfig(class_name=dg.multiprocess_executor.__name__),
-)
+default_execution_config = Executor.multiprocess()
 
 # configuring an executor to run each workflow step in a new Docker container
 # add this to a job or the Definitions class to use it
-docker_config = ExecutionConfig(
-    executor=SelectorConfig(
-        class_name=docker_executor.__name__,
-        config={
-            # specify a default image
-            "image": image,
-            # set env vars here
-            # "env_vars": [f"DAGSTER_USER"],
-            "container_kwargs": {
-                "volumes": [
-                    # bind the ~/.azure folder for optional cli login
-                    f"/home/{user}/.azure:/root/.azure",
-                    # bind current file so we don't have to rebuild
-                    # the container image for workflow changes
-                    f"{__file__}:{workdir}/{os.path.basename(__file__)}",
-                ]
-            },
+docker_execution_config = Executor.docker(
+    {
+        # specify a default image
+        "image": image,
+        # set env vars here
+        # "env_vars": ["SOME_VAR=some_val"],
+        "container_kwargs": {
+            "volumes": [
+                # bind the ~/.azure folder for optional cli login
+                f"/home/{user}/.azure:/root/.azure",
+                # bind current file so we don't have to rebuild
+                # the container image for workflow changes
+                f"{__file__}:{workdir}/{os.path.basename(__file__)}",
+            ]
         },
-    )
+    },
 )
 
 
 # configuring an executor to run each workflow step in a new Azure Container
 # App Job execution
 # add this to a job or the Definitions class to use it
-azure_caj_config = ExecutionConfig(
-    executor=SelectorConfig(
-        class_name=azure_container_app_job_executor.__name__,
-        config={
-            "container_app_job_name": "cfa-dagster",
-            # specify a default image
-            "image": image,
-            # set env vars here
-            # "env_vars": [f"DAGSTER_USER"],
-        },
-    )
+azure_caj_execution_config = Executor.azure_container_app_job(
+    {
+        "container_app_job_name": "cfa-dagster",
+        # specify a default image
+        "image": image,
+        # set env vars here
+        # "env_vars": ["SOME_VAR=some_val"],
+    },
 )
 
 # configuring an executor to run each workflow steps in a new Azure Batch
 # task for maximum scale
 # add this to a job or the Definitions class to use it
-azure_batch_config = ExecutionConfig(
-    executor=SelectorConfig(
-        class_name=azure_batch_executor.__name__,
-        config={
-            # change the pool_name to your existing pool name
-            "pool_name": "cfa-dagster",
-            # specify a default image
-            "image": image,
-            # set env vars here
-            "env_vars": ["CFA_DAGSTER_LOG_LEVEL=debug"],
-            "container_kwargs": {
-                # set the working directory to match your Dockerfile
-                # required for Azure Batch
-                "working_dir": workdir,
-                # mount config if your existing Batch pool already has Blob mounts
-                # "volumes": [
-                #     "nssp-etl:nssp-etl",
-                # ]
-            },
+azure_batch_execution_config = Executor.azure_batch(
+    {
+        # change the pool_name to your existing pool name
+        "pool_name": "cfa-dagster",
+        # specify a default image
+        "image": image,
+        # set env vars here
+        # "env_vars": ["SOME_VAR=some_val"],
+        "container_kwargs": {
+            # set the working directory to match your Dockerfile
+            # required for Azure Batch
+            "working_dir": workdir,
+            # mount config if your existing Batch pool already has Blob mounts
+            # "volumes": [
+            #     "nssp-etl:nssp-etl",
+            # ]
         },
-    ),
+    },
 )
 
 # configuring an executor to run an Azure Container Instance
 # add this to a job or the Definitions class to use it
-azure_container_instance_config = ExecutionConfig(
-    executor=SelectorConfig(
-        class_name=azure_container_instance_executor.__name__,
-        config={
-            # specify a default image
-            "image": image,
-            # set env vars here
-            "env_vars": [],
-            "identity_name": "dagster-daemon-mi",
-        },
-    ),
+azure_container_instance_execution_config = Executor.azure_container_instance(
+    {
+        # specify a default image
+        "image": image,
+        # set env vars here
+        # "env_vars": ["SOME_VAR=some_val"],
+        "identity_name": "dagster-daemon-mi",
+    },
 )
 
 
@@ -224,7 +209,7 @@ if not is_production():
         config=dg.RunConfig(
             ops={"build_image": {"inputs": {"should_push": False}}},
             # configure this job to run on your computer
-            execution=default_config.to_run_config(),
+            execution=default_execution_config.to_run_config(),
         ),
         executor_def=dynamic_executor(),
     )
@@ -264,18 +249,18 @@ defs = dg.Definitions(
     },
     executor=dynamic_executor(
         # try switching to Azure compute after pushing your image
-        default_config=default_config,
-        # default_config=docker_config,
-        # default_config=azure_caj_config,
-        # default_config=azure_batch_config,
-        # default_config=azure_container_instance_config,
+        default_config=default_execution_config,
+        # default_config=docker_execution_config,
+        # default_config=azure_caj_execution_config,
+        # default_config=azure_batch_execution_config,
+        # default_config=azure_container_instance_execution_config,
         # alternate configs show you default values in the Launchpad on hover
         alternate_configs=[
-            default_config,
-            docker_config,
-            azure_caj_config,
-            azure_batch_config,
-            azure_container_instance_config,
+            default_execution_config,
+            docker_execution_config,
+            azure_caj_execution_config,
+            azure_batch_execution_config,
+            azure_container_instance_execution_config,
         ],
     ),
 )

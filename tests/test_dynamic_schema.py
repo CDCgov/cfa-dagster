@@ -1,6 +1,8 @@
 import os
 from unittest.mock import patch
 
+from dagster._config import process_config
+
 from cfa_dagster.execution.utils import get_dynamic_executor_config_schema
 
 
@@ -93,3 +95,73 @@ def test_dynamic_schema_launcher_options_dev_vs_prod():
     # Both should have DefaultRunLauncher
     assert "DefaultRunLauncher" in dev_launcher_fields
     assert "DefaultRunLauncher" in prod_launcher_fields
+
+
+def test_dynamic_schema_accepts_profiling_for_local_executors():
+    schema = get_dynamic_executor_config_schema(use_full_schema=True)
+
+    for executor_name in ("in_process_executor", "multiprocess_executor"):
+        result = process_config(
+            schema["executor"].config_type,
+            {
+                executor_name: {
+                    "profiling": {
+                        "enabled": True,
+                        "sample_interval_seconds": 2.0,
+                    }
+                }
+            },
+        )
+
+        assert result.success
+        assert result.value[executor_name]["profiling"] == {
+            "enabled": True,
+            "sample_interval_seconds": 2.0,
+        }
+
+
+def test_dynamic_schema_accepts_profiling_for_docker_executor():
+    schema = get_dynamic_executor_config_schema(use_full_schema=True)
+
+    result = process_config(
+        schema["executor"].config_type,
+        {
+            "docker_executor": {
+                "image": "test-image",
+                "profiling": {
+                    "enabled": True,
+                    "sample_interval_seconds": 2.0,
+                },
+            }
+        },
+    )
+
+    assert result.success
+    assert result.value["docker_executor"]["profiling"] == {
+        "enabled": True,
+        "sample_interval_seconds": 2.0,
+    }
+
+
+def test_dynamic_schema_accepts_profiling_for_azure_container_instance_executor():
+    schema = get_dynamic_executor_config_schema(use_full_schema=True)
+
+    result = process_config(
+        schema["executor"].config_type,
+        {
+            "azure_container_instance_executor": {
+                "image": "test-image",
+                "identity_name": "test-identity",
+                "profiling": {
+                    "enabled": True,
+                    "sample_interval_seconds": 2.0,
+                },
+            }
+        },
+    )
+
+    assert result.success
+    assert result.value["azure_container_instance_executor"]["profiling"] == {
+        "enabled": True,
+        "sample_interval_seconds": 2.0,
+    }

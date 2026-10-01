@@ -6,7 +6,6 @@ from typing import Any, Optional
 import dagster._check as check
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
-from azure.mgmt.subscription import SubscriptionClient
 from dagster._core.launcher.base import (
     CheckRunHealthResult,
     LaunchRunContext,
@@ -27,7 +26,7 @@ from dagster_docker.utils import (
 )
 from typing_extensions import Self
 
-from ..utils import require_dagster_user
+from ..utils import get_subscription_id, require_dagster_user
 from .utils import CAJ_CONFIG_SCHEMA, get_status_caj, start_caj, stop_caj
 
 log = logging.getLogger(__name__)
@@ -77,16 +76,9 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
         self._resource_group = "ext-edav-cfa-prd"  # TODO: move to config?
         credential = DefaultAzureCredential()
 
-        # Get first subscription for logged-in credential
-        first_subscription_id = (
-            SubscriptionClient(credential)
-            .subscriptions.list()
-            .next()
-            .subscription_id
-        )
-
         self._azure_caj_client = ContainerAppsAPIClient(
-            credential=credential, subscription_id=first_subscription_id
+            credential=credential,
+            subscription_id=get_subscription_id(credential),
         )
 
         super().__init__()

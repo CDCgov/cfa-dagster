@@ -21,11 +21,10 @@ from dagster._core.executor.step_delegating import StepDelegatingExecutor
 
 # used via globals()[executor_class_name]
 # ruff: noqa: F401
-from dagster_docker import docker_executor
-
 from ..azure_batch import azure_batch_executor
 from ..azure_container_app_job import azure_container_app_job_executor
 from ..azure_container_instance import azure_container_instance_executor
+from ..docker import docker_executor
 from ..utils import require_dagster_user
 
 # using relative import to avoid circular dependency

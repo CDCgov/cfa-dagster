@@ -2,6 +2,7 @@ import hashlib
 import logging
 import os
 import re
+import shlex
 import uuid
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Optional, cast
@@ -11,7 +12,6 @@ from azure.batch import BatchClient
 from azure.batch import models as batch_models
 from azure.core.exceptions import HttpResponseError
 from azure.identity import DefaultAzureCredential
-from azure.mgmt.subscription import SubscriptionClient
 from dagster import Field, Permissive, StringSource, executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
@@ -35,7 +35,12 @@ from dagster_docker.utils import (
     validate_docker_image,
 )
 
-from cfa_dagster.utils import require_dagster_user
+from cfa_dagster.profiling import (
+    PROFILING_CONFIG_SCHEMA,
+    ProfilingConfig,
+    wrap_command_for_profiling,
+)
+from cfa_dagster.utils import get_subscription_id, require_dagster_user
 
 from ..utils import get_run_timestamp
 
@@ -72,6 +77,7 @@ if TYPE_CHECKING:
                     "of available options."
                 ),
             ),
+            **PROFILING_CONFIG_SCHEMA,
         },
     ),
     requirements=multiple_process_executor_requirements(),
@@ -124,6 +130,7 @@ def azure_batch_executor(
     tag_concurrency_limits = check.opt_list_elem(
         config, "tag_concurrency_limits"
     )
+    profiling = ProfilingConfig.from_config(config)
 
     # propagate user & dev env vars
     require_dagster_user()
@@ -154,7 +161,7 @@ def azure_batch_executor(
     pool_name = check.opt_str_elem(config, "pool_name")
 
     return StepDelegatingExecutor(
-        AzureBatchStepHandler(image, container_context, pool_name),
+        AzureBatchStepHandler(image, container_context, pool_name, profiling),
         retries=check.not_none(RetryMode.from_config(retries)),
         max_concurrent=max_concurrent,
         tag_concurrency_limits=tag_concurrency_limits,
@@ -167,6 +174,7 @@ class AzureBatchStepHandler(StepHandler):
         image: Optional[str],
         container_context: DockerContainerContext,
         pool_name: Optional[str],
+        profiling: ProfilingConfig,
     ):
         super().__init__()
         # self._pool_id = "cfa-dagster"
@@ -176,12 +184,7 @@ class AzureBatchStepHandler(StepHandler):
 
         batch_url = "https://cfaprdba.eastus.batch.azure.com"
 
-        self._subscription_id = (
-            SubscriptionClient(credential)
-            .subscriptions.list()
-            .next()
-            .subscription_id
-        )
+        self._subscription_id = get_subscription_id(credential)
 
         self._batch_client = BatchClient(
             endpoint=batch_url, credential=credential
@@ -191,6 +194,7 @@ class AzureBatchStepHandler(StepHandler):
         self._container_context = check.inst_param(
             container_context, "container_context", DockerContainerContext
         )
+        self._profiling = profiling
 
     def _get_image(self, step_handler_context: StepHandlerContext):
         step_key = self._get_step_key(step_handler_context)
@@ -427,8 +431,11 @@ class AzureBatchStepHandler(StepHandler):
         env_vars["DAGSTER_RUN_JOB_NAME"] = (
             step_handler_context.dagster_run.job_name
         )
+        env_vars["DAGSTER_RUN_ID"] = step_handler_context.dagster_run.run_id
         env_vars["DAGSTER_RUN_STEP_KEY"] = step_key
-        command = execute_step_args.get_command_args()
+        command = wrap_command_for_profiling(
+            execute_step_args.get_command_args(), self._profiling
+        )
 
         resource_group_name = "ext-edav-cfa-network-prd"
         user_assigned_identity_name = "ext-edav-cfa-batch-account"
@@ -468,7 +475,7 @@ class AzureBatchStepHandler(StepHandler):
 
         task = batch_models.BatchTaskCreateOptions(
             id=task_id,
-            command_line=" ".join(command),
+            command_line=shlex.join(command),
             container_settings=container_settings,
             environment_settings=[
                 {"name": k, "value": v} for k, v in env_vars.items()

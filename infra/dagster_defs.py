@@ -13,7 +13,6 @@ from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
 from azure.mgmt.containerinstance import ContainerInstanceManagementClient
 from azure.mgmt.msi import ManagedServiceIdentityClient
-from azure.mgmt.subscription import SubscriptionClient
 
 from cfa_dagster import (
     ADLS2PickleIOManager,
@@ -21,6 +20,7 @@ from cfa_dagster import (
     SelectorConfig,
     collect_definitions,
     dynamic_executor,
+    get_subscription_id,
     start_dev_env,
 )
 
@@ -228,9 +228,7 @@ def batch_client_resource():
 def aci_client_resource():
     credential = DefaultAzureCredential()
 
-    subscription_id = next(
-        SubscriptionClient(credential).subscriptions.list()
-    ).subscription_id
+    subscription_id = get_subscription_id(credential)
 
     return ContainerInstanceManagementClient(
         credential=credential,
@@ -277,9 +275,7 @@ def create_or_update_code_location_aca(
 
     credential = DefaultAzureCredential()
 
-    subscription_id = next(
-        SubscriptionClient(credential).subscriptions.list()
-    ).subscription_id
+    subscription_id = get_subscription_id(credential)
 
     resource_group_name = "ext-edav-cfa-prd"
     location = "eastus"
@@ -401,9 +397,7 @@ def create_or_update_code_location_aca(
 def update_dagster_aca(context, image_tag: str):
     credential = DefaultAzureCredential()
 
-    subscription_id = next(
-        SubscriptionClient(credential).subscriptions.list()
-    ).subscription_id
+    subscription_id = get_subscription_id(credential)
 
     resource_group_name = "ext-edav-cfa-prd"
     location = "eastus"
@@ -614,16 +608,9 @@ def restart_dagster_webserver(context: dg.OpExecutionContext):
     CONTAINER_APP = "dagster"
     credential = DefaultAzureCredential()
 
-    # Get first subscription for logged-in credential
-    first_subscription_id = (
-        SubscriptionClient(credential)
-        .subscriptions.list()
-        .next()
-        .subscription_id
-    )
-
     client = ContainerAppsAPIClient(
-        credential=credential, subscription_id=first_subscription_id
+        credential=credential,
+        subscription_id=get_subscription_id(credential),
     )
 
     # Find active revision
@@ -734,13 +721,13 @@ def fetch_latest_release_tag():
 cleanup_batch_schedule = dg.ScheduleDefinition(
     job=cleanup_dagster_batch_jobs,
     cron_schedule="0 */3 * * *",
-    execution_timezone="America/Los_Angeles",
+    execution_timezone="America/New_York",
 )
 
 cleanup_aci_schedule = dg.ScheduleDefinition(
     job=cleanup_dagster_aci_container_groups,
     cron_schedule="30 */3 * * *",
-    execution_timezone="America/Los_Angeles",
+    execution_timezone="America/New_York",
 )
 
 # collect Dagster definitions from the current file

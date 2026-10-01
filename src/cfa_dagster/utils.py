@@ -4,6 +4,7 @@ from datetime import datetime
 from urllib.parse import quote
 
 import dagster as dg
+from azure.mgmt.subscription import SubscriptionClient
 from dagster._core.definitions.unresolved_asset_job_definition import (
     UnresolvedAssetJobDefinition,
 )
@@ -13,6 +14,8 @@ log = logging.getLogger(__name__)
 
 LOCAL_HOSTNAME = "127.0.0.1"
 LOCAL_PORT = 4000
+AZURE_SUBSCRIPTION_NAME = "EXT-EDAV-CFA-PRD"
+AZURE_SUBSCRIPTION_ID_ENV = "CFA_DAGSTER_AZURE_SUBSCRIPTION_ID"
 PROD_HOSTNAME = os.getenv(
     "DAGSTER_WEBSERVER_URL", "dagster.apps.edav.ext.cdc.gov"
 )
@@ -31,6 +34,27 @@ def is_production() -> bool:
         return False
     # Otherwise, check if we're in production based on CFA_DAGSTER_ENV
     return os.getenv("CFA_DAGSTER_ENV") == "prod"
+
+
+def get_subscription_id(credential) -> str:
+    subscription_id = os.getenv(AZURE_SUBSCRIPTION_ID_ENV)
+    if subscription_id:
+        return subscription_id
+
+    subscriptions = list(SubscriptionClient(credential).subscriptions.list())
+    for subscription in subscriptions:
+        display_name = subscription.display_name or ""
+        if display_name.casefold() == AZURE_SUBSCRIPTION_NAME.casefold():
+            return subscription.subscription_id
+
+    available = ", ".join(
+        f"{subscription.display_name} ({subscription.subscription_id})"
+        for subscription in subscriptions
+    )
+    raise RuntimeError(
+        f"Azure subscription {AZURE_SUBSCRIPTION_NAME!r} not found. "
+        f"Available subscriptions: {available or '<none>'}"
+    )
 
 
 def get_webserver_url() -> str:

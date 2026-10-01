@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Optional, cast
 import dagster._check as check
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.appcontainers import ContainerAppsAPIClient
-from azure.mgmt.subscription import SubscriptionClient
 from dagster import executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
@@ -28,7 +27,8 @@ from dagster_docker.utils import (
     validate_docker_image,
 )
 
-from cfa_dagster.utils import require_dagster_user
+from cfa_dagster.profiling import ProfilingConfig, wrap_command_for_profiling
+from cfa_dagster.utils import get_subscription_id, require_dagster_user
 
 from .utils import CAJ_CONFIG_SCHEMA, get_status_caj, start_caj, stop_caj
 
@@ -95,6 +95,7 @@ def azure_container_app_job_executor(
     tag_concurrency_limits = check.opt_list_elem(
         config, "tag_concurrency_limits"
     )
+    profiling = ProfilingConfig.from_config(config)
 
     # propagate user & dev env vars
     require_dagster_user()
@@ -124,7 +125,12 @@ def azure_container_app_job_executor(
 
     return StepDelegatingExecutor(
         AzureContainerAppJobStepHandler(
-            image, container_context, container_app_job_name, cpu, memory
+            image,
+            container_context,
+            container_app_job_name,
+            cpu,
+            memory,
+            profiling,
         ),
         retries=check.not_none(RetryMode.from_config(retries)),
         max_concurrent=max_concurrent,
@@ -140,6 +146,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
         container_app_job_name: str,
         cpu: float,
         memory: float,
+        profiling: ProfilingConfig,
     ):
         super().__init__()
         log.debug(f"Launching a new {self.name}")
@@ -149,19 +156,13 @@ class AzureContainerAppJobStepHandler(StepHandler):
         self._container_app_job_name = container_app_job_name
         self._cpu = cpu
         self._memory = memory
+        self._profiling = profiling
         self._resource_group = "ext-edav-cfa-prd"  # TODO: move to config?
         credential = DefaultAzureCredential()
 
-        # Get first subscription for logged-in credential
-        first_subscription_id = (
-            SubscriptionClient(credential)
-            .subscriptions.list()
-            .next()
-            .subscription_id
-        )
-
         self._azure_caj_client = ContainerAppsAPIClient(
-            credential=credential, subscription_id=first_subscription_id
+            credential=credential,
+            subscription_id=get_subscription_id(credential),
         )
 
         self._image = check.opt_str_param(image, "image")
@@ -259,7 +260,16 @@ class AzureContainerAppJobStepHandler(StepHandler):
         env_vars["DAGSTER_RUN_JOB_NAME"] = (
             step_handler_context.dagster_run.job_name
         )
+        env_vars["DAGSTER_RUN_ID"] = step_handler_context.dagster_run.run_id
         env_vars["DAGSTER_RUN_STEP_KEY"] = step_key
+        if self._cpu is not None:
+            env_vars["CFA_DAGSTER_REQUESTED_CPU_CORES"] = str(self._cpu)
+        if self._memory is not None:
+            env_vars["CFA_DAGSTER_REQUESTED_MEMORY_GIB"] = str(self._memory)
+
+        command = wrap_command_for_profiling(
+            execute_step_args.get_command_args(), self._profiling
+        )
 
         job_execution_id = start_caj(
             self._azure_caj_client,
@@ -267,7 +277,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
             container_app_job_name=self._container_app_job_name,
             image=step_image,
             env_vars=env_vars,
-            command=execute_step_args.get_command_args(),
+            command=command,
             cpu=self._cpu,
             memory=self._memory,
         )

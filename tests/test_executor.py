@@ -7,21 +7,28 @@ from dagster import (
     in_process_executor,
     multiprocess_executor,
 )
+from dagster._config import process_config
 from dagster._core.execution.context.system import PlanOrchestrationContext
 from dagster._core.execution.plan.plan import ExecutionPlan
 from dagster._core.executor.init import InitExecutorContext
+from dagster_docker.container_context import DockerContainerContext
 
 from cfa_dagster import (
     azure_container_app_job_executor,
     azure_container_instance_executor,
     docker_executor,
 )
+from cfa_dagster.azure_container_instance.executor import (
+    AzureContainerInstanceStepHandler,
+)
+from cfa_dagster.docker.executor import ProfiledDockerStepHandler
 from cfa_dagster.execution.executor import (
     DynamicExecutor,
     create_executor,
     dynamic_executor,
 )
 from cfa_dagster.execution.utils import ExecutionConfig, SelectorConfig
+from cfa_dagster.profiling import PROFILER_SOURCE_ENV, PROFILER_SOURCE_PSUTIL
 
 
 @pytest.fixture
@@ -151,6 +158,80 @@ def test_create_executor_docker():
         pytest.skip("Skipping test due to complex executor dependencies")
 
 
+def test_docker_executor_accepts_profiling_config():
+    result = process_config(
+        docker_executor.config_schema.config_type,
+        {
+            "image": "test-image",
+            "profiling": {
+                "enabled": True,
+                "sample_interval_seconds": 2.0,
+            },
+        },
+    )
+
+    assert result.success
+    assert result.value["profiling"] == {
+        "enabled": True,
+        "sample_interval_seconds": 2.0,
+    }
+
+
+def test_profiled_docker_step_handler_wraps_command_and_env():
+    client = Mock()
+    container_context = Mock()
+    container_context.container_kwargs = {
+        "stop_timeout": 30,
+        "labels": {"a": "b"},
+    }
+    container_context.env_vars = ["EXISTING=value"]
+    container_context.networks = ["test-network"]
+
+    step_handler_context = Mock()
+    step_handler_context.execute_step_args.step_keys_to_execute = ["some_step"]
+    step_handler_context.execute_step_args.run_id = "run-123"
+    step_handler_context.execute_step_args.known_state = None
+    step_handler_context.execute_step_args.get_command_args.return_value = [
+        "dagster",
+        "api",
+        "execute_step",
+    ]
+    step_handler_context.dagster_run.job_name = "test_job"
+    step_handler_context.dagster_run.run_id = "run-123"
+
+    handler = ProfiledDockerStepHandler(
+        "test-image",
+        DockerContainerContext(),
+        profiling=Mock(enabled=True, sample_interval_seconds=1.0),
+    )
+
+    handler._create_step_container(
+        client,
+        container_context,
+        "test-image",
+        step_handler_context,
+    )
+
+    kwargs = client.containers.create.call_args.kwargs
+    assert kwargs["command"][:6] == [
+        "python",
+        "-m",
+        "cfa_dagster.execution.profile_step",
+        "--sample-interval-seconds",
+        "1.0",
+        "--",
+    ]
+    assert kwargs["command"][6:] == ["dagster", "api", "execute_step"]
+    assert kwargs["environment"]["DAGSTER_RUN_ID"] == "run-123"
+    assert kwargs["environment"]["DAGSTER_RUN_STEP_KEY"] == "some_step"
+    assert kwargs["environment"]["DAGSTER_RUN_JOB_NAME"] == "test_job"
+    assert kwargs["environment"][PROFILER_SOURCE_ENV] == PROFILER_SOURCE_PSUTIL
+    assert kwargs["environment"]["EXISTING"] == "value"
+    assert kwargs["network"] == "test-network"
+    assert kwargs["labels"] == {"a": "b"}
+    assert "stop_timeout" not in kwargs
+
+
 def test_create_executor_azure_container_app():
     """Test creating azure_container_app_job_executor"""
     init_context = Mock(spec=InitExecutorContext)
@@ -228,6 +309,85 @@ def test_create_executor_azure_container_instance(monkeypatch):
 
     assert executor is not None
     mock_handler.assert_called_once()
+
+
+def test_azure_container_instance_executor_accepts_profiling_config():
+    result = process_config(
+        azure_container_instance_executor.config_schema.config_type,
+        {
+            "image": "test-image",
+            "identity_name": "test-identity",
+            "profiling": {
+                "enabled": True,
+                "sample_interval_seconds": 2.0,
+            },
+        },
+    )
+
+    assert result.success
+    assert result.value["profiling"] == {
+        "enabled": True,
+        "sample_interval_seconds": 2.0,
+    }
+
+
+def test_azure_container_instance_step_handler_wraps_command_and_env():
+    container_context = Mock()
+    container_context.env_vars = ["EXISTING=value"]
+    container_context.networks = []
+    container_context.container_kwargs = {}
+
+    step_handler_context = Mock()
+    step_handler_context.execute_step_args.step_keys_to_execute = ["some_step"]
+    step_handler_context.execute_step_args.known_state = None
+    step_handler_context.execute_step_args.get_command_args.return_value = [
+        "dagster",
+        "api",
+        "execute_step",
+    ]
+    step_handler_context.dagster_run.job_name = "test_job"
+    step_handler_context.dagster_run.run_id = "run-123"
+
+    handler = AzureContainerInstanceStepHandler.__new__(
+        AzureContainerInstanceStepHandler
+    )
+    handler._container_context = DockerContainerContext()
+    handler._cpu = 1.5
+    handler._memory = 3.0
+    handler._profiling = Mock(enabled=True, sample_interval_seconds=1.0)
+    handler._subscription_id = "subscription-id"
+    handler._container_group_identity = None
+    handler._image_registry_credentials = None
+    handler._location = "eastus"
+    handler._get_docker_container_context = Mock(
+        return_value=container_context
+    )
+    handler._get_container_group_id = Mock(return_value="container-group")
+    handler._get_image = Mock(return_value="test-image")
+
+    container_group = handler._build_container_group(step_handler_context)
+    container = container_group.containers[0]
+    env = {
+        env_var.name: env_var.value
+        for env_var in container.environment_variables
+    }
+
+    assert container.command[:6] == [
+        "python",
+        "-m",
+        "cfa_dagster.execution.profile_step",
+        "--sample-interval-seconds",
+        "1.0",
+        "--",
+    ]
+    assert container.command[6:] == ["dagster", "api", "execute_step"]
+    assert env["DAGSTER_RUN_ID"] == "run-123"
+    assert env["DAGSTER_RUN_STEP_KEY"] == "some_step"
+    assert env["DAGSTER_RUN_JOB_NAME"] == "test_job"
+    assert env[PROFILER_SOURCE_ENV] == PROFILER_SOURCE_PSUTIL
+    assert env["CFA_DAGSTER_REQUESTED_CPU_CORES"] == "1.5"
+    assert env["CFA_DAGSTER_REQUESTED_MEMORY_GIB"] == "3.0"
+    assert env["EXISTING"] == "value"
 
 
 def test_create_executor_invalid_class():

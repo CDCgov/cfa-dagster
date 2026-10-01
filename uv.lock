@@ -394,6 +394,7 @@ dependencies = [
     { name = "dagster-graphql" },
     { name = "dagster-postgres" },
     { name = "dagster-shared" },
+    { name = "psutil" },
     { name = "psycopg2-binary" },
     { name = "pyyaml" },
 ]
@@ -434,6 +435,7 @@ requires-dist = [
     { name = "dagster-postgres", specifier = "~=0.29.2" },
     { name = "dagster-shared", specifier = ">=1.12.2,<1.14" },
     { name = "dagster-webserver", marker = "extra == 'dev'", specifier = ">=1.12.2,<1.14" },
+    { name = "psutil" },
     { name = "psycopg2-binary" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=7.0.0" },
     { name = "pyyaml", specifier = "~=6.0.2" },
