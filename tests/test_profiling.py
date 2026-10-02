@@ -71,6 +71,54 @@ def test_summarize_samples_calculates_cpu_and_memory():
     assert "profiler_status" not in summary
 
 
+def test_summarize_samples_calculates_optional_metrics():
+    gib = 1024**3
+    summary = _summarize_samples(
+        [
+            ResourceSample(
+                0.0,
+                10.0,
+                gib,
+                gib,
+                thread_count=2,
+                disk_read_bytes=gib,
+                disk_write_bytes=2 * gib,
+                network_bytes_sent=3 * gib,
+                network_bytes_received=4 * gib,
+                system_swap_used_bytes=gib,
+            ),
+            ResourceSample(
+                1.0,
+                11.0,
+                gib,
+                gib,
+                thread_count=4,
+                disk_read_bytes=2 * gib,
+                disk_write_bytes=4 * gib,
+                network_bytes_sent=6 * gib,
+                network_bytes_received=8 * gib,
+                system_swap_used_bytes=2 * gib,
+            ),
+        ],
+        "psutil",
+        1.0,
+    )
+
+    assert summary["status"] == "ok"
+    assert summary["thread_count_average"] == 3.0
+    assert summary["thread_count_max"] == 4
+    assert summary["disk_read_gib_total"] == 1.0
+    assert summary["disk_write_gib_total"] == 2.0
+    assert summary["system_network_sent_gib_total"] == 3.0
+    assert summary["system_network_received_gib_total"] == 4.0
+    assert summary["system_swap_used_average_gib"] == 1.5
+    assert summary["system_swap_used_peak_gib"] == 2.0
+    assert "disk_read_bytes_total" not in summary
+    assert "disk_write_bytes_total" not in summary
+    assert "system_network_bytes_sent_total" not in summary
+    assert "system_network_bytes_received_total" not in summary
+
+
 def test_summarize_samples_reports_zero_cpu_delta():
     summary = _summarize_samples(
         [
@@ -86,6 +134,23 @@ def test_summarize_samples_reports_zero_cpu_delta():
     assert summary["cpu_average_cores"] == 0.0
     assert summary["cpu_max_cores"] == 0.0
     assert "status_reason" not in summary
+
+
+def test_summarize_samples_sums_positive_cpu_deltas():
+    summary = _summarize_samples(
+        [
+            ResourceSample(0.0, 1.0, 100, 100),
+            ResourceSample(1.0, 5.0, 100, 100),
+            ResourceSample(2.0, 3.0, 100, 100),
+        ],
+        "psutil",
+        2.0,
+    )
+
+    assert summary["status"] == "ok"
+    assert summary["cpu_usage_seconds_total"] == 4.0
+    assert summary["cpu_average_cores"] == 2.0
+    assert summary["cpu_max_cores"] == 4.0
 
 
 def test_summarize_samples_reports_resource_statuses_when_missing():
@@ -187,14 +252,40 @@ def test_get_instance_from_execute_step_command(monkeypatch):
 def test_psutil_sampler_sums_parent_and_children(monkeypatch):
     CpuTimes = namedtuple("CpuTimes", ["user", "system"])
     MemoryInfo = namedtuple("MemoryInfo", ["rss"])
+    IoCounters = namedtuple("IoCounters", ["read_bytes", "write_bytes"])
+    NetworkIoCounters = namedtuple("NetworkIoCounters", ["bytes_sent", "bytes_recv"])
+    SwapMemory = namedtuple("SwapMemory", ["used"])
 
     class FakeProcess:
-        def __init__(self, pid, children=None, cpu_user=0.0, cpu_system=0.0, rss=0):
+        def __init__(
+            self,
+            pid,
+            children=None,
+            cpu_user=0.0,
+            cpu_system=0.0,
+            rss=0,
+            threads=1,
+            read_bytes=0,
+            write_bytes=0,
+        ):
             self.pid = pid
             self._children = children or []
             self._cpu_user = cpu_user
             self._cpu_system = cpu_system
             self._rss = rss
+            self._threads = threads
+            self._read_bytes = read_bytes
+            self._write_bytes = write_bytes
+
+        def oneshot(self):
+            class OneShot:
+                def __enter__(self):
+                    return None
+
+                def __exit__(self, exc_type, exc_value, traceback):
+                    return False
+
+            return OneShot()
 
         def children(self, recursive=True):
             return self._children
@@ -205,9 +296,40 @@ def test_psutil_sampler_sums_parent_and_children(monkeypatch):
         def memory_info(self):
             return MemoryInfo(self._rss)
 
-    child = FakeProcess(456, cpu_user=0.5, cpu_system=0.25, rss=200)
-    parent = FakeProcess(123, [child], cpu_user=1.0, cpu_system=0.5, rss=100)
+        def num_threads(self):
+            return self._threads
+
+        def io_counters(self):
+            return IoCounters(self._read_bytes, self._write_bytes)
+
+    child = FakeProcess(
+        456,
+        cpu_user=0.5,
+        cpu_system=0.25,
+        rss=200,
+        threads=2,
+        read_bytes=20,
+        write_bytes=30,
+    )
+    parent = FakeProcess(
+        123,
+        [child],
+        cpu_user=1.0,
+        cpu_system=0.5,
+        rss=100,
+        threads=3,
+        read_bytes=40,
+        write_bytes=50,
+    )
     monkeypatch.setattr("cfa_dagster.profiling.psutil.Process", lambda pid: parent)
+    monkeypatch.setattr(
+        "cfa_dagster.profiling.psutil.net_io_counters",
+        lambda nowrap=True: NetworkIoCounters(100, 200),
+    )
+    monkeypatch.setattr(
+        "cfa_dagster.profiling.psutil.swap_memory",
+        lambda: SwapMemory(300),
+    )
 
     sampler = PsutilProcessTreeSampler(123)
     sample = sampler.sample(0.0)
@@ -215,6 +337,12 @@ def test_psutil_sampler_sums_parent_and_children(monkeypatch):
     assert sample.cpu_usage_seconds == 2.25
     assert sample.memory_bytes == 300
     assert sample.memory_peak_bytes == 300
+    assert sample.thread_count == 5
+    assert sample.disk_read_bytes == 60
+    assert sample.disk_write_bytes == 80
+    assert sample.network_bytes_sent == 100
+    assert sample.network_bytes_received == 200
+    assert sample.system_swap_used_bytes == 300
 
 
 def test_get_sampler_uses_psutil(monkeypatch):

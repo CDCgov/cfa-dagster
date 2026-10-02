@@ -7,6 +7,7 @@ import os
 import subprocess
 import time
 import zlib
+from contextlib import nullcontext
 from dataclasses import dataclass
 from itertools import pairwise
 
@@ -89,6 +90,12 @@ class ResourceSample:
     cpu_usage_seconds: float | None
     memory_bytes: int | None
     memory_peak_bytes: int | None
+    thread_count: int | None = None
+    disk_read_bytes: int | None = None
+    disk_write_bytes: int | None = None
+    network_bytes_sent: int | None = None
+    network_bytes_received: int | None = None
+    system_swap_used_bytes: int | None = None
 
 
 class ResourceSampler:
@@ -125,30 +132,72 @@ class PsutilProcessTreeSampler(ResourceSampler):
     def sample(self, elapsed_seconds: float) -> ResourceSample:
         cpu_usage_seconds = 0.0
         memory_bytes = 0
+        thread_count = 0
+        disk_read_bytes = 0
+        disk_write_bytes = 0
         saw_cpu = False
         saw_memory = False
+        saw_threads = False
+        saw_disk = False
         for process in self._processes():
             try:
-                cpu_times = process.cpu_times()
-                cpu_usage_seconds += cpu_times.user + cpu_times.system
-                saw_cpu = True
-            except psutil.Error:
-                log.debug("Unable to read psutil cpu times", exc_info=True)
+                oneshot = getattr(process, "oneshot", nullcontext)
+                with oneshot():
+                    try:
+                        cpu_times = process.cpu_times()
+                        cpu_usage_seconds += cpu_times.user + cpu_times.system
+                        saw_cpu = True
+                    except psutil.Error:
+                        log.debug("Unable to read psutil cpu times", exc_info=True)
 
-            try:
-                memory_bytes += process.memory_info().rss
-                saw_memory = True
+                    try:
+                        memory_bytes += process.memory_info().rss
+                        saw_memory = True
+                    except psutil.Error:
+                        log.debug("Unable to read psutil memory info", exc_info=True)
+
+                    try:
+                        thread_count += process.num_threads()
+                        saw_threads = True
+                    except (AttributeError, psutil.Error):
+                        log.debug("Unable to read psutil thread count", exc_info=True)
+
+                    try:
+                        io_counters = process.io_counters()
+                        disk_read_bytes += io_counters.read_bytes
+                        disk_write_bytes += io_counters.write_bytes
+                        saw_disk = True
+                    except (AttributeError, psutil.Error):
+                        log.debug("Unable to read psutil disk io", exc_info=True)
             except psutil.Error:
-                log.debug("Unable to read psutil memory info", exc_info=True)
+                log.debug("Unable to sample psutil process", exc_info=True)
 
         if saw_memory:
             self._memory_peak_bytes = max(self._memory_peak_bytes, memory_bytes)
+
+        try:
+            net_io = psutil.net_io_counters(nowrap=True)
+        except psutil.Error:
+            log.debug("Unable to read psutil network io", exc_info=True)
+            net_io = None
+
+        try:
+            swap = psutil.swap_memory()
+        except psutil.Error:
+            log.debug("Unable to read psutil swap memory", exc_info=True)
+            swap = None
 
         return ResourceSample(
             elapsed_seconds=elapsed_seconds,
             cpu_usage_seconds=cpu_usage_seconds if saw_cpu else None,
             memory_bytes=memory_bytes if saw_memory else None,
             memory_peak_bytes=self._memory_peak_bytes if saw_memory else None,
+            thread_count=thread_count if saw_threads else None,
+            disk_read_bytes=disk_read_bytes if saw_disk else None,
+            disk_write_bytes=disk_write_bytes if saw_disk else None,
+            network_bytes_sent=net_io.bytes_sent if net_io else None,
+            network_bytes_received=net_io.bytes_recv if net_io else None,
+            system_swap_used_bytes=swap.used if swap else None,
         )
 
 
@@ -177,6 +226,23 @@ def _summarize_samples(
         s.memory_peak_bytes for s in samples if s.memory_peak_bytes is not None
     ]
     cpu_samples = [s for s in samples if s.cpu_usage_seconds is not None]
+    thread_values = [s.thread_count for s in samples if s.thread_count is not None]
+    disk_samples = [
+        s
+        for s in samples
+        if s.disk_read_bytes is not None and s.disk_write_bytes is not None
+    ]
+    network_samples = [
+        s
+        for s in samples
+        if s.network_bytes_sent is not None
+        and s.network_bytes_received is not None
+    ]
+    swap_values = [
+        s.system_swap_used_bytes
+        for s in samples
+        if s.system_swap_used_bytes is not None
+    ]
     memory_status = "ok" if memory_values else "unavailable"
     cpu_status = "ok" if len(cpu_samples) >= 2 else "insufficient_samples"
     if not cpu_samples:
@@ -202,13 +268,7 @@ def _summarize_samples(
         )
 
     if len(cpu_samples) >= 2:
-        first = cpu_samples[0]
-        last = cpu_samples[-1]
-        assert first.cpu_usage_seconds is not None
-        assert last.cpu_usage_seconds is not None
-        cpu_usage_seconds_total = max(
-            0.0, last.cpu_usage_seconds - first.cpu_usage_seconds
-        )
+        cpu_usage_seconds_total = 0.0
         cpu_max_cores = 0.0
         for previous, current in pairwise(cpu_samples):
             assert previous.cpu_usage_seconds is not None
@@ -216,7 +276,10 @@ def _summarize_samples(
             elapsed_delta = current.elapsed_seconds - previous.elapsed_seconds
             if elapsed_delta <= 0:
                 continue
-            cpu_delta = current.cpu_usage_seconds - previous.cpu_usage_seconds
+            cpu_delta = max(
+                0.0, current.cpu_usage_seconds - previous.cpu_usage_seconds
+            )
+            cpu_usage_seconds_total += cpu_delta
             cpu_max_cores = max(cpu_max_cores, cpu_delta / elapsed_delta)
         summary.update(
             {
@@ -232,6 +295,72 @@ def _summarize_samples(
         )
         summary["cpu_average_cores"] = _round_float(
             float(summary["cpu_average_cores"])
+        )
+
+    if thread_values:
+        summary.update(
+            {
+                "thread_count_average": _round_float(
+                    sum(thread_values) / len(thread_values)
+                ),
+                "thread_count_max": max(thread_values),
+            }
+        )
+
+    if len(disk_samples) >= 2:
+        first = disk_samples[0]
+        last = disk_samples[-1]
+        assert first.disk_read_bytes is not None
+        assert first.disk_write_bytes is not None
+        assert last.disk_read_bytes is not None
+        assert last.disk_write_bytes is not None
+        summary.update(
+            {
+                "disk_read_gib_total": _round_float(
+                    max(0, last.disk_read_bytes - first.disk_read_bytes)
+                    / 1024**3
+                ),
+                "disk_write_gib_total": _round_float(
+                    max(0, last.disk_write_bytes - first.disk_write_bytes)
+                    / 1024**3
+                ),
+            }
+        )
+
+    if len(network_samples) >= 2:
+        first = network_samples[0]
+        last = network_samples[-1]
+        assert first.network_bytes_sent is not None
+        assert first.network_bytes_received is not None
+        assert last.network_bytes_sent is not None
+        assert last.network_bytes_received is not None
+        summary.update(
+            {
+                "system_network_sent_gib_total": _round_float(
+                    max(0, last.network_bytes_sent - first.network_bytes_sent)
+                    / 1024**3
+                ),
+                "system_network_received_gib_total": _round_float(
+                    max(
+                        0,
+                        last.network_bytes_received
+                        - first.network_bytes_received,
+                    )
+                    / 1024**3
+                ),
+            }
+        )
+
+    if swap_values:
+        summary.update(
+            {
+                "system_swap_used_average_gib": _round_float(
+                    sum(swap_values) / len(swap_values) / 1024**3
+                ),
+                "system_swap_used_peak_gib": _round_float(
+                    max(swap_values) / 1024**3
+                ),
+            }
         )
 
     if source == "unavailable":

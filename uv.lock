@@ -397,6 +397,7 @@ dependencies = [
     { name = "psutil" },
     { name = "psycopg2-binary" },
     { name = "pyyaml" },
+    { name = "sqlalchemy" },
 ]
 
 [package.optional-dependencies]
@@ -439,6 +440,7 @@ requires-dist = [
     { name = "psycopg2-binary" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=7.0.0" },
     { name = "pyyaml", specifier = "~=6.0.2" },
+    { name = "sqlalchemy", specifier = "<2.1" },
     { name = "watchdog", marker = "extra == 'dev'", specifier = ">=6.0.0" },
 ]
 provides-extras = ["test", "dev"]
