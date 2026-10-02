@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import logging
 import os
 import subprocess
+import threading
 import time
 import zlib
 from contextlib import nullcontext
@@ -20,6 +22,8 @@ DEFAULT_PROFILING_SAMPLE_INTERVAL_SECONDS = 1.0
 PROFILING_CONFIG_KEY = "profiling"
 PROFILER_SOURCE_ENV = "CFA_DAGSTER_PROFILER_SOURCE"
 PROFILER_SOURCE_PSUTIL = "psutil"
+PROFILER_ASSET_KEY_ENV = "CFA_DAGSTER_PROFILE_ASSET_KEY"
+PROFILER_PARTITION_KEY_ENV = "CFA_DAGSTER_PROFILE_PARTITION_KEY"
 
 PROFILING_CONFIG_SCHEMA = {
     PROFILING_CONFIG_KEY: Field(
@@ -69,19 +73,23 @@ class ProfilingConfig:
 
 
 def wrap_command_for_profiling(
-    command: list[str], profiling: ProfilingConfig
+    command: list[str],
+    profiling: ProfilingConfig,
+    *,
+    track_step_status: bool = False,
 ) -> list[str]:
     if not profiling.enabled:
         return command
-    return [
+    wrapped = [
         "python",
         "-m",
-        "cfa_dagster.execution.profile_step",
+        "cfa_dagster.profile_step",
         "--sample-interval-seconds",
         str(profiling.sample_interval_seconds),
-        "--",
-        *command,
     ]
+    if track_step_status:
+        wrapped.append("--track-step-status")
+    return [*wrapped, "--", *command]
 
 
 @dataclass
@@ -408,9 +416,20 @@ def _get_compressed_execute_step_args(command: list[str]) -> str | None:
     return os.getenv("DAGSTER_COMPRESSED_EXECUTE_STEP_ARGS")
 
 
-def _get_instance_from_execute_step_command(command: list[str]):
+def _get_execute_step_args_json(command: list[str]) -> str | None:
     compressed_args = _get_compressed_execute_step_args(command)
-    if not compressed_args:
+    if compressed_args:
+        return zlib.decompress(base64.b64decode(compressed_args)).decode()
+    with contextlib.suppress(ValueError):
+        index = command.index("execute_step")
+        if index + 1 < len(command):
+            return command[index + 1]
+    return os.getenv("DAGSTER_EXECUTE_STEP_ARGS")
+
+
+def _get_instance_from_execute_step_command(command: list[str]):
+    serialized_args = _get_execute_step_args_json(command)
+    if not serialized_args:
         return None
 
     try:
@@ -418,9 +437,6 @@ def _get_instance_from_execute_step_command(command: list[str]):
         from dagster._grpc.types import ExecuteStepArgs
         from dagster._serdes import deserialize_value
 
-        serialized_args = zlib.decompress(
-            base64.b64decode(compressed_args)
-        ).decode()
         execute_step_args = deserialize_value(serialized_args, ExecuteStepArgs)
         return DagsterInstance.from_ref(execute_step_args.instance_ref)
     except Exception:
@@ -431,8 +447,158 @@ def _get_instance_from_execute_step_command(command: list[str]):
         return None
 
 
+def _execute_step_and_get_success(command: list[str]) -> bool | None:
+    serialized_args = _get_execute_step_args_json(command)
+    if not serialized_args:
+        return None
+
+    from dagster import _check as check
+    from dagster._cli.api import (
+        _execute_step_command_body,
+        get_instance_for_cli,
+    )
+    from dagster._core.events import DagsterEventType
+    from dagster._grpc.types import ExecuteStepArgs
+    from dagster._serdes import deserialize_value
+    from dagster._utils.interrupts import capture_interrupts
+
+    execute_step_args = deserialize_value(serialized_args, ExecuteStepArgs)
+    step_key = (
+        execute_step_args.step_keys_to_execute[0]
+        if execute_step_args.step_keys_to_execute
+        and len(execute_step_args.step_keys_to_execute) == 1
+        else None
+    )
+    succeeded = None
+    with capture_interrupts(), get_instance_for_cli(
+        instance_ref=execute_step_args.instance_ref
+    ) as instance:
+        dagster_run = check.not_none(
+            instance.get_run_by_id(execute_step_args.run_id),
+            f"Run with id '{execute_step_args.run_id}' not found for step execution",
+        )
+        for event in _execute_step_command_body(
+            execute_step_args,
+            instance,
+            dagster_run,
+        ):
+            if event.step_key != step_key:
+                continue
+            if event.event_type_value == DagsterEventType.STEP_SUCCESS.value:
+                succeeded = True
+            elif event.event_type_value == DagsterEventType.STEP_FAILURE.value:
+                succeeded = False
+    return succeeded
+
+
+def get_profile_asset_observation_env(step_context) -> dict[str, str]:
+    try:
+        job_def = getattr(step_context, "job_def", None)
+        if job_def is None:
+            job_def = step_context.job.get_definition()
+        asset_layer = job_def.asset_layer
+        selected_keys = asset_layer.get_selected_entity_keys_for_node(
+            step_context.node_handle
+        )
+        matches = []
+        for step_output in step_context.step.step_outputs:
+            asset_key = asset_layer.get_asset_key_for_node_output(
+                step_context.node_handle,
+                step_output.name,
+            )
+            if asset_key is None or asset_key not in selected_keys:
+                continue
+            matches.append((asset_key, step_output.name))
+    except Exception:  # noqa: BLE001 - fail closed rather than blocking step launch.
+        return {}
+
+    if len(matches) != 1:
+        return {}
+    asset_key, output_name = matches[0]
+    env = {PROFILER_ASSET_KEY_ENV: asset_key.to_user_string()}
+    has_asset_partitions_for_output = getattr(
+        step_context, "has_asset_partitions_for_output", None
+    )
+    if has_asset_partitions_for_output is None:
+        partition_key = step_context.dagster_run.tags.get("dagster/partition")
+        if partition_key:
+            env[PROFILER_PARTITION_KEY_ENV] = partition_key
+        return env
+    if has_asset_partitions_for_output(output_name):
+        with contextlib.suppress(Exception):
+            partition_range = step_context.asset_partition_key_range_for_output(
+                output_name
+            )
+            if partition_range.start != partition_range.end:
+                return {}
+            env[PROFILER_PARTITION_KEY_ENV] = partition_range.start
+            return env
+        return {}
+    return env
+
+
+def _get_profile_asset_observation_from_env():
+    asset_key = os.getenv(PROFILER_ASSET_KEY_ENV)
+    if not asset_key:
+        return None
+    try:
+        from dagster import AssetKey
+
+        return AssetKey.from_user_string(asset_key), os.getenv(
+            PROFILER_PARTITION_KEY_ENV
+        )
+    except Exception:
+        log.warning("Unable to parse profiler asset observation env", exc_info=True)
+        return None
+
+
+def _report_asset_observations(
+    instance,
+    dagster_run,
+    run_id: str,
+    step_key: str,
+    summary: dict[str, int | float | str],
+) -> bool:
+    try:
+        from dagster import AssetObservation
+        from dagster._core.events import (
+            AssetObservationData,
+            DagsterEvent,
+            DagsterEventType,
+        )
+
+        observation_context = _get_profile_asset_observation_from_env()
+        if observation_context is None:
+            return False
+        asset_key, partition_key = observation_context
+        observation = AssetObservation(
+            asset_key=asset_key,
+            description="Step resource profile",
+            metadata=summary,
+            partition=partition_key,
+            tags={"cfa_dagster/profiling": "true"},
+        )
+        instance.report_dagster_event(
+            DagsterEvent(
+                event_type_value=DagsterEventType.ASSET_OBSERVATION.value,
+                job_name=dagster_run.job_name,
+                step_key=step_key,
+                event_specific_data=AssetObservationData(observation),
+                message="Observed step resource profile.",
+            ),
+            run_id=run_id,
+        )
+        return True
+    except Exception:
+        log.warning("Unable to report asset resource profile observations", exc_info=True)
+        return False
+
+
 def _report_profile(
-    summary: dict[str, int | float | str], command: list[str] | None = None
+    summary: dict[str, int | float | str],
+    command: list[str] | None = None,
+    *,
+    emit_asset_observations: bool = True,
 ) -> None:
     run_id = os.getenv("DAGSTER_RUN_ID")
     step_key = os.getenv("DAGSTER_RUN_STEP_KEY")
@@ -457,6 +623,16 @@ def _report_profile(
                 run_id,
             )
             return
+        if emit_asset_observations:
+            reported_asset_observation = _report_asset_observations(
+                instance,
+                dagster_run,
+                run_id,
+                step_key,
+                summary,
+            )
+            if reported_asset_observation:
+                return
         instance.report_engine_event(
             message="Step resource profile",
             dagster_run=dagster_run,
@@ -467,11 +643,66 @@ def _report_profile(
         log.warning("Unable to report step resource profile", exc_info=True)
 
 
+def _sample_until_stopped(
+    sampler: ResourceSampler,
+    samples: list[ResourceSample],
+    start: float,
+    sample_interval_seconds: float,
+    stop: threading.Event,
+) -> None:
+    while not stop.wait(sample_interval_seconds):
+        samples.append(sampler.sample(time.monotonic() - start))
+
+
 def run_profiled_command(
-    command: list[str], sample_interval_seconds: float
+    command: list[str],
+    sample_interval_seconds: float,
+    *,
+    track_step_status: bool = False,
 ) -> int:
     sample_interval_seconds = max(sample_interval_seconds, 0.1)
     start = time.monotonic()
+    if track_step_status:
+        sampler = _get_sampler(os.getpid())
+        samples = [sampler.sample(0.0)]
+        stop_sampling = threading.Event()
+        sampler_thread = threading.Thread(
+            target=_sample_until_stopped,
+            args=(
+                sampler,
+                samples,
+                start,
+                sample_interval_seconds,
+                stop_sampling,
+            ),
+            daemon=True,
+        )
+        sampler_thread.start()
+        try:
+            succeeded = _execute_step_and_get_success(command)
+            return_code = 0
+        except KeyboardInterrupt:
+            raise
+        except Exception:
+            log.warning("Unable to execute tracked step command", exc_info=True)
+            succeeded = False
+            return_code = 1
+        finally:
+            stop_sampling.set()
+            sampler_thread.join(timeout=30)
+
+        duration_seconds = time.monotonic() - start
+        samples.append(sampler.sample(duration_seconds))
+        summary = _summarize_samples(samples, sampler.source, duration_seconds)
+        summary["sample_interval_seconds"] = _round_float(sample_interval_seconds)
+        _add_requested_resources(summary)
+        _report_profile(
+            summary,
+            command,
+            emit_asset_observations=succeeded is True,
+        )
+        return return_code
+
     process = subprocess.Popen(command)
     sampler = _get_sampler(process.pid)
     samples = [sampler.sample(0.0)]
@@ -491,7 +722,11 @@ def run_profiled_command(
     summary = _summarize_samples(samples, sampler.source, duration_seconds)
     summary["sample_interval_seconds"] = _round_float(sample_interval_seconds)
     _add_requested_resources(summary)
-    _report_profile(summary, command)
+    _report_profile(
+        summary,
+        command,
+        emit_asset_observations=return_code == 0,
+    )
     return return_code
 
 
@@ -502,6 +737,7 @@ def main(argv: list[str] | None = None) -> int:
         type=float,
         default=DEFAULT_PROFILING_SAMPLE_INTERVAL_SECONDS,
     )
+    parser.add_argument("--track-step-status", action="store_true")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     command = list(args.command)
@@ -509,4 +745,12 @@ def main(argv: list[str] | None = None) -> int:
         command = command[1:]
     if not command:
         parser.error("missing command to profile")
-    return run_profiled_command(command, args.sample_interval_seconds)
+    return run_profiled_command(
+        command,
+        args.sample_interval_seconds,
+        track_step_status=args.track_step_status,
+    )
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

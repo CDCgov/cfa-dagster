@@ -28,9 +28,11 @@ from ..docker import docker_executor
 
 # using relative import to avoid circular dependency
 from ..profiling import (
+    PROFILER_ASSET_KEY_ENV,
     PROFILER_SOURCE_ENV,
     PROFILER_SOURCE_PSUTIL,
     ProfilingConfig,
+    get_profile_asset_observation_env,
     wrap_command_for_profiling,
 )
 from ..utils import require_dagster_user
@@ -63,12 +65,15 @@ class SynchronousStepHandler(StepHandler):
         step_key = step_handler_context.execute_step_args.step_keys_to_execute[
             0
         ]
+        step_context = step_handler_context.get_step_context(step_key)
+        asset_observation_env = get_profile_asset_observation_env(step_context)
         return {
             **os.environ,
             "DAGSTER_RUN_JOB_NAME": step_handler_context.dagster_run.job_name,
             "DAGSTER_RUN_ID": step_handler_context.dagster_run.run_id,
             "DAGSTER_RUN_STEP_KEY": step_key,
             PROFILER_SOURCE_ENV: PROFILER_SOURCE_PSUTIL,
+            **asset_observation_env,
         }
 
     def launch_step(
@@ -85,13 +90,13 @@ class SynchronousStepHandler(StepHandler):
             metadata={},
         )
 
+        env = self._get_env(step_handler_context)
         command = wrap_command_for_profiling(
             step_handler_context.execute_step_args.get_command_args(),
             self._profiling,
+            track_step_status=PROFILER_ASSET_KEY_ENV in env,
         )
-        result = subprocess.run(
-            command, env=self._get_env(step_handler_context), check=False
-        )
+        result = subprocess.run(command, env=env, check=False)
 
         if result.returncode != 0:
             raise Exception(
@@ -149,9 +154,12 @@ class SubprocessStepHandler(StepHandler):
             "DAGSTER_RUN_STEP_KEY": step_key,
             PROFILER_SOURCE_ENV: PROFILER_SOURCE_PSUTIL,
         }
+        asset_observation_env = get_profile_asset_observation_env(step_context)
+        env.update(asset_observation_env)
         command = wrap_command_for_profiling(
             step_handler_context.execute_step_args.get_command_args(),
             self._profiling,
+            track_step_status=bool(asset_observation_env),
         )
         process = subprocess.Popen(command, env=env)
         self._processes[step_key] = process

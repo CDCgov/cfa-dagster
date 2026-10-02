@@ -27,7 +27,11 @@ from dagster_docker.utils import (
     validate_docker_image,
 )
 
-from cfa_dagster.profiling import ProfilingConfig, wrap_command_for_profiling
+from cfa_dagster.profiling import (
+    ProfilingConfig,
+    get_profile_asset_observation_env,
+    wrap_command_for_profiling,
+)
 from cfa_dagster.utils import get_subscription_id, require_dagster_user
 
 from .utils import CAJ_CONFIG_SCHEMA, get_status_caj, start_caj, stop_caj
@@ -262,13 +266,19 @@ class AzureContainerAppJobStepHandler(StepHandler):
         )
         env_vars["DAGSTER_RUN_ID"] = step_handler_context.dagster_run.run_id
         env_vars["DAGSTER_RUN_STEP_KEY"] = step_key
+        asset_observation_env = get_profile_asset_observation_env(
+            step_handler_context.get_step_context(step_key)
+        )
+        env_vars.update(asset_observation_env)
         if self._cpu is not None:
             env_vars["CFA_DAGSTER_REQUESTED_CPU_CORES"] = str(self._cpu)
         if self._memory is not None:
             env_vars["CFA_DAGSTER_REQUESTED_MEMORY_GIB"] = str(self._memory)
 
         command = wrap_command_for_profiling(
-            execute_step_args.get_command_args(), self._profiling
+            execute_step_args.get_command_args(),
+            self._profiling,
+            track_step_status=bool(asset_observation_env),
         )
 
         job_execution_id = start_caj(

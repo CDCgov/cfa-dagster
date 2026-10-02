@@ -50,6 +50,7 @@ from cfa_dagster.profiling import (
     PROFILER_SOURCE_PSUTIL,
     PROFILING_CONFIG_SCHEMA,
     ProfilingConfig,
+    get_profile_asset_observation_env,
     wrap_command_for_profiling,
 )
 from cfa_dagster.utils import get_subscription_id, require_dagster_user
@@ -388,10 +389,13 @@ class AzureContainerInstanceStepHandler(StepHandler):
             step_handler_context.dagster_run.job_name
         )
         env_vars["DAGSTER_RUN_ID"] = step_handler_context.dagster_run.run_id
-        env_vars["DAGSTER_RUN_STEP_KEY"] = self._get_step_key(
-            step_handler_context
-        )
+        step_key = self._get_step_key(step_handler_context)
+        env_vars["DAGSTER_RUN_STEP_KEY"] = step_key
         env_vars[PROFILER_SOURCE_ENV] = PROFILER_SOURCE_PSUTIL
+        asset_observation_env = get_profile_asset_observation_env(
+            step_handler_context.get_step_context(step_key)
+        )
+        env_vars.update(asset_observation_env)
         env_vars["CFA_DAGSTER_REQUESTED_CPU_CORES"] = str(self._cpu)
         env_vars["CFA_DAGSTER_REQUESTED_MEMORY_GIB"] = str(self._memory)
 
@@ -403,7 +407,9 @@ class AzureContainerInstanceStepHandler(StepHandler):
         execute_step_args = step_handler_context.execute_step_args
 
         command = wrap_command_for_profiling(
-            execute_step_args.get_command_args(), self._profiling
+            execute_step_args.get_command_args(),
+            self._profiling,
+            track_step_status=bool(asset_observation_env),
         )
         log.warning("ACI COMMAND: %r", command)
 

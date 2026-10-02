@@ -216,7 +216,7 @@ def test_profiled_docker_step_handler_wraps_command_and_env():
     assert kwargs["command"][:6] == [
         "python",
         "-m",
-        "cfa_dagster.execution.profile_step",
+        "cfa_dagster.profile_step",
         "--sample-interval-seconds",
         "1.0",
         "--",
@@ -375,7 +375,7 @@ def test_azure_container_instance_step_handler_wraps_command_and_env():
     assert container.command[:6] == [
         "python",
         "-m",
-        "cfa_dagster.execution.profile_step",
+        "cfa_dagster.profile_step",
         "--sample-interval-seconds",
         "1.0",
         "--",
