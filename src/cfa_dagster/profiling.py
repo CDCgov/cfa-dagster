@@ -127,7 +127,11 @@ class PsutilProcessTreeSampler(ResourceSampler):
         try:
             return cls(pid)
         except psutil.Error:
-            log.debug("Unable to create psutil sampler for pid %s", pid, exc_info=True)
+            log.debug(
+                "Unable to create psutil sampler for pid %s",
+                pid,
+                exc_info=True,
+            )
             return None
 
     def _processes(self) -> list[psutil.Process]:
@@ -156,19 +160,25 @@ class PsutilProcessTreeSampler(ResourceSampler):
                         cpu_usage_seconds += cpu_times.user + cpu_times.system
                         saw_cpu = True
                     except psutil.Error:
-                        log.debug("Unable to read psutil cpu times", exc_info=True)
+                        log.debug(
+                            "Unable to read psutil cpu times", exc_info=True
+                        )
 
                     try:
                         memory_bytes += process.memory_info().rss
                         saw_memory = True
                     except psutil.Error:
-                        log.debug("Unable to read psutil memory info", exc_info=True)
+                        log.debug(
+                            "Unable to read psutil memory info", exc_info=True
+                        )
 
                     try:
                         thread_count += process.num_threads()
                         saw_threads = True
                     except (AttributeError, psutil.Error):
-                        log.debug("Unable to read psutil thread count", exc_info=True)
+                        log.debug(
+                            "Unable to read psutil thread count", exc_info=True
+                        )
 
                     try:
                         io_counters = process.io_counters()
@@ -176,12 +186,16 @@ class PsutilProcessTreeSampler(ResourceSampler):
                         disk_write_bytes += io_counters.write_bytes
                         saw_disk = True
                     except (AttributeError, psutil.Error):
-                        log.debug("Unable to read psutil disk io", exc_info=True)
+                        log.debug(
+                            "Unable to read psutil disk io", exc_info=True
+                        )
             except psutil.Error:
                 log.debug("Unable to sample psutil process", exc_info=True)
 
         if saw_memory:
-            self._memory_peak_bytes = max(self._memory_peak_bytes, memory_bytes)
+            self._memory_peak_bytes = max(
+                self._memory_peak_bytes, memory_bytes
+            )
 
         try:
             net_io = psutil.net_io_counters(nowrap=True)
@@ -229,12 +243,16 @@ def _status_reason(cpu_status: str, memory_status: str) -> str | None:
 def _summarize_samples(
     samples: list[ResourceSample], source: str, duration_seconds: float
 ) -> dict[str, int | float | str]:
-    memory_values = [s.memory_bytes for s in samples if s.memory_bytes is not None]
+    memory_values = [
+        s.memory_bytes for s in samples if s.memory_bytes is not None
+    ]
     memory_peak_values = [
         s.memory_peak_bytes for s in samples if s.memory_peak_bytes is not None
     ]
     cpu_samples = [s for s in samples if s.cpu_usage_seconds is not None]
-    thread_values = [s.thread_count for s in samples if s.thread_count is not None]
+    thread_values = [
+        s.thread_count for s in samples if s.thread_count is not None
+    ]
     disk_samples = [
         s
         for s in samples
@@ -294,8 +312,7 @@ def _summarize_samples(
                 "cpu_usage_seconds_total": _round_float(
                     cpu_usage_seconds_total
                 ),
-                "cpu_average_cores": cpu_usage_seconds_total
-                / duration_seconds
+                "cpu_average_cores": cpu_usage_seconds_total / duration_seconds
                 if duration_seconds > 0
                 else 0.0,
                 "cpu_max_cores": _round_float(cpu_max_cores),
@@ -391,8 +408,8 @@ def _add_requested_resources(summary: dict[str, int | float | str]) -> None:
             cpu = float(requested_cpu)
             summary["requested_cpu_cores"] = _round_float(cpu)
             if cpu > 0 and "cpu_max_cores" in summary:
-                summary["cpu_max_percent_of_request"] = (
-                    _round_float(float(summary["cpu_max_cores"]) / cpu * 100)
+                summary["cpu_max_percent_of_request"] = _round_float(
+                    float(summary["cpu_max_cores"]) / cpu * 100
                 )
         except ValueError:
             pass
@@ -401,8 +418,8 @@ def _add_requested_resources(summary: dict[str, int | float | str]) -> None:
             memory = float(requested_memory)
             summary["requested_memory_gib"] = _round_float(memory)
             if memory > 0 and "memory_peak_gib" in summary:
-                summary["memory_peak_percent_of_request"] = (
-                    _round_float(float(summary["memory_peak_gib"]) / memory * 100)
+                summary["memory_peak_percent_of_request"] = _round_float(
+                    float(summary["memory_peak_gib"]) / memory * 100
                 )
         except ValueError:
             pass
@@ -470,9 +487,12 @@ def _execute_step_and_get_success(command: list[str]) -> bool | None:
         else None
     )
     succeeded = None
-    with capture_interrupts(), get_instance_for_cli(
-        instance_ref=execute_step_args.instance_ref
-    ) as instance:
+    with (
+        capture_interrupts(),
+        get_instance_for_cli(
+            instance_ref=execute_step_args.instance_ref
+        ) as instance,
+    ):
         dagster_run = check.not_none(
             instance.get_run_by_id(execute_step_args.run_id),
             f"Run with id '{execute_step_args.run_id}' not found for step execution",
@@ -526,8 +546,8 @@ def get_profile_asset_observation_env(step_context) -> dict[str, str]:
         return env
     if has_asset_partitions_for_output(output_name):
         with contextlib.suppress(Exception):
-            partition_range = step_context.asset_partition_key_range_for_output(
-                output_name
+            partition_range = (
+                step_context.asset_partition_key_range_for_output(output_name)
             )
             if partition_range.start != partition_range.end:
                 return {}
@@ -548,7 +568,9 @@ def _get_profile_asset_observation_from_env():
             PROFILER_PARTITION_KEY_ENV
         )
     except Exception:
-        log.warning("Unable to parse profiler asset observation env", exc_info=True)
+        log.warning(
+            "Unable to parse profiler asset observation env", exc_info=True
+        )
         return None
 
 
@@ -590,7 +612,10 @@ def _report_asset_observations(
         )
         return True
     except Exception:
-        log.warning("Unable to report asset resource profile observations", exc_info=True)
+        log.warning(
+            "Unable to report asset resource profile observations",
+            exc_info=True,
+        )
         return False
 
 
@@ -613,9 +638,10 @@ def _report_profile(
         from dagster import DagsterInstance
         from dagster._core.events import EngineEventData
 
-        instance = _get_instance_from_execute_step_command(
-            command or []
-        ) or DagsterInstance.get()
+        instance = (
+            _get_instance_from_execute_step_command(command or [])
+            or DagsterInstance.get()
+        )
         dagster_run = instance.get_run_by_id(run_id)
         if dagster_run is None:
             log.warning(
@@ -684,7 +710,9 @@ def run_profiled_command(
         except KeyboardInterrupt:
             raise
         except Exception:
-            log.warning("Unable to execute tracked step command", exc_info=True)
+            log.warning(
+                "Unable to execute tracked step command", exc_info=True
+            )
             succeeded = False
             return_code = 1
         finally:
@@ -694,7 +722,9 @@ def run_profiled_command(
         duration_seconds = time.monotonic() - start
         samples.append(sampler.sample(duration_seconds))
         summary = _summarize_samples(samples, sampler.source, duration_seconds)
-        summary["sample_interval_seconds"] = _round_float(sample_interval_seconds)
+        summary["sample_interval_seconds"] = _round_float(
+            sample_interval_seconds
+        )
         _add_requested_resources(summary)
         _report_profile(
             summary,

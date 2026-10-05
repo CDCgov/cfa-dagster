@@ -188,7 +188,10 @@ def test_summarize_samples_reports_resource_statuses_when_missing():
     )
 
     assert summary["status"] == "partial"
-    assert summary["status_reason"] == "cpu: insufficient_samples; memory: unavailable"
+    assert (
+        summary["status_reason"]
+        == "cpu: insufficient_samples; memory: unavailable"
+    )
     assert "cpu_usage_seconds_total" not in summary
     assert "memory_peak_gib" not in summary
 
@@ -220,7 +223,10 @@ def test_run_profiled_command_preserves_exit_code_and_reports(monkeypatch):
     )
     monkeypatch.setattr(
         "cfa_dagster.profiling._report_profile",
-        lambda summary, command=None, *, emit_asset_observations=True: reported.append(
+        lambda summary,
+        command=None,
+        *,
+        emit_asset_observations=True: reported.append(
             (summary, command, emit_asset_observations)
         ),
     )
@@ -243,7 +249,13 @@ def test_get_compressed_execute_step_args_from_command(monkeypatch):
 
     assert (
         _get_compressed_execute_step_args(
-            ["dagster", "api", "execute_step", "--compressed-input-json", "abc"]
+            [
+                "dagster",
+                "api",
+                "execute_step",
+                "--compressed-input-json",
+                "abc",
+            ]
         )
         == "abc"
     )
@@ -252,7 +264,10 @@ def test_get_compressed_execute_step_args_from_command(monkeypatch):
 def test_get_compressed_execute_step_args_from_env(monkeypatch):
     monkeypatch.setenv("DAGSTER_COMPRESSED_EXECUTE_STEP_ARGS", "from-env")
 
-    assert _get_compressed_execute_step_args(["dagster", "api", "execute_step"]) == "from-env"
+    assert (
+        _get_compressed_execute_step_args(["dagster", "api", "execute_step"])
+        == "from-env"
+    )
 
 
 def test_get_instance_from_execute_step_command(monkeypatch):
@@ -273,7 +288,13 @@ def test_get_instance_from_execute_step_command(monkeypatch):
 
     assert (
         _get_instance_from_execute_step_command(
-            ["dagster", "api", "execute_step", "--compressed-input-json", compressed]
+            [
+                "dagster",
+                "api",
+                "execute_step",
+                "--compressed-input-json",
+                compressed,
+            ]
         )
         is expected_instance
     )
@@ -395,22 +416,31 @@ def test_get_profile_asset_observation_env_skips_ambiguous_cases():
         def asset_partition_key_range_for_output(self, output_name):
             return self._partition_range
 
-    assert get_profile_asset_observation_env(
-        FakeStepContext(
-            FakeAssetLayer(
-                {asset_one, asset_two}, {"one": asset_one, "two": asset_two}
+    assert (
+        get_profile_asset_observation_env(
+            FakeStepContext(
+                FakeAssetLayer(
+                    {asset_one, asset_two},
+                    {"one": asset_one, "two": asset_two},
+                )
             )
         )
-    ) == {}
-    assert get_profile_asset_observation_env(
-        FakeStepContext(
-            FakeAssetLayer({asset_one}, {"one": asset_one}),
-            PartitionRange("a", "b"),
+        == {}
+    )
+    assert (
+        get_profile_asset_observation_env(
+            FakeStepContext(
+                FakeAssetLayer({asset_one}, {"one": asset_one}),
+                PartitionRange("a", "b"),
+            )
         )
-    ) == {}
+        == {}
+    )
 
 
-def test_report_profile_emits_asset_observation_without_engine_event(monkeypatch):
+def test_report_profile_emits_asset_observation_without_engine_event(
+    monkeypatch,
+):
     asset_key = AssetKey(["asset_one"])
     reported_engine_events = []
     reported_dagster_events = []
@@ -538,7 +568,10 @@ def test_run_profiled_command_skips_asset_observation_on_failure(monkeypatch):
     )
     monkeypatch.setattr(
         "cfa_dagster.profiling._report_profile",
-        lambda summary, command=None, *, emit_asset_observations=True: reports.append(
+        lambda summary,
+        command=None,
+        *,
+        emit_asset_observations=True: reports.append(
             (summary, command, emit_asset_observations)
         ),
     )
@@ -553,7 +586,9 @@ def test_run_profiled_command_skips_asset_observation_on_failure(monkeypatch):
     assert reports[0][2] is False
 
 
-def test_run_profiled_command_emits_asset_observation_on_step_success(monkeypatch):
+def test_run_profiled_command_emits_asset_observation_on_step_success(
+    monkeypatch,
+):
     reports = []
 
     class FakeSampler(ResourceSampler):
@@ -571,7 +606,10 @@ def test_run_profiled_command_emits_asset_observation_on_step_success(monkeypatc
     )
     monkeypatch.setattr(
         "cfa_dagster.profiling._report_profile",
-        lambda summary, command=None, *, emit_asset_observations=True: reports.append(
+        lambda summary,
+        command=None,
+        *,
+        emit_asset_observations=True: reports.append(
             (summary, command, emit_asset_observations)
         ),
     )
@@ -591,7 +629,9 @@ def test_psutil_sampler_sums_parent_and_children(monkeypatch):
     CpuTimes = namedtuple("CpuTimes", ["user", "system"])
     MemoryInfo = namedtuple("MemoryInfo", ["rss"])
     IoCounters = namedtuple("IoCounters", ["read_bytes", "write_bytes"])
-    NetworkIoCounters = namedtuple("NetworkIoCounters", ["bytes_sent", "bytes_recv"])
+    NetworkIoCounters = namedtuple(
+        "NetworkIoCounters", ["bytes_sent", "bytes_recv"]
+    )
     SwapMemory = namedtuple("SwapMemory", ["used"])
 
     class FakeProcess:
@@ -659,7 +699,9 @@ def test_psutil_sampler_sums_parent_and_children(monkeypatch):
         read_bytes=40,
         write_bytes=50,
     )
-    monkeypatch.setattr("cfa_dagster.profiling.psutil.Process", lambda pid: parent)
+    monkeypatch.setattr(
+        "cfa_dagster.profiling.psutil.Process", lambda pid: parent
+    )
     monkeypatch.setattr(
         "cfa_dagster.profiling.psutil.net_io_counters",
         lambda nowrap=True: NetworkIoCounters(100, 200),

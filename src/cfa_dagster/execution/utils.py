@@ -373,6 +373,17 @@ def get_dynamic_executor_config_schema(
         if alt.executor:
             alternate_executors[alt.executor.class_name] = alt.executor.config
 
+    # add/overwrite the default launcher and executor to ensure the launchpad hover
+    # reflects the true default value
+    if default_config.launcher:
+        alternate_launchers[default_config.launcher.class_name] = (
+            default_config.launcher.config
+        )
+    if default_config.executor:
+        alternate_executors[default_config.executor.class_name] = (
+            default_config.executor.config
+        )
+
     launcher_fields = with_alternate_default(
         {
             "DefaultRunLauncher": {},
