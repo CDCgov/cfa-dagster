@@ -256,7 +256,6 @@ class AzureContainerInstanceStepHandler(StepHandler):
             .get("config", {})
             .get("image")
         )
-        log.info("Resolved image: %s", image)
         if not image:
             image = self._image
 
@@ -266,6 +265,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
                 step_handler_context.dagster_run.job_code_origin,
             ).repository_origin.container_image
 
+        log.info("Resolved image: %s", image)
         if not image:
             raise Exception(
                 "No docker image specified by the executor, run config, or code location"
@@ -411,7 +411,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
             self._profiling,
             track_step_status=bool(asset_observation_env),
         )
-        log.warning("ACI COMMAND: %r", command)
+        log.debug("ACI COMMAND: %r", command)
 
         container = Container(
             name=self._get_container_group_id(step_handler_context),
