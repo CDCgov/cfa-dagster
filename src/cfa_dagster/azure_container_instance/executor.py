@@ -23,7 +23,6 @@ from azure.mgmt.containerinstance.models import (
     UserAssignedIdentities,
 )
 from azure.mgmt.msi import ManagedServiceIdentityClient
-from azure.mgmt.subscription import SubscriptionClient
 from dagster import Field, Float, Int, String, executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
@@ -46,7 +45,15 @@ from dagster_docker.utils import (
     validate_docker_config,
 )
 
-from cfa_dagster.utils import require_dagster_user
+from cfa_dagster.profiling import (
+    PROFILER_SOURCE_ENV,
+    PROFILER_SOURCE_PSUTIL,
+    PROFILING_CONFIG_SCHEMA,
+    ProfilingConfig,
+    get_profile_asset_observation_env,
+    wrap_command_for_profiling,
+)
+from cfa_dagster.utils import get_subscription_id, require_dagster_user
 
 log = logging.getLogger(__name__)
 ACI_START_TIMEOUT_SECONDS = 600
@@ -96,6 +103,7 @@ if TYPE_CHECKING:
                     "to attach to the ACI container group."
                 ),
             ),
+            **PROFILING_CONFIG_SCHEMA,
         },
     ),
     requirements=multiple_process_executor_requirements(),
@@ -135,6 +143,7 @@ def azure_container_instance_executor(
     identity_name = check.opt_str_elem(config, "identity_name")
     retries = check.dict_elem(config, "retries", key_type=str)
     max_concurrent = check.opt_int_elem(config, "max_concurrent")
+    profiling = ProfilingConfig.from_config(config)
     tag_concurrency_limits = check.opt_list_elem(
         config, "tag_concurrency_limits"
     )
@@ -167,7 +176,7 @@ def azure_container_instance_executor(
 
     return StepDelegatingExecutor(
         AzureContainerInstanceStepHandler(
-            image, identity_name, container_context, cpu, memory
+            image, identity_name, container_context, cpu, memory, profiling
         ),
         retries=check.not_none(RetryMode.from_config(retries)),
         max_concurrent=max_concurrent,
@@ -183,17 +192,13 @@ class AzureContainerInstanceStepHandler(StepHandler):
         container_context: DockerContainerContext,
         cpu: float,
         memory: float,
+        profiling: ProfilingConfig,
     ):
         super().__init__()
 
         credential = DefaultAzureCredential()
 
-        self._subscription_id = (
-            SubscriptionClient(credential)
-            .subscriptions.list()
-            .next()
-            .subscription_id
-        )
+        self._subscription_id = get_subscription_id(credential)
 
         self._azure_client = ContainerInstanceManagementClient(
             credential=credential,
@@ -235,6 +240,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
         self._image = check.opt_str_param(image, "image")
         self._cpu = cpu
         self._memory = memory
+        self._profiling = profiling
         self._container_context = check.inst_param(
             container_context,
             "container_context",
@@ -250,7 +256,6 @@ class AzureContainerInstanceStepHandler(StepHandler):
             .get("config", {})
             .get("image")
         )
-        log.info("Resolved image: %s", image)
         if not image:
             image = self._image
 
@@ -260,6 +265,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
                 step_handler_context.dagster_run.job_code_origin,
             ).repository_origin.container_image
 
+        log.info("Resolved image: %s", image)
         if not image:
             raise Exception(
                 "No docker image specified by the executor, run config, or code location"
@@ -382,9 +388,16 @@ class AzureContainerInstanceStepHandler(StepHandler):
         env_vars["DAGSTER_RUN_JOB_NAME"] = (
             step_handler_context.dagster_run.job_name
         )
-        env_vars["DAGSTER_RUN_STEP_KEY"] = self._get_step_key(
-            step_handler_context
+        env_vars["DAGSTER_RUN_ID"] = step_handler_context.dagster_run.run_id
+        step_key = self._get_step_key(step_handler_context)
+        env_vars["DAGSTER_RUN_STEP_KEY"] = step_key
+        env_vars[PROFILER_SOURCE_ENV] = PROFILER_SOURCE_PSUTIL
+        asset_observation_env = get_profile_asset_observation_env(
+            step_handler_context.get_step_context(step_key)
         )
+        env_vars.update(asset_observation_env)
+        env_vars["CFA_DAGSTER_REQUESTED_CPU_CORES"] = str(self._cpu)
+        env_vars["CFA_DAGSTER_REQUESTED_MEMORY_GIB"] = str(self._memory)
 
         aci_env_vars = [
             EnvironmentVariable(name=name, value=value)
@@ -393,8 +406,12 @@ class AzureContainerInstanceStepHandler(StepHandler):
 
         execute_step_args = step_handler_context.execute_step_args
 
-        command = execute_step_args.get_command_args()
-        log.warning("ACI COMMAND: %r", command)
+        command = wrap_command_for_profiling(
+            execute_step_args.get_command_args(),
+            self._profiling,
+            track_step_status=bool(asset_observation_env),
+        )
+        log.debug("ACI COMMAND: %r", command)
 
         container = Container(
             name=self._get_container_group_id(step_handler_context),

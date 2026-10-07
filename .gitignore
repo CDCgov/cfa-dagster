@@ -383,3 +383,5 @@ website/site/
 src/cfa_dagster/.logs_queue
 src/cfa_dagster/.nux
 src/cfa_dagster/.telemetry
+
+**/.dagster_home/**

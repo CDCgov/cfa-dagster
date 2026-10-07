@@ -19,21 +19,19 @@ dependencies = [
     "dagster-shared>=1.12.2,<1.14",
     "dagster-graphql>=1.12.2,<1.14",
     "dagster-postgres~=0.29.2",
+    # Keep sqlalchemy below 2.1: 2.1 makes a bare postgresql:// URL default to
+    # psycopg 3, and dagster-postgres 1.13.24 breaks on it (bound NOTIFY payload,
+    # psycopg2-only pgcode, and set_pg_statement_timeout closing the connection).
+    # Tracked upstream in dagster-io/dagster#34232, #34235 and #33959.
+    "sqlalchemy<2.1",
     "aiofiles~=24.1.0",
     "azure-keyvault-secrets",
+    "psutil",
     "psycopg2-binary",
     # used by dagster clis, just importing an error
     "click",
     "azure-mgmt-containerinstance>=10.1.0",
     "azure-mgmt-msi>=7.1.0",
-]
-
-# Keep sqlalchemy below 2.1: 2.1 makes a bare postgresql:// URL default to
-# psycopg 3, and dagster-postgres 1.13.24 breaks on it (bound NOTIFY payload,
-# psycopg2-only pgcode, and set_pg_statement_timeout closing the connection).
-# Tracked upstream in dagster-io/dagster#34232, #34235 and #33959.
-constraint-dependencies = [
-    "sqlalchemy<2.1",
 ]
 
 

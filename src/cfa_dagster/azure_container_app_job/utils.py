@@ -5,6 +5,8 @@ from dagster import Field, Float, StringSource
 from dagster._utils.merger import merge_dicts
 from dagster_docker import docker_executor as base_docker_executor
 
+from cfa_dagster.profiling import PROFILING_CONFIG_SCHEMA
+
 log = logging.getLogger(__name__)
 
 CAJ_CONFIG_SCHEMA = merge_dicts(
@@ -32,6 +34,7 @@ CAJ_CONFIG_SCHEMA = merge_dicts(
                 "Memory value must be double CPU e.g. 0.25 cpu 0.5 memory"
             ),
         ),
+        **PROFILING_CONFIG_SCHEMA,
     },
 )
 
