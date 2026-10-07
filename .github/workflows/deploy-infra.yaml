@@ -2,11 +2,11 @@ name: Deploy server
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "pyproject.toml"
+    inputs:
+      image_tag:
+        description: Image tag to build and deploy
+        required: false
+        type: string
 
 env:
   IMAGE_NAME: cfa-dagster
@@ -27,8 +27,12 @@ jobs:
       - name: Extract version tag
         id: version
         run: |
-          V=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
-          echo "tag=v$V" >> "$GITHUB_OUTPUT"
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            echo "tag=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            V=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+            echo "tag=v$V" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build Image
         run: nix build infra/#

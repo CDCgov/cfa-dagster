@@ -12,6 +12,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       contents: write
     steps:
       - uses: actions/checkout@v4
@@ -41,3 +42,13 @@ jobs:
         run: |
           uv build
           gh release create "${{ steps.version.outputs.tag }}" dist/* --generate-notes
+
+      - name: Trigger infra deploy
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run deploy-infra.yaml \
+            --ref main \
+            -f image_tag="${{ steps.version.outputs.tag }}"
+          echo "Triggered deploy-infra for ${{ steps.version.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
