@@ -9,7 +9,7 @@ from cfa_dagster.profiling import PROFILING_CONFIG_SCHEMA
 
 log = logging.getLogger(__name__)
 
-CAJ_CONFIG_SCHEMA = merge_dicts(
+CAJ_BASE_CONFIG_SCHEMA = merge_dicts(
     base_docker_executor.config_schema.config_type.fields,
     {
         "container_app_job_name": Field(
@@ -34,8 +34,12 @@ CAJ_CONFIG_SCHEMA = merge_dicts(
                 "Memory value must be double CPU e.g. 0.25 cpu 0.5 memory"
             ),
         ),
-        **PROFILING_CONFIG_SCHEMA,
     },
+)
+
+CAJ_EXECUTOR_CONFIG_SCHEMA = merge_dicts(
+    CAJ_BASE_CONFIG_SCHEMA,
+    PROFILING_CONFIG_SCHEMA,
 )
 
 

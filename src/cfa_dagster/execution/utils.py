@@ -20,6 +20,7 @@ from dagster_docker.utils import DOCKER_CONFIG_SCHEMA
 
 from ..azure_batch.executor import azure_batch_executor
 from ..azure_container_app_job.executor import azure_container_app_job_executor
+from ..azure_container_app_job.launcher import AzureContainerAppJobRunLauncher
 from ..azure_container_instance.executor import (
     azure_container_instance_executor,
 )
@@ -387,9 +388,7 @@ def get_dynamic_executor_config_schema(
     launcher_fields = with_alternate_default(
         {
             "DefaultRunLauncher": {},
-            "AzureContainerAppJobRunLauncher": (
-                azure_container_app_job_executor.config_schema.config_type.fields
-            ),
+            "AzureContainerAppJobRunLauncher": AzureContainerAppJobRunLauncher.config_type(),
             **(
                 {"DockerRunLauncher": DOCKER_CONFIG_SCHEMA}
                 if use_full_schema

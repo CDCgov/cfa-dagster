@@ -27,7 +27,7 @@ from dagster_docker.utils import (
 from typing_extensions import Self
 
 from ..utils import get_subscription_id, require_dagster_user
-from .utils import CAJ_CONFIG_SCHEMA, get_status_caj, start_caj, stop_caj
+from .utils import CAJ_BASE_CONFIG_SCHEMA, get_status_caj, start_caj, stop_caj
 
 log = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
 
     @classmethod
     def config_type(cls):
-        return CAJ_CONFIG_SCHEMA
+        return CAJ_BASE_CONFIG_SCHEMA
 
     @classmethod
     def from_config_value(

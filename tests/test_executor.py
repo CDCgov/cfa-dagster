@@ -18,6 +18,9 @@ from cfa_dagster import (
     azure_container_instance_executor,
     docker_executor,
 )
+from cfa_dagster.azure_container_app_job.launcher import (
+    AzureContainerAppJobRunLauncher,
+)
 from cfa_dagster.azure_container_instance.executor import (
     AzureContainerInstanceStepHandler,
 )
@@ -262,6 +265,38 @@ def test_create_executor_azure_container_app():
     except Exception:
         # Skip this test if we can't properly mock the dependencies
         pytest.skip("Skipping test due to complex executor dependencies")
+
+
+def test_azure_container_app_job_executor_accepts_profiling_config():
+    result = process_config(
+        azure_container_app_job_executor.config_schema.config_type,
+        {
+            "profiling": {
+                "enabled": True,
+                "sample_interval_seconds": 2.0,
+            },
+        },
+    )
+
+    assert result.success
+    assert result.value["profiling"] == {
+        "enabled": True,
+        "sample_interval_seconds": 2.0,
+    }
+
+
+def test_azure_container_app_job_launcher_rejects_profiling_config():
+    result = process_config(
+        AzureContainerAppJobRunLauncher.config_type(),
+        {
+            "profiling": {
+                "enabled": True,
+                "sample_interval_seconds": 2.0,
+            },
+        },
+    )
+
+    assert not result.success
 
 
 def test_create_executor_azure_container_instance(monkeypatch):

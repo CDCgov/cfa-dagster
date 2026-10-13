@@ -34,7 +34,7 @@ from cfa_dagster.profiling import (
 )
 from cfa_dagster.utils import get_subscription_id, require_dagster_user
 
-from .utils import CAJ_CONFIG_SCHEMA, get_status_caj, start_caj, stop_caj
+from .utils import CAJ_EXECUTOR_CONFIG_SCHEMA, get_status_caj, start_caj, stop_caj
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 
 @executor(
     name="azure_container_app_job",
-    config_schema=CAJ_CONFIG_SCHEMA,
+    config_schema=CAJ_EXECUTOR_CONFIG_SCHEMA,
     requirements=multiple_process_executor_requirements(),
 )
 def azure_container_app_job_executor(
