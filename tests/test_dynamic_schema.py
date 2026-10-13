@@ -170,9 +170,11 @@ def test_dynamic_schema_accepts_profiling_for_azure_container_instance_executor(
 def test_dynamic_schema_excludes_profiling_for_container_app_job_launcher():
     schema = get_dynamic_executor_config_schema(use_full_schema=True)
 
-    launcher_fields = schema["launcher"].config_type.fields[
-        "AzureContainerAppJobRunLauncher"
-    ].config_type.fields
+    launcher_fields = (
+        schema["launcher"]
+        .config_type.fields["AzureContainerAppJobRunLauncher"]
+        .config_type.fields
+    )
 
     assert "profiling" not in launcher_fields
 
@@ -180,8 +182,10 @@ def test_dynamic_schema_excludes_profiling_for_container_app_job_launcher():
 def test_dynamic_schema_accepts_profiling_for_container_app_job_executor():
     schema = get_dynamic_executor_config_schema(use_full_schema=True)
 
-    executor_fields = schema["executor"].config_type.fields[
-        "azure_container_app_job_executor"
-    ].config_type.fields
+    executor_fields = (
+        schema["executor"]
+        .config_type.fields["azure_container_app_job_executor"]
+        .config_type.fields
+    )
 
     assert "profiling" in executor_fields
