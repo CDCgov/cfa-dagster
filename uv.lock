@@ -376,7 +376,7 @@ wheels = [
 
 [[package]]
 name = "cfa-dagster"
-version = "1.6.0"
+version = "1.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
