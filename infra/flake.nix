@@ -81,13 +81,10 @@
             cp ${./dagster_defs.py} $out/app/dagster_defs.py
           '';
 
-          # Create a runtime environment with all necessary files
-          runtimeEnv = pkgs.buildEnv {
-            name = "cfa-dagster-runtime";
+          # Keep non-Python runtime dependencies in their own reusable layer.
+          runtimeTools = pkgs.buildEnv {
+            name = "cfa-dagster-runtime-tools";
             paths = [
-              # Python virtualenv with all dependencies
-              virtualenv
-
               # Runtime dependencies
               pkgs.glibc
               pkgs.gcc.cc.lib
@@ -105,18 +102,20 @@
               pkgs.dockerTools.binSh
               pkgs.neovim
               pkgs.uv
-
-              # DAGSTER_HOME directory
-              dagsterHomeLayer
             ];
           };
 
-          # Build the container image using dockerTools without a base image
-          container = pkgs.dockerTools.buildImage {
+          # Build a layered image so dependency, runtime, and application changes
+          # can be pushed independently.
+          container = pkgs.dockerTools.buildLayeredImage {
             name = "cfa-dagster-infra";
             tag = "nix";
 
-            copyToRoot = runtimeEnv;
+            contents = [
+              runtimeTools
+              virtualenv
+              dagsterHomeLayer
+            ];
 
             # Image configuration
             config = {
@@ -130,7 +129,11 @@
               WorkingDir = dagsterHome;
 
               # Default command
-              Cmd = [ "python" "-c" "import cfa_dagster" ];
+              Cmd = [
+                "python"
+                "-c"
+                "import cfa_dagster"
+              ];
             };
           };
         in
