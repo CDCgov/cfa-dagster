@@ -49,9 +49,12 @@ image = f"{IMAGE_REGISTRY}.azurecr.io/cfa-dagster:{image_tag}"
 # this should match your Dockerfile WORKDIR
 workdir = "/app"
 
+# executor config to enable profiling
+profiling_config = {"profiling": {"enabled": True}}
+
 # this is the default run config that launches the job in your local shell
 # and executes each step in a separate system process
-default_execution_config = Executor.multiprocess()
+default_execution_config = Executor.multiprocess(profiling_config)
 
 # configuring an executor to run each workflow step in a new Docker container
 # add this to a job or the Definitions class to use it
@@ -70,6 +73,7 @@ docker_execution_config = Executor.docker(
                 f"{__file__}:{workdir}/{os.path.basename(__file__)}",
             ]
         },
+        **profiling_config,
     },
 )
 
@@ -84,6 +88,7 @@ azure_caj_execution_config = Executor.azure_container_app_job(
         "image": image,
         # set env vars here
         # "env_vars": ["SOME_VAR=some_val"],
+        **profiling_config,
     },
 )
 
@@ -107,6 +112,7 @@ azure_batch_execution_config = Executor.azure_batch(
             #     "nssp-etl:nssp-etl",
             # ]
         },
+        **profiling_config,
     },
 )
 
@@ -119,6 +125,7 @@ azure_container_instance_execution_config = Executor.azure_container_instance(
         # set env vars here
         # "env_vars": ["SOME_VAR=some_val"],
         "identity_name": "dagster-daemon-mi",
+        **profiling_config,
     },
 )
 
