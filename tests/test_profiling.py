@@ -223,11 +223,8 @@ def test_run_profiled_command_preserves_exit_code_and_reports(monkeypatch):
     )
     monkeypatch.setattr(
         "cfa_dagster.profiling._report_profile",
-        lambda summary,
-        command=None,
-        *,
-        emit_asset_observations=True: reported.append(
-            (summary, command, emit_asset_observations)
+        lambda summary, command=None, *, emit_asset_observations=True: (
+            reported.append((summary, command, emit_asset_observations))
         ),
     )
 
@@ -568,11 +565,8 @@ def test_run_profiled_command_skips_asset_observation_on_failure(monkeypatch):
     )
     monkeypatch.setattr(
         "cfa_dagster.profiling._report_profile",
-        lambda summary,
-        command=None,
-        *,
-        emit_asset_observations=True: reports.append(
-            (summary, command, emit_asset_observations)
+        lambda summary, command=None, *, emit_asset_observations=True: (
+            reports.append((summary, command, emit_asset_observations))
         ),
     )
 
@@ -606,11 +600,8 @@ def test_run_profiled_command_emits_asset_observation_on_step_success(
     )
     monkeypatch.setattr(
         "cfa_dagster.profiling._report_profile",
-        lambda summary,
-        command=None,
-        *,
-        emit_asset_observations=True: reports.append(
-            (summary, command, emit_asset_observations)
+        lambda summary, command=None, *, emit_asset_observations=True: (
+            reports.append((summary, command, emit_asset_observations))
         ),
     )
 

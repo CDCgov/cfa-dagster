@@ -3,6 +3,8 @@ import logging
 import os
 import re
 import shlex
+import socket
+import traceback
 import uuid
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Optional, cast
@@ -16,6 +18,7 @@ from dagster import Field, Permissive, StringSource, executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
+from dagster import MetadataValue
 from dagster._core.events import DagsterEvent, EngineEventData
 from dagster._core.execution.retries import RetryMode
 from dagster._core.executor.base import Executor
@@ -338,19 +341,19 @@ class AzureBatchStepHandler(StepHandler):
         # batch tasks only allow alphanumeric, hyphen, underscore
         regex_batch_task = r"[^0-9A-Za-z]+"
 
-        step_key = self._get_step_key(step_handler_context)
-        step_key = re.sub(regex_batch_task, "_", step_key)
-
+        dagster_step_key = self._get_step_key(step_handler_context)
+        step_key = re.sub(regex_batch_task, "_", dagster_step_key)
         partition_key = run.tags.get("dagster/partition") or ""
         if partition_key:
             partition_key = re.sub(regex_batch_task, "_", partition_key)
 
-        if step_handler_context.execute_step_args.known_state:
-            retry_count = step_handler_context.execute_step_args.known_state.get_retry_state().get_attempt_count(
-                step_key
-            )
-        else:
-            retry_count = 0
+        known_state = step_handler_context.execute_step_args.known_state
+
+        retry_count = (
+            known_state.get_retry_state().get_attempt_count(dagster_step_key)
+            if known_state
+            else 0
+        )
 
         retry_str = str(retry_count)
 
@@ -588,10 +591,45 @@ class AzureBatchStepHandler(StepHandler):
         step_key = self._get_step_key(step_handler_context)
         job_id = self._get_job_id(step_handler_context)
         task_id = self._get_task_id(step_handler_context)
+        run_id = step_handler_context.dagster_run.run_id
+
+        caller_stack = "".join(traceback.format_stack(limit=30))
+        active_exception = traceback.format_exc()
+
+        # Also write to the parent run worker's logs, independently
+        # of Dagster's event storage.
+        log.warning(
+            "Batch termination requested: run=%s step=%s job=%s task=%s "
+            "host=%s pid=%s\nCaller stack:\n%s\nActive exception:\n%s",
+            run_id,
+            step_key,
+            job_id,
+            task_id,
+            socket.gethostname(),
+            os.getpid(),
+            caller_stack,
+            active_exception,
+        )
 
         yield DagsterEvent.engine_event(
             step_handler_context.get_step_context(step_key),
-            message=f"Terminating Azure Batch task {task_id} in job {job_id} for step {step_key}.",
-            event_specific_data=EngineEventData(),
+            message=(
+                f"Terminating Azure Batch task {task_id} "
+                f"in job {job_id} for step {step_key}."
+            ),
+            event_specific_data=EngineEventData(
+                metadata={
+                    "termination_caller": MetadataValue.text(caller_stack),
+                    "active_exception": MetadataValue.text(active_exception),
+                    "orchestrator_host": MetadataValue.text(
+                        socket.gethostname()
+                    ),
+                    "orchestrator_pid": MetadataValue.int(os.getpid()),
+                }
+            ),
         )
-        self._batch_client.terminate_task(job_id=job_id, task_id=task_id)
+
+        self._batch_client.terminate_task(
+            job_id=job_id,
+            task_id=task_id,
+        )
