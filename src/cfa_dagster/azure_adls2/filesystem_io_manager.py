@@ -577,6 +577,11 @@ class ADLS2FilesystemIOManager(ConfigurableIOManager):
         default=is_production(),
     )
     adls2: ResourceDependency[ADLS2Resource]
+    file_system: str = Field(
+        description="The name of the file system e.g. cfadagster",
+        default="cfadagster" if is_production() else "cfadagsterdev",
+    )
+
     overrides: dict[str, Any] = Field(
         description=(
             "Override an upstream dependency input with a configured value e.g."
@@ -639,7 +644,7 @@ class ADLS2FilesystemIOManager(ConfigurableIOManager):
         log.debug(f"self.on_input_conflict: {self.on_input_conflict}")
 
         return FilesystemADLS2IOManager(
-            file_system=adls2.storage_account,
+            file_system=self.file_system or adls2.storage_account,
             adls2_client=adls2.adls2_client,
             input_mode=self.input_mode,
             on_input_conflict=self.on_input_conflict,
