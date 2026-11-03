@@ -28,6 +28,9 @@ submissions also include these fields on the step worker starting event:
 - `commandLine_characters`: the character count of the actual submitted command.
 - `commandLine_utf8_bytes`: its UTF-8 byte count.
 
+Both event messages also display these diagnostics and the Azure Batch job and
+pool IDs directly in the Dagster event log, alongside the structured metadata.
+
 The counts include the profiling wrapper when enabled. Serialized execution
 arguments remain in the task environment and are not exposed in this metadata.
 Submission errors still propagate normally.

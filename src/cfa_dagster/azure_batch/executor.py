@@ -524,9 +524,19 @@ class AzureBatchStepHandler(StepHandler):
             "Azure Batch Job ID": job_id,
             "Azure Batch Pool ID": self._pool_id,
         }
+        launch_details = (
+            f"base_command_preview: {command_preview}\n"
+            f"commandLine_characters: {len(command_line)}\n"
+            f"commandLine_utf8_bytes: {len(command_line.encode('utf-8'))}\n"
+            f"Azure Batch Job ID: {job_id}\n"
+            f"Azure Batch Pool ID: {self._pool_id}"
+        )
         yield DagsterEvent.engine_event(
             step_handler_context.get_step_context(step_key),
-            message=f"Submitting Azure Batch task {task_id} in job {job_id}.",
+            message=(
+                f"Submitting Azure Batch task {task_id} in job {job_id}.\n"
+                f"{launch_details}"
+            ),
             event_specific_data=EngineEventData(metadata=launch_metadata),
         )
 
@@ -535,7 +545,8 @@ class AzureBatchStepHandler(StepHandler):
         yield DagsterEvent.step_worker_starting(
             step_handler_context.get_step_context(step_key),
             message=(
-                f"Launching step in task {task_id}, Azure Batch job: {job_id}."
+                f"Launching step in task {task_id}, Azure Batch job: {job_id}.\n"
+                f"{launch_details}"
             ),
             metadata=launch_metadata,
         )
