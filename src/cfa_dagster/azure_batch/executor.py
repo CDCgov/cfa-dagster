@@ -2,9 +2,9 @@ import hashlib
 import logging
 import os
 import re
-import sys
 import shlex
 import socket
+import sys
 import traceback
 import uuid
 from collections.abc import Iterator
@@ -15,11 +15,10 @@ from azure.batch import BatchClient
 from azure.batch import models as batch_models
 from azure.core.exceptions import HttpResponseError
 from azure.identity import DefaultAzureCredential
-from dagster import Field, Permissive, StringSource, executor
+from dagster import Field, MetadataValue, Permissive, StringSource, executor
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
-from dagster import MetadataValue
 from dagster._core.events import DagsterEvent, EngineEventData
 from dagster._core.execution.retries import RetryMode
 from dagster._core.executor.base import Executor
