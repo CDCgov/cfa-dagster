@@ -507,45 +507,38 @@ class AzureBatchStepHandler(StepHandler):
             user_identity=user_identity,
         )
 
-        self._failed_launch_metadata = {}
-
-        try:
-            self._batch_client.create_task(job_id=job_id, task=task)
-        except HttpResponseError:
-            # Read the exact command string submitted to Azure.
-            command_line = task.command_line
-
-            # Hide Dagster's serialized payload, which may contain credentials.
-            # Lengths below are measured BEFORE redaction.
-            # Diagnostic preview only: omit serialized arguments.
-            command_preview = shlex.join(
-                execute_step_args.get_command_args(
-                    skip_serialized_namedtuple=True
-                )
+        command_line = task.command_line
+        # Exclude serialized arguments, which may contain credentials.
+        command_preview = shlex.join(
+            execute_step_args.get_command_args(
+                skip_serialized_namedtuple=True
             )
-
-        self._failed_launch_metadata = {
-            "failed_launch_base_command_preview": MetadataValue.text(
-                command_preview
-            ),
-            "failed_launch_commandLine_characters": MetadataValue.int(
+        )
+        launch_metadata = {
+            "base_command_preview": MetadataValue.text(command_preview),
+            "commandLine_characters": MetadataValue.int(
                 len(command_line)
             ),
-            "failed_launch_commandLine_utf8_bytes": MetadataValue.int(
+            "commandLine_utf8_bytes": MetadataValue.int(
                 len(command_line.encode("utf-8"))
             ),
+            "Azure Batch Job ID": job_id,
+            "Azure Batch Pool ID": self._pool_id,
         }
-        raise
+        yield DagsterEvent.engine_event(
+            step_handler_context.get_step_context(step_key),
+            message=f"Submitting Azure Batch task {task_id} in job {job_id}.",
+            event_specific_data=EngineEventData(metadata=launch_metadata),
+        )
+
+        self._batch_client.create_task(job_id=job_id, task=task)
 
         yield DagsterEvent.step_worker_starting(
             step_handler_context.get_step_context(step_key),
             message=(
                 f"Launching step in task {task_id}, Azure Batch job: {job_id}."
             ),
-            metadata={
-                "Azure Batch Job ID": job_id,
-                "Azure Batch Pool ID": self._pool_id,
-            },
+            metadata=launch_metadata,
         )
 
     def check_step_health(
@@ -667,7 +660,6 @@ class AzureBatchStepHandler(StepHandler):
                         socket.gethostname()
                     ),
                     "orchestrator_pid": MetadataValue.int(os.getpid()),
-                    **self._failed_launch_metadata,
                 }
             ),
         )
@@ -691,7 +683,6 @@ class AzureBatchStepHandler(StepHandler):
                     metadata={
                         "termination_job_id": MetadataValue.text(job_id),
                         "termination_task_id": MetadataValue.text(task_id),
-                        **self._failed_launch_metadata,
                     },
                 ),
             )

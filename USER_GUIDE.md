@@ -17,6 +17,21 @@ See the [examples](examples/) first if you haven't done so already
 - [Executor](https://docs.dagster.io/guides/operate/run-executors#for-a-code-location): the python class that determines how steps (Ops, Assets) are executed in a Dagster run e.g. sequentially or in parallel in the Run Launcher environment, parallelized across Azure Batch tasks, or parallelized across Azure Container App Job executions
 - [Backfill](https://docs.dagster.io/guides/build/partitions-and-backfills/backfilling-data): Materializing multiple partitions of an Asset at once aka running a python function parallelized against a set of parameters
 
+## Azure Batch submission diagnostics
+
+The Azure Batch executor records command diagnostics in a Dagster engine event
+before submitting each task, whether submission succeeds or fails. Successful
+submissions also include these fields on the step worker starting event:
+
+- `base_command_preview`: the base Dagster command without serialized execution
+  arguments or the optional profiling wrapper.
+- `commandLine_characters`: the character count of the actual submitted command.
+- `commandLine_utf8_bytes`: its UTF-8 byte count.
+
+The counts include the profiling wrapper when enabled. Serialized execution
+arguments remain in the task environment and are not exposed in this metadata.
+Submission errors still propagate normally.
+
 ## Using Dagster in an Existing Repo
 
 Using Dagster in an existing repo is as easy as adding a `dagster_defs.py` file to your repo root and including it and its dependencies in your `Dockerfile`. See the [examples](examples/) for reference files.
