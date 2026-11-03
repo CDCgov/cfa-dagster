@@ -505,7 +505,34 @@ class AzureBatchStepHandler(StepHandler):
             user_identity=user_identity,
         )
 
-        self._batch_client.create_task(job_id=job_id, task=task)
+        self._failed_launch_metadata = {}
+
+        try:
+            self._batch_client.create_task(job_id=job_id, task=task)
+        except HttpResponseError:
+            # Read the exact command string submitted to Azure.
+            command_line = task.command_line
+
+            # Hide Dagster's serialized payload, which may contain credentials.
+            # Lengths below are measured BEFORE redaction.
+            command_preview = re.sub(
+                r"(--compressed-input-json(?:=|\s+))\S+",
+                r"\1<redacted>",
+                command_line,
+            )
+
+        self._failed_launch_metadata = {
+            "failed_launch_commandLine_preview": MetadataValue.text(
+                command_preview
+            ),
+            "failed_launch_commandLine_characters": MetadataValue.int(
+                len(command_line)
+            ),
+            "failed_launch_commandLine_utf8_bytes": MetadataValue.int(
+                len(command_line.encode("utf-8"))
+            ),
+        }
+        raise
 
         yield DagsterEvent.step_worker_starting(
             step_handler_context.get_step_context(step_key),
@@ -637,6 +664,7 @@ class AzureBatchStepHandler(StepHandler):
                         socket.gethostname()
                     ),
                     "orchestrator_pid": MetadataValue.int(os.getpid()),
+                    **self._failed_launch_metadata,
                 }
             ),
         )
