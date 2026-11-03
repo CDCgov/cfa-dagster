@@ -509,15 +509,11 @@ class AzureBatchStepHandler(StepHandler):
         command_line = task.command_line
         # Exclude serialized arguments, which may contain credentials.
         command_preview = shlex.join(
-            execute_step_args.get_command_args(
-                skip_serialized_namedtuple=True
-            )
+            execute_step_args.get_command_args(skip_serialized_namedtuple=True)
         )
         launch_metadata = {
             "base_command_preview": MetadataValue.text(command_preview),
-            "commandLine_characters": MetadataValue.int(
-                len(command_line)
-            ),
+            "commandLine_characters": MetadataValue.int(len(command_line)),
             "commandLine_utf8_bytes": MetadataValue.int(
                 len(command_line.encode("utf-8"))
             ),

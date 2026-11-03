@@ -30,7 +30,7 @@ def test_launch_metadata_is_emitted_before_submission(
     handler._get_job_id = Mock(return_value="job")
     handler._get_task_id = Mock(return_value="task")
     handler._get_or_create_job = Mock()
-    command = ["dagster", "api", "execute_step", "--step-key", "caf\u00e9"]
+    command = ["dagster", "api", "execute_step", "--step-key", "calf\u00e9"]
     execute_step_args = Mock()
     execute_step_args.get_command_args.return_value = command
     execute_step_args.get_command_env.return_value = [
@@ -73,9 +73,10 @@ def test_launch_metadata_is_emitted_before_submission(
         assert metadata["commandLine_utf8_bytes"].value == len(
             command_line.encode("utf-8")
         )
-        assert metadata["commandLine_utf8_bytes"].value > metadata[
-            "commandLine_characters"
-        ].value
+        assert (
+            metadata["commandLine_utf8_bytes"].value
+            > metadata["commandLine_characters"].value
+        )
         assert "secret" not in repr(metadata)
 
         if submission_fails:
