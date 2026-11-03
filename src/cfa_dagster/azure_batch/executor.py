@@ -2,6 +2,7 @@ import hashlib
 import logging
 import os
 import re
+import sys
 import shlex
 import socket
 import traceback
@@ -30,6 +31,7 @@ from dagster._core.executor.step_delegating.step_handler.base import (
     StepHandlerContext,
 )
 from dagster._core.utils import parse_env_var
+from dagster._utils.error import serializable_error_info_from_exc_info
 from dagster._utils.merger import merge_dicts
 from dagster_docker import docker_executor as base_docker_executor
 from dagster_docker.container_context import DockerContainerContext
@@ -515,14 +517,15 @@ class AzureBatchStepHandler(StepHandler):
 
             # Hide Dagster's serialized payload, which may contain credentials.
             # Lengths below are measured BEFORE redaction.
-            command_preview = re.sub(
-                r"(--compressed-input-json(?:=|\s+))\S+",
-                r"\1<redacted>",
-                command_line,
+            # Diagnostic preview only: omit serialized arguments.
+            command_preview = shlex.join(
+                execute_step_args.get_command_args(
+                    skip_serialized_namedtuple=True
+                )
             )
 
         self._failed_launch_metadata = {
-            "failed_launch_commandLine_preview": MetadataValue.text(
+            "failed_launch_base_command_preview": MetadataValue.text(
                 command_preview
             ),
             "failed_launch_commandLine_characters": MetadataValue.int(
@@ -669,7 +672,28 @@ class AzureBatchStepHandler(StepHandler):
             ),
         )
 
-        self._batch_client.terminate_task(
-            job_id=job_id,
-            task_id=task_id,
-        )
+        try:
+            self._batch_client.terminate_task(
+                job_id=job_id,
+                task_id=task_id,
+            )
+        except Exception:
+            yield DagsterEvent.engine_event(
+                step_handler_context.get_step_context(step_key),
+                message=(
+                    f"Failed to terminate Azure Batch task {task_id} "
+                    f"in job {job_id}. Check task status in Azure."
+                ),
+                event_specific_data=EngineEventData(
+                    error=serializable_error_info_from_exc_info(
+                        sys.exc_info()
+                    ),
+                    metadata={
+                        "termination_job_id": MetadataValue.text(job_id),
+                        "termination_task_id": MetadataValue.text(task_id),
+                        **self._failed_launch_metadata,
+                    },
+                ),
+            )
+            # Continue cleanup without masking the original launch exception.
+            return
