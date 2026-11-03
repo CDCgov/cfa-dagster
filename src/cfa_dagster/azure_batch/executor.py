@@ -441,8 +441,20 @@ class AzureBatchStepHandler(StepHandler):
             step_handler_context.get_step_context(step_key)
         )
         env_vars.update(asset_observation_env)
+
+        # Put Dagster's serialized execution arguments in the task environment.
+        env_vars.update(
+            {
+                setting["name"]: setting["value"]
+                for setting in execute_step_args.get_command_env()
+            }
+        )
+
+        # Omit those arguments from the command line.
         command = wrap_command_for_profiling(
-            execute_step_args.get_command_args(),
+            execute_step_args.get_command_args(
+                skip_serialized_namedtuple=True
+            ),
             self._profiling,
             track_step_status=bool(asset_observation_env),
         )
