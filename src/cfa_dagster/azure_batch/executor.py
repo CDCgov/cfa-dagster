@@ -15,7 +15,14 @@ from azure.batch import BatchClient
 from azure.batch import models as batch_models
 from azure.core.exceptions import HttpResponseError
 from azure.identity import DefaultAzureCredential
-from dagster import Field, MetadataValue, Permissive, StringSource, executor
+from dagster import (
+    Bool,
+    Field,
+    MetadataValue,
+    Permissive,
+    StringSource,
+    executor,
+)
 from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
@@ -65,6 +72,15 @@ if TYPE_CHECKING:
                 is_required=True,
                 description="The name of the Azure Batch Pool.",
             ),
+            "send_serialized_json_directly": Field(
+                Bool,
+                is_required=False,
+                default_value=False,
+                description=(
+                    "Pass serialized step arguments via task environment "
+                    "settings instead of the command line."
+                ),
+            ),
             "container_kwargs": Field(
                 Permissive(
                     {
@@ -109,6 +125,7 @@ def azure_batch_executor(
           config:
             pool_name: ...
             image: ...
+            send_serialized_json_directly: false
             env_vars: ...
             container_kwargs: ...
 
@@ -136,6 +153,10 @@ def azure_batch_executor(
         config, "tag_concurrency_limits"
     )
     profiling = ProfilingConfig.from_config(config)
+    send_serialized_json_directly = check.bool_param(
+        config.get("send_serialized_json_directly", False),
+        "send_serialized_json_directly",
+    )
 
     # propagate user & dev env vars
     require_dagster_user()
@@ -166,7 +187,13 @@ def azure_batch_executor(
     pool_name = check.opt_str_elem(config, "pool_name")
 
     return StepDelegatingExecutor(
-        AzureBatchStepHandler(image, container_context, pool_name, profiling),
+        AzureBatchStepHandler(
+            image,
+            container_context,
+            pool_name,
+            profiling,
+            send_serialized_json_directly=send_serialized_json_directly,
+        ),
         retries=check.not_none(RetryMode.from_config(retries)),
         max_concurrent=max_concurrent,
         tag_concurrency_limits=tag_concurrency_limits,
@@ -180,6 +207,7 @@ class AzureBatchStepHandler(StepHandler):
         container_context: DockerContainerContext,
         pool_name: Optional[str],
         profiling: ProfilingConfig,
+        send_serialized_json_directly: bool = False,
     ):
         super().__init__()
         # self._pool_id = "cfa-dagster"
@@ -200,6 +228,7 @@ class AzureBatchStepHandler(StepHandler):
             container_context, "container_context", DockerContainerContext
         )
         self._profiling = profiling
+        self._send_serialized_json_directly = send_serialized_json_directly
 
     def _get_image(self, step_handler_context: StepHandlerContext):
         step_key = self._get_step_key(step_handler_context)
@@ -443,18 +472,18 @@ class AzureBatchStepHandler(StepHandler):
         )
         env_vars.update(asset_observation_env)
 
-        # Put Dagster's serialized execution arguments in the task environment.
-        # env_vars.update(
-        #     {
-        #         setting["name"]: setting["value"]
-        #         for setting in execute_step_args.get_command_env()
-        #     }
-        # )
+        if self._send_serialized_json_directly:
+            # Put serialized arguments in the environment, not the command line.
+            env_vars.update(
+                {
+                    setting["name"]: setting["value"]
+                    for setting in execute_step_args.get_command_env()
+                }
+            )
 
-        # Omit those arguments from the command line.
         command = wrap_command_for_profiling(
             execute_step_args.get_command_args(
-                skip_serialized_namedtuple=False
+                skip_serialized_namedtuple=self._send_serialized_json_directly
             ),
             self._profiling,
             track_step_status=bool(asset_observation_env),
@@ -507,10 +536,10 @@ class AzureBatchStepHandler(StepHandler):
         )
 
         command_line = task.command_line
-        # Exclude serialized arguments, which may contain credentials.
+        # Preview the base command without the profiling wrapper.
         command_preview = shlex.join(
             execute_step_args.get_command_args(
-                skip_serialized_namedtuple=False
+                skip_serialized_namedtuple=self._send_serialized_json_directly
             )
         )
         launch_metadata = {
