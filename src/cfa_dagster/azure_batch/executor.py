@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import logging
 import os
@@ -7,6 +8,7 @@ import socket
 import sys
 import traceback
 import uuid
+import zlib
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Optional, cast
 
@@ -544,51 +546,37 @@ class AzureBatchStepHandler(StepHandler):
             user_identity=user_identity,
         )
 
-        command_line = task.command_line
         # Compare shell-quoted base commands without the profiling wrapper.
         # The unskipped preview includes the potentially sensitive payload.
         command_with_serialized = shlex.join(command_args_with_serialized)
         command_without_serialized = shlex.join(
             command_args_without_serialized
         )
-        with_serialized_bytes = len(command_with_serialized.encode("utf-8"))
-        without_serialized_bytes = len(
-            command_without_serialized.encode("utf-8")
-        )
+        data = command_args_with_serialized[-1]
+        raw = base64.b64decode(data)
+        decompressed = zlib.decompress(raw)
+        try:
+            decoded_json = decompressed.decode("utf-8")
+        except UnicodeDecodeError:
+            decoded_json = str(decompressed)
+
         launch_metadata = {
-            "skip_serialized_namedtuple": MetadataValue.bool(
-                self._send_serialized_json_directly
-            ),
-            "base_command_with_serialized_args_characters": MetadataValue.int(
-                len(command_with_serialized)
-            ),
-            "base_command_without_serialized_args_characters": MetadataValue.int(
-                len(command_without_serialized)
-            ),
-            "base_command_with_serialized_args_utf8_bytes": MetadataValue.int(
-                with_serialized_bytes
-            ),
-            "base_command_without_serialized_args_utf8_bytes": MetadataValue.int(
-                without_serialized_bytes
-            ),
-            "base_command_characters_saved_by_skip": MetadataValue.int(
-                len(command_with_serialized) - len(command_without_serialized)
-            ),
-            "base_command_utf8_bytes_saved_by_skip": MetadataValue.int(
-                with_serialized_bytes - without_serialized_bytes
-            ),
-            "base_command_with_serialized_args": MetadataValue.text(
+            "commandLine without skip": MetadataValue.text(
                 command_with_serialized
             ),
-            "base_command_without_serialized_args": MetadataValue.text(
+            "commandLine without skip character count": MetadataValue.int(
+                len(command_with_serialized)
+            ),
+            "commandLine without skip decoded": MetadataValue.text(
+                decoded_json
+            ),
+            "commandLine with skip": MetadataValue.text(
                 command_without_serialized
             ),
-            "commandLine_characters": MetadataValue.int(len(command_line)),
-            "commandLine_utf8_bytes": MetadataValue.int(
-                len(command_line.encode("utf-8"))
+            "commandLine with skip character count": MetadataValue.int(
+                len(command_without_serialized)
             ),
-            "Azure Batch Job ID": job_id,
-            "Azure Batch Pool ID": self._pool_id,
+            "commandLine with skip decoded": MetadataValue.text(decoded_json),
         }
         launch_details = "\n".join(
             f"{key}: {value.value if isinstance(value, MetadataValue) else value}"
