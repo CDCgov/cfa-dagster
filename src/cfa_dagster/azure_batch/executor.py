@@ -74,7 +74,7 @@ if TYPE_CHECKING:
                 is_required=True,
                 description="The name of the Azure Batch Pool.",
             ),
-            "send_serialized_json_directly": Field(
+            "send_dagster_json_as_env_vars": Field(
                 Bool,
                 is_required=False,
                 default_value=False,
@@ -127,7 +127,7 @@ def azure_batch_executor(
           config:
             pool_name: ...
             image: ...
-            send_serialized_json_directly: false
+            send_dagster_json_as_env_vars: false
             env_vars: ...
             container_kwargs: ...
 
@@ -155,9 +155,9 @@ def azure_batch_executor(
         config, "tag_concurrency_limits"
     )
     profiling = ProfilingConfig.from_config(config)
-    send_serialized_json_directly = check.bool_param(
-        config.get("send_serialized_json_directly", False),
-        "send_serialized_json_directly",
+    send_dagster_json_as_env_vars = check.bool_param(
+        config.get("send_dagster_json_as_env_vars", False),
+        "send_dagster_json_as_env_vars",
     )
 
     # propagate user & dev env vars
@@ -194,7 +194,7 @@ def azure_batch_executor(
             container_context,
             pool_name,
             profiling,
-            send_serialized_json_directly=send_serialized_json_directly,
+            send_dagster_json_as_env_vars=send_dagster_json_as_env_vars,
         ),
         retries=check.not_none(RetryMode.from_config(retries)),
         max_concurrent=max_concurrent,
@@ -209,7 +209,7 @@ class AzureBatchStepHandler(StepHandler):
         container_context: DockerContainerContext,
         pool_name: Optional[str],
         profiling: ProfilingConfig,
-        send_serialized_json_directly: bool = False,
+        send_dagster_json_as_env_vars: bool = False,
     ):
         super().__init__()
         # self._pool_id = "cfa-dagster"
@@ -230,7 +230,7 @@ class AzureBatchStepHandler(StepHandler):
             container_context, "container_context", DockerContainerContext
         )
         self._profiling = profiling
-        self._send_serialized_json_directly = send_serialized_json_directly
+        self._send_dagster_json_as_env_vars = send_dagster_json_as_env_vars
 
     def _get_image(self, step_handler_context: StepHandlerContext):
         step_key = self._get_step_key(step_handler_context)
@@ -474,7 +474,7 @@ class AzureBatchStepHandler(StepHandler):
         )
         env_vars.update(asset_observation_env)
 
-        if self._send_serialized_json_directly:
+        if self._send_dagster_json_as_env_vars:
             # Put serialized arguments in the environment, not the command line.
             env_vars.update(
                 {
@@ -491,7 +491,7 @@ class AzureBatchStepHandler(StepHandler):
         )
         base_command_args = (
             command_args_without_serialized
-            if self._send_serialized_json_directly
+            if self._send_dagster_json_as_env_vars
             else command_args_with_serialized
         )
         command = wrap_command_for_profiling(
@@ -562,7 +562,7 @@ class AzureBatchStepHandler(StepHandler):
 
         launch_metadata = {
             "skip_serialized_namedtuple": MetadataValue.bool(
-                self._send_serialized_json_directly
+                self._send_dagster_json_as_env_vars
             ),
             "commandLine without skip": MetadataValue.text(
                 command_with_serialized
