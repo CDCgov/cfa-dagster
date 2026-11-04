@@ -538,7 +538,32 @@ class AzureBatchStepHandler(StepHandler):
             event_specific_data=EngineEventData(metadata=launch_metadata),
         )
 
-        self._batch_client.create_task(job_id=job_id, task=task)
+        try:
+            self._batch_client.create_task(job_id=job_id, task=task)
+        except Exception:
+            log.exception(
+                "Failed to submit Azure Batch task %s in job %s for step %s "
+                "(run %s, pool %s).",
+                task_id,
+                job_id,
+                step_key,
+                step_handler_context.dagster_run.run_id,
+                self._pool_id,
+            )
+            yield DagsterEvent.engine_event(
+                step_handler_context.get_step_context(step_key),
+                message=(
+                    f"Failed to submit Azure Batch task {task_id} "
+                    f"in job {job_id} for step {step_key}."
+                ),
+                event_specific_data=EngineEventData(
+                    error=serializable_error_info_from_exc_info(
+                        sys.exc_info()
+                    ),
+                    metadata=launch_metadata,
+                ),
+            )
+            raise
 
         yield DagsterEvent.step_worker_starting(
             step_handler_context.get_step_context(step_key),
@@ -672,6 +697,7 @@ class AzureBatchStepHandler(StepHandler):
             ),
         )
 
+        # Try/catch for failure to terminate task
         try:
             self._batch_client.terminate_task(
                 job_id=job_id,
