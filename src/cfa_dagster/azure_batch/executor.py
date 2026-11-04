@@ -558,14 +558,6 @@ class AzureBatchStepHandler(StepHandler):
             f"Azure Batch Job ID: {job_id}\n"
             f"Azure Batch Pool ID: {self._pool_id}"
         )
-        yield DagsterEvent.engine_event(
-            step_handler_context.get_step_context(step_key),
-            message=(
-                f"Submitting Azure Batch task {task_id} in job {job_id}.\n"
-                f"{launch_details}"
-            ),
-            event_specific_data=EngineEventData(metadata=launch_metadata),
-        )
 
         try:
             self._batch_client.create_task(job_id=job_id, task=task)
