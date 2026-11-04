@@ -481,10 +481,19 @@ class AzureBatchStepHandler(StepHandler):
                 }
             )
 
+        command_args_with_serialized = execute_step_args.get_command_args(
+            skip_serialized_namedtuple=False
+        )
+        command_args_without_serialized = execute_step_args.get_command_args(
+            skip_serialized_namedtuple=True
+        )
+        base_command_args = (
+            command_args_without_serialized
+            if self._send_serialized_json_directly
+            else command_args_with_serialized
+        )
         command = wrap_command_for_profiling(
-            execute_step_args.get_command_args(
-                skip_serialized_namedtuple=self._send_serialized_json_directly
-            ),
+            base_command_args,
             self._profiling,
             track_step_status=bool(asset_observation_env),
         )
@@ -536,14 +545,44 @@ class AzureBatchStepHandler(StepHandler):
         )
 
         command_line = task.command_line
-        # Preview the base command without the profiling wrapper.
-        command_preview = shlex.join(
-            execute_step_args.get_command_args(
-                skip_serialized_namedtuple=self._send_serialized_json_directly
-            )
+        # Compare shell-quoted base commands without the profiling wrapper.
+        # The unskipped preview includes the potentially sensitive payload.
+        command_with_serialized = shlex.join(command_args_with_serialized)
+        command_without_serialized = shlex.join(
+            command_args_without_serialized
+        )
+        with_serialized_bytes = len(command_with_serialized.encode("utf-8"))
+        without_serialized_bytes = len(
+            command_without_serialized.encode("utf-8")
         )
         launch_metadata = {
-            "base_command_preview": MetadataValue.text(command_preview),
+            "skip_serialized_namedtuple": MetadataValue.bool(
+                self._send_serialized_json_directly
+            ),
+            "base_command_with_serialized_args_characters": MetadataValue.int(
+                len(command_with_serialized)
+            ),
+            "base_command_without_serialized_args_characters": MetadataValue.int(
+                len(command_without_serialized)
+            ),
+            "base_command_with_serialized_args_utf8_bytes": MetadataValue.int(
+                with_serialized_bytes
+            ),
+            "base_command_without_serialized_args_utf8_bytes": MetadataValue.int(
+                without_serialized_bytes
+            ),
+            "base_command_characters_saved_by_skip": MetadataValue.int(
+                len(command_with_serialized) - len(command_without_serialized)
+            ),
+            "base_command_utf8_bytes_saved_by_skip": MetadataValue.int(
+                with_serialized_bytes - without_serialized_bytes
+            ),
+            "base_command_with_serialized_args": MetadataValue.text(
+                command_with_serialized
+            ),
+            "base_command_without_serialized_args": MetadataValue.text(
+                command_without_serialized
+            ),
             "commandLine_characters": MetadataValue.int(len(command_line)),
             "commandLine_utf8_bytes": MetadataValue.int(
                 len(command_line.encode("utf-8"))
@@ -551,12 +590,9 @@ class AzureBatchStepHandler(StepHandler):
             "Azure Batch Job ID": job_id,
             "Azure Batch Pool ID": self._pool_id,
         }
-        launch_details = (
-            f"base_command_preview: {command_preview}\n"
-            f"commandLine_characters: {len(command_line)}\n"
-            f"commandLine_utf8_bytes: {len(command_line.encode('utf-8'))}\n"
-            f"Azure Batch Job ID: {job_id}\n"
-            f"Azure Batch Pool ID: {self._pool_id}"
+        launch_details = "\n".join(
+            f"{key}: {value.value if isinstance(value, MetadataValue) else value}"
+            for key, value in launch_metadata.items()
         )
 
         try:
