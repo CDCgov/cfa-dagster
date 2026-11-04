@@ -561,6 +561,9 @@ class AzureBatchStepHandler(StepHandler):
             decoded_json = str(decompressed)
 
         launch_metadata = {
+            "skip_serialized_namedtuple": MetadataValue.bool(
+                self._send_serialized_json_directly
+            ),
             "commandLine without skip": MetadataValue.text(
                 command_with_serialized
             ),
