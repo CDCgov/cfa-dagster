@@ -578,6 +578,9 @@ class AzureBatchStepHandler(StepHandler):
             ),
             "commandLine with skip decoded": MetadataValue.text(decoded_json),
         }
+        launch_details = "\n".join(
+            f"{key}: {value.value}" for key, value in launch_metadata.items()
+        )
 
         try:
             self._batch_client.create_task(job_id=job_id, task=task)
@@ -595,7 +598,8 @@ class AzureBatchStepHandler(StepHandler):
                 step_handler_context.get_step_context(step_key),
                 message=(
                     f"Failed to submit Azure Batch task {task_id} "
-                    f"in job {job_id} for step {step_key}."
+                    f"in job {job_id} for step {step_key}.\n"
+                    f"{launch_details}"
                 ),
                 event_specific_data=EngineEventData(
                     error=serializable_error_info_from_exc_info(
@@ -609,7 +613,8 @@ class AzureBatchStepHandler(StepHandler):
         yield DagsterEvent.step_worker_starting(
             step_handler_context.get_step_context(step_key),
             message=(
-                f"Launching step in task {task_id}, Azure Batch job: {job_id}."
+                f"Launching step in task {task_id}, Azure Batch job: {job_id}.\n"
+                f"{launch_details}"
             ),
             metadata=launch_metadata,
         )
