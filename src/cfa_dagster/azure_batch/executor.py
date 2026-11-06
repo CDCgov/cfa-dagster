@@ -438,19 +438,21 @@ class AzureBatchStepHandler(StepHandler):
             step_handler_context.get_step_context(step_key)
         )
         env_vars.update(asset_observation_env)
-        # Toggle for Command line error testing
-        # Update env_vars with the command args
-        # env_vars.update(
-        #     {
-        #         setting["name"]: setting["value"]
-        #         for setting in execute_step_args.get_command_env()
-        #     }
-        # )
 
-        # raw_command_args = execute_step_args.get_command_args(skip_serialized_namedtuple=True)
-        raw_command_args = execute_step_args.get_command_args(
-            skip_serialized_namedtuple=False
+        # Update env_vars with the command args
+        # instead of sending them as a serialized namedtuple in the command directly
+        env_vars.update(
+            {
+                setting["name"]: setting["value"]
+                for setting in execute_step_args.get_command_env()
+            }
         )
+
+        # Skipping the serialized namedtuple prevents commandLine space errors
+        raw_command_args = execute_step_args.get_command_args(
+            skip_serialized_namedtuple=True
+        )
+
         raw_command = wrap_command_for_profiling(
             raw_command_args,
             self._profiling,
@@ -532,11 +534,17 @@ class AzureBatchStepHandler(StepHandler):
         )
 
         try:
-            self._batch_client.create_task(job_id=job_id, task=task)
+            status_code = self._batch_client.create_task(
+                job_id=job_id,
+                task=task,
+                cls=lambda response, _, __: response.http_response.status_code,
+            )
             yield DagsterEvent.engine_event(
                 step_handler_context.get_step_context(step_key),
                 message=f"Create task for {step_key}/{task_id}/{job_id} submitted without tripping an error synchronously.",
-                event_specific_data=EngineEventData(),
+                event_specific_data=EngineEventData(
+                    metadata={"status_code": status_code}
+                ),
             )
 
         except Exception:
