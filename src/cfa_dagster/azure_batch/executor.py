@@ -438,11 +438,14 @@ class AzureBatchStepHandler(StepHandler):
             step_handler_context.get_step_context(step_key)
         )
         env_vars.update(asset_observation_env)
-        command = wrap_command_for_profiling(
-            execute_step_args.get_command_args(),
+        raw_command_args = execute_step_args.get_raw_command_args()
+        raw_command = wrap_command_for_profiling(
+            raw_command_args,
             self._profiling,
             track_step_status=bool(asset_observation_env),
         )
+        # Prepares the command for shells
+        command = shlex.join(raw_command)
 
         resource_group_name = "ext-edav-cfa-network-prd"
         user_assigned_identity_name = "ext-edav-cfa-batch-account"
@@ -482,7 +485,7 @@ class AzureBatchStepHandler(StepHandler):
 
         task = batch_models.BatchTaskCreateOptions(
             id=task_id,
-            command_line=shlex.join(command),
+            command_line=command,
             container_settings=container_settings,
             environment_settings=[
                 {"name": k, "value": v} for k, v in env_vars.items()
@@ -490,18 +493,51 @@ class AzureBatchStepHandler(StepHandler):
             user_identity=user_identity,
         )
 
-        self._batch_client.create_task(job_id=job_id, task=task)
-
+        # Logs event for submitting the task to batch
         yield DagsterEvent.step_worker_starting(
             step_handler_context.get_step_context(step_key),
-            message=(
-                f"Launching step in task {task_id}, Azure Batch job: {job_id}."
-            ),
+            message=(f"Submitting {task_id}, Azure Batch job: {job_id}."),
             metadata={
                 "Azure Batch Job ID": job_id,
                 "Azure Batch Pool ID": self._pool_id,
             },
         )
+
+        # Expanded metadata for debugging
+        launch_metadata = {
+            "length_of_command": len(command),
+            "command": command,
+            "env_vars": env_vars,
+        }
+
+        # Event to log our command information, etc.
+        yield DagsterEvent.engine_event(
+            step_handler_context.get_step_context(step_key),
+            message="Azure Batch launch details.",
+            event_specific_data=EngineEventData(metadata=launch_metadata),
+        )
+
+        try:
+            self._batch_client.create_task(job_id=job_id, task=task)
+
+        except Exception:
+            log.exception(
+                "Failed to submit Azure Batch task %s in job %s for step %s "
+                "(run %s, pool %s).",
+                task_id,
+                job_id,
+                step_key,
+                step_handler_context.dagster_run.run_id,
+                self._pool_id,
+            )
+            yield DagsterEvent.engine_event(
+                step_handler_context.get_step_context(step_key),
+                message=(
+                    f"Failed to submit Azure Batch task {task_id} "
+                    f"in job {job_id} for step {step_key}."
+                ),
+            )
+            raise
 
     def check_step_health(
         self, step_handler_context: StepHandlerContext
