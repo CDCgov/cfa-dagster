@@ -548,15 +548,6 @@ class AzureBatchStepHandler(StepHandler):
             )
 
         except Exception:
-            log.exception(
-                "Failed to submit Azure Batch task %s in job %s for step %s "
-                "(run %s, pool %s).",
-                task_id,
-                job_id,
-                step_key,
-                step_handler_context.dagster_run.run_id,
-                self._pool_id,
-            )
             yield DagsterEvent.engine_event(
                 step_handler_context.get_step_context(step_key),
                 message=(
@@ -657,4 +648,24 @@ class AzureBatchStepHandler(StepHandler):
             message=f"Terminating Azure Batch task {task_id} in job {job_id} for step {step_key}.",
             event_specific_data=EngineEventData(),
         )
-        self._batch_client.terminate_task(job_id=job_id, task_id=task_id)
+
+        try:
+            status_code = self._batch_client.terminate_task(
+                job_id=job_id,
+                task_id=task_id,
+                cls=lambda response, _, __: response.http_response.status_code,
+            )
+            yield DagsterEvent.engine_event(
+                step_handler_context.get_step_context(step_key),
+                message=f"Terminate task for {step_key}/{task_id}/{job_id} submitted without tripping an error synchronously.",
+                event_specific_data=EngineEventData(
+                    metadata={"status_code": status_code}
+                ),
+            )
+        except Exception:
+            yield DagsterEvent.engine_event(
+                step_handler_context.get_step_context(step_key),
+                message=f"Could NOT gracefully terminate Azure Batch task {task_id} in job {job_id} for step {step_key}.",
+                event_specific_data=EngineEventData(),
+            )
+            raise
