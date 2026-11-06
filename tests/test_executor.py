@@ -1,7 +1,9 @@
+import json
 import os
 from unittest.mock import Mock, patch
 
 import pytest
+from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 from dagster import (
     DagsterInvalidConfigError,
     in_process_executor,
@@ -18,6 +20,7 @@ from cfa_dagster import (
     azure_container_instance_executor,
     docker_executor,
 )
+from cfa_dagster.azure_batch.executor import AzureBatchStepHandler
 from cfa_dagster.azure_container_app_job.launcher import (
     AzureContainerAppJobRunLauncher,
 )
@@ -423,6 +426,64 @@ def test_azure_container_instance_step_handler_wraps_command_and_env():
     assert env["CFA_DAGSTER_REQUESTED_CPU_CORES"] == "1.5"
     assert env["CFA_DAGSTER_REQUESTED_MEMORY_GIB"] == "3.0"
     assert env["EXISTING"] == "value"
+
+
+@pytest.mark.parametrize(
+    "status_code,error_code,ignored",
+    [
+        (404, "TaskNotFound", True),
+        (404, "JobNotFound", False),
+        (404, None, False),
+        (403, "AuthorizationFailure", False),
+        (500, "InternalError", False),
+        (500, "TaskNotFound", False),
+        (None, None, False),
+    ],
+)
+def test_azure_batch_termination_only_ignores_task_not_found(
+    status_code, error_code, ignored
+):
+    handler = AzureBatchStepHandler.__new__(AzureBatchStepHandler)
+    handler._batch_client = Mock()
+    handler._get_job_id = Mock(return_value="job-id")
+    handler._get_task_id = Mock(return_value="task-id")
+    context = Mock()
+    context.execute_step_args.step_keys_to_execute = ["some_step"]
+
+    if status_code is None:
+        error = RuntimeError("termination failed")
+    else:
+        response = Mock(status_code=status_code, reason="termination failed")
+        response.text.return_value = json.dumps(
+            {
+                "code": error_code,
+                "message": {"lang": "en-US", "value": "termination failed"},
+            }
+        )
+        error_type = (
+            ResourceNotFoundError if status_code == 404 else HttpResponseError
+        )
+        error = error_type(response=response)
+    handler._batch_client.terminate_task.side_effect = error
+
+    with patch("cfa_dagster.azure_batch.executor.DagsterEvent") as events:
+        if ignored:
+            emitted = list(handler.terminate_step(context))
+            assert len(emitted) == 2
+            result = events.engine_event.call_args.kwargs
+            assert "nothing to terminate" in result["message"]
+            metadata = result["event_specific_data"].metadata
+            assert metadata["status_code"].value == 404
+            assert metadata["error_code"].value == "TaskNotFound"
+        else:
+            with pytest.raises(type(error)) as raised:
+                list(handler.terminate_step(context))
+            assert raised.value is error
+            assert (
+                "Could NOT gracefully terminate"
+                in events.engine_event.call_args.kwargs["message"]
+            )
+    handler._batch_client.terminate_task.assert_called_once()
 
 
 def test_create_executor_invalid_class():

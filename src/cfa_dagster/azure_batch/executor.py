@@ -438,11 +438,28 @@ class AzureBatchStepHandler(StepHandler):
             step_handler_context.get_step_context(step_key)
         )
         env_vars.update(asset_observation_env)
-        command = wrap_command_for_profiling(
-            execute_step_args.get_command_args(),
+
+        # Update env_vars with the command args
+        # instead of sending them as a serialized namedtuple in the command directly
+        env_vars.update(
+            {
+                setting["name"]: setting["value"]
+                for setting in execute_step_args.get_command_env()
+            }
+        )
+
+        # Skipping the serialized namedtuple prevents commandLine space errors
+        raw_command_args = execute_step_args.get_command_args(
+            skip_serialized_namedtuple=True
+        )
+
+        raw_command = wrap_command_for_profiling(
+            raw_command_args,
             self._profiling,
             track_step_status=bool(asset_observation_env),
         )
+        # Prepares the command for shells
+        command = shlex.join(raw_command)
 
         resource_group_name = "ext-edav-cfa-network-prd"
         user_assigned_identity_name = "ext-edav-cfa-batch-account"
@@ -482,7 +499,7 @@ class AzureBatchStepHandler(StepHandler):
 
         task = batch_models.BatchTaskCreateOptions(
             id=task_id,
-            command_line=shlex.join(command),
+            command_line=command,
             container_settings=container_settings,
             environment_settings=[
                 {"name": k, "value": v} for k, v in env_vars.items()
@@ -490,18 +507,55 @@ class AzureBatchStepHandler(StepHandler):
             user_identity=user_identity,
         )
 
-        self._batch_client.create_task(job_id=job_id, task=task)
-
+        # Logs event for submitting the task to batch
         yield DagsterEvent.step_worker_starting(
             step_handler_context.get_step_context(step_key),
             message=(
-                f"Launching step in task {task_id}, Azure Batch job: {job_id}."
+                f"Submitting to Azure batch - task: {task_id}, job: {job_id}, pool: {self._pool_id}"
             ),
             metadata={
                 "Azure Batch Job ID": job_id,
                 "Azure Batch Pool ID": self._pool_id,
             },
         )
+
+        # Expanded metadata for debugging
+        launch_metadata = {
+            "length_of_command": len(command),
+            "command": command,
+            "env_vars": env_vars,
+        }
+
+        # Event to log our command information, etc.
+        yield DagsterEvent.engine_event(
+            step_handler_context.get_step_context(step_key),
+            message="Azure Batch launch details.",
+            event_specific_data=EngineEventData(metadata=launch_metadata),
+        )
+
+        try:
+            status_code = self._batch_client.create_task(
+                job_id=job_id,
+                task=task,
+                cls=lambda response, _, __: response.http_response.status_code,
+            )
+            yield DagsterEvent.engine_event(
+                step_handler_context.get_step_context(step_key),
+                message=f"Create task for {step_key}/{task_id}/{job_id} submitted without tripping an error synchronously.",
+                event_specific_data=EngineEventData(
+                    metadata={"status_code": status_code}
+                ),
+            )
+
+        except Exception:
+            yield DagsterEvent.engine_event(
+                step_handler_context.get_step_context(step_key),
+                message=(
+                    f"Failed to submit Azure Batch task {task_id} "
+                    f"in job {job_id} for step {step_key}."
+                ),
+            )
+            raise
 
     def check_step_health(
         self, step_handler_context: StepHandlerContext
@@ -594,4 +648,45 @@ class AzureBatchStepHandler(StepHandler):
             message=f"Terminating Azure Batch task {task_id} in job {job_id} for step {step_key}.",
             event_specific_data=EngineEventData(),
         )
-        self._batch_client.terminate_task(job_id=job_id, task_id=task_id)
+
+        try:
+            status_code = self._batch_client.terminate_task(
+                job_id=job_id,
+                task_id=task_id,
+                cls=lambda response, _, __: response.http_response.status_code,
+            )
+            yield DagsterEvent.engine_event(
+                step_handler_context.get_step_context(step_key),
+                message=f"Terminate task for {step_key}/{task_id}/{job_id} submitted without tripping an error synchronously.",
+                event_specific_data=EngineEventData(
+                    metadata={"status_code": status_code}
+                ),
+            )
+        except Exception as err:
+            # Cleanup may follow a failed launch that never created the task.
+            if (
+                isinstance(err, HttpResponseError)
+                and err.status_code == 404
+                and err.error is not None
+                and err.error.code == "TaskNotFound"
+            ):
+                yield DagsterEvent.engine_event(
+                    step_handler_context.get_step_context(step_key),
+                    message=(
+                        f"Azure Batch task {task_id} in job {job_id} "
+                        "does not exist; nothing to terminate."
+                    ),
+                    event_specific_data=EngineEventData(
+                        metadata={
+                            "status_code": err.status_code,
+                            "error_code": err.error.code,
+                        }
+                    ),
+                )
+                return
+            yield DagsterEvent.engine_event(
+                step_handler_context.get_step_context(step_key),
+                message=f"Could NOT gracefully terminate Azure Batch task {task_id} in job {job_id} for step {step_key}.",
+                event_specific_data=EngineEventData(),
+            )
+            raise
