@@ -438,7 +438,7 @@ class AzureBatchStepHandler(StepHandler):
             step_handler_context.get_step_context(step_key)
         )
         env_vars.update(asset_observation_env)
-        raw_command_args = execute_step_args.get_raw_command_args()
+        raw_command_args = execute_step_args.get_command_args()
         raw_command = wrap_command_for_profiling(
             raw_command_args,
             self._profiling,
