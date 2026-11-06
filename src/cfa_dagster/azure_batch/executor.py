@@ -533,6 +533,11 @@ class AzureBatchStepHandler(StepHandler):
 
         try:
             self._batch_client.create_task(job_id=job_id, task=task)
+            yield DagsterEvent.engine_event(
+                step_handler_context.get_step_context(step_key),
+                message=f"Create task for {step_key}/{task_id}/{job_id} submitted without tripping an error synchronously.",
+                event_specific_data=EngineEventData(),
+            )
 
         except Exception:
             log.exception(
