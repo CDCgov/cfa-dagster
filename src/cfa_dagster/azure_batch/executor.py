@@ -438,7 +438,19 @@ class AzureBatchStepHandler(StepHandler):
             step_handler_context.get_step_context(step_key)
         )
         env_vars.update(asset_observation_env)
-        raw_command_args = execute_step_args.get_command_args()
+        # Toggle for Command line error testing
+        # Update env_vars with the command args
+        # env_vars.update(
+        #     {
+        #         setting["name"]: setting["value"]
+        #         for setting in execute_step_args.get_command_env()
+        #     }
+        # )
+
+        # raw_command_args = execute_step_args.get_command_args(skip_serialized_namedtuple=True)
+        raw_command_args = execute_step_args.get_command_args(
+            skip_serialized_namedtuple=False
+        )
         raw_command = wrap_command_for_profiling(
             raw_command_args,
             self._profiling,
@@ -496,7 +508,9 @@ class AzureBatchStepHandler(StepHandler):
         # Logs event for submitting the task to batch
         yield DagsterEvent.step_worker_starting(
             step_handler_context.get_step_context(step_key),
-            message=(f"Submitting {task_id}, Azure Batch job: {job_id}."),
+            message=(
+                f"Submitting to Azure batch - task: {task_id}, job: {job_id}, pool: {self._pool_id}"
+            ),
             metadata={
                 "Azure Batch Job ID": job_id,
                 "Azure Batch Pool ID": self._pool_id,
