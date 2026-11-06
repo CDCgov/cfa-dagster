@@ -662,7 +662,28 @@ class AzureBatchStepHandler(StepHandler):
                     metadata={"status_code": status_code}
                 ),
             )
-        except Exception:
+        except Exception as err:
+            # Cleanup may follow a failed launch that never created the task.
+            if (
+                isinstance(err, HttpResponseError)
+                and err.status_code == 404
+                and err.error is not None
+                and err.error.code == "TaskNotFound"
+            ):
+                yield DagsterEvent.engine_event(
+                    step_handler_context.get_step_context(step_key),
+                    message=(
+                        f"Azure Batch task {task_id} in job {job_id} "
+                        "does not exist; nothing to terminate."
+                    ),
+                    event_specific_data=EngineEventData(
+                        metadata={
+                            "status_code": err.status_code,
+                            "error_code": err.error.code,
+                        }
+                    ),
+                )
+                return
             yield DagsterEvent.engine_event(
                 step_handler_context.get_step_context(step_key),
                 message=f"Could NOT gracefully terminate Azure Batch task {task_id} in job {job_id} for step {step_key}.",
