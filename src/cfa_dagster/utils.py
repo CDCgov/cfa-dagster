@@ -158,6 +158,76 @@ def collect_definitions(namespace):
     }
 
 
+def update_code_location(
+    registry_image: str,
+    *,
+    client: DagsterGraphQLClient | None = None,
+) -> str:
+    """Launch a code location update and return the run ID without waiting.
+
+    By default, target the central Dagster server even in local development.
+    Pass a client to target another server. Private ghcr.io/cdcent images are
+    not supported. GraphQL and launch failures raise exceptions.
+    """
+    if registry_image.startswith("ghcr.io/cdcent"):
+        raise ValueError("Cannot use images from private ghcr.io/cdcent repos")
+
+    if client is None:
+        client = DagsterGraphQLClient(hostname=PROD_HOSTNAME)
+
+    # Keep the mutation and variables aligned with scripts/update_code_location.py.
+    query = """
+    mutation runJob($runConfigData: RunConfigData, $tags: [ExecutionTag!]) {
+      launchRun(
+        executionParams: {
+          selector: {
+            jobName: "update_code_location",
+            repositoryName: "__repository__",
+            repositoryLocationName: "cfa_dagster"
+          },
+          runConfigData: $runConfigData,
+          executionMetadata: {
+              tags: $tags
+          }
+        }
+      ) {
+        __typename
+        ... on LaunchRunSuccess {
+          run {
+            runId
+            status
+          }
+        }
+        ... on RunConfigValidationInvalid {
+          pipelineName
+          errors {
+            __typename
+            message
+          }
+        }
+      }
+    }
+    """
+    variables = {
+        "runConfigData": {
+            "ops": {
+                "get_code_location_name": {
+                    "inputs": {"registry_image": registry_image}
+                }
+            }
+        },
+        "tags": [{"key": "registry_image", "value": registry_image}],
+    }
+    result = client._execute(query, variables=variables)
+    payload = result.get("launchRun")
+    if (
+        isinstance(payload, dict)
+        and payload.get("__typename") == "LaunchRunSuccess"
+    ):
+        return payload["run"]["runId"]
+    raise RuntimeError(f"Failed to update code location: {payload!r}")
+
+
 def launch_asset_backfill(
     asset_keys: list[str],
     partition_keys: list[str],
