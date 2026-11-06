@@ -13,6 +13,11 @@ from .azure_container_app_job.launcher import AzureContainerAppJobRunLauncher
 from .azure_container_instance.executor import (
     azure_container_instance_executor,
 )
+from .azure_data_factory import (
+    ADFDatalakeToMUSTResource,
+    ADFPipelineRun,
+    ADFResource,
+)
 from .azure_keyvault import AzureKeyVaultResource
 from .cli import start_dev_env
 from .docker.executor import docker_executor
@@ -39,6 +44,7 @@ from .utils import (
     is_production,
     launch_asset_backfill,
     require_dagster_user,
+    update_code_location,
 )
 
 # Create a logger for the package
