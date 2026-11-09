@@ -2,7 +2,7 @@ repos:
   #####
   # Basic file cleanliness
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: check-added-large-files
       - id: check-yaml
@@ -13,7 +13,7 @@ repos:
   #####
   # Python
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.10
+    rev: v0.17.4
     hooks:
       # Sort imports
       - id: ruff
@@ -32,7 +32,7 @@ repos:
         args: ["--baseline", ".secrets.baseline"]
         exclude: uv.lock
   - repo: https://github.com/crate-ci/typos
-    rev: v1.36.2
+    rev: v1.52.0
     hooks:
       - id: typos
   - repo: local
