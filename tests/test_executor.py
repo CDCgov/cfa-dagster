@@ -495,7 +495,7 @@ def test_azure_batch_launch_redacts_password_in_metadata_only(
         (None, None),
     ],
 )
-def test_azure_batch_launch_logs_error_on_step_before_reraising(
+def test_azure_batch_launch_reports_step_failure_before_reraising(
     http_status, error_code
 ):
     handler = AzureBatchStepHandler.__new__(AzureBatchStepHandler)
@@ -544,23 +544,35 @@ def test_azure_batch_launch_logs_error_on_step_before_reraising(
 
     assert raised.value is error
     assert len(emitted) == 3
-    assert events.engine_event.call_count == 2
+    events.engine_event.assert_called_once()
     assert (
-        events.engine_event.call_args.args[0]
+        events.engine_event.call_args.kwargs["message"]
+        == "Azure Batch launch details."
+    )
+    events.step_failure_event.assert_called_once()
+    assert emitted[-1] is events.step_failure_event.return_value
+    assert (
+        events.step_failure_event.call_args.args[0]
         is context.get_step_context.return_value
     )
-    failure = events.engine_event.call_args.kwargs
+    failure = events.step_failure_event.call_args.kwargs
     assert "some_step" in failure["message"]
-    details = failure["event_specific_data"]
+    assert "task-id" in failure["message"]
+    assert "job-id" in failure["message"]
+    details = failure["step_failure_data"]
     assert "submission failed" in details.error.message
     assert details.error.stack
-    assert details.metadata["operation"].value == "create_task"
-    assert details.metadata["status_code"].value == http_status
-    assert details.metadata["error_code"].value == error_code
-    assert details.metadata["Azure Batch Task ID"].value == "task-id"
-    assert details.metadata["Azure Batch Job ID"].value == "job-id"
-    assert details.metadata["Azure Batch Pool ID"].value == "pool-id"
-    events.step_failure_event.assert_not_called()
+    assert details.error_source.value == "FRAMEWORK_ERROR"
+    assert (
+        details.user_failure_data.label == "Azure Batch task submission failed"
+    )
+    metadata = details.user_failure_data.metadata
+    assert metadata["operation"].value == "create_task"
+    assert metadata["status_code"].value == http_status
+    assert metadata["error_code"].value == error_code
+    assert metadata["Azure Batch Task ID"].value == "task-id"
+    assert metadata["Azure Batch Job ID"].value == "job-id"
+    assert metadata["Azure Batch Pool ID"].value == "pool-id"
     handler._batch_client.terminate_task.assert_not_called()
 
 

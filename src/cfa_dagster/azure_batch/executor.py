@@ -18,6 +18,10 @@ from dagster._core.definitions.executor_definition import (
     multiple_process_executor_requirements,
 )
 from dagster._core.events import DagsterEvent, EngineEventData
+from dagster._core.execution.plan.objects import (
+    StepFailureData,
+    UserFailureData,
+)
 from dagster._core.execution.retries import RetryMode
 from dagster._core.executor.base import Executor
 from dagster._core.executor.init import InitExecutorContext
@@ -553,26 +557,28 @@ class AzureBatchStepHandler(StepHandler):
             )
 
         except Exception as err:
-            yield DagsterEvent.engine_event(
+            error_info = serializable_error_info_from_exc_info(sys.exc_info())
+            yield DagsterEvent.step_failure_event(
                 step_handler_context.get_step_context(step_key),
                 message=(
                     f"Failed to submit Azure Batch task {task_id} "
                     f"in job {job_id} for step {step_key}."
                 ),
-                event_specific_data=EngineEventData(
-                    error=serializable_error_info_from_exc_info(
-                        sys.exc_info()
+                step_failure_data=StepFailureData(
+                    error=error_info,
+                    user_failure_data=UserFailureData(
+                        label="Azure Batch task submission failed",
+                        metadata={
+                            "operation": "create_task",
+                            "status_code": getattr(err, "status_code", None),
+                            "error_code": getattr(
+                                getattr(err, "error", None), "code", None
+                            ),
+                            "Azure Batch Task ID": task_id,
+                            "Azure Batch Job ID": job_id,
+                            "Azure Batch Pool ID": self._pool_id,
+                        },
                     ),
-                    metadata={
-                        "operation": "create_task",
-                        "status_code": getattr(err, "status_code", None),
-                        "error_code": getattr(
-                            getattr(err, "error", None), "code", None
-                        ),
-                        "Azure Batch Task ID": task_id,
-                        "Azure Batch Job ID": job_id,
-                        "Azure Batch Pool ID": self._pool_id,
-                    },
                 ),
             )
             raise
