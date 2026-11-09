@@ -41,7 +41,9 @@ class ADFResource(dg.ConfigurableResource):
     subscription_secret: str = "CFA-EDAV-Subscription-ID"
     tenant_secret: str = "CFA-EDAV-Tenant-ID"
     client_id_secret: str = "CFA-DataShare-PRD-SP-Client-ID"
-    client_secret_secret: str = "SP-CFA-To-EDAV-DataShare-Batch-Pipeline-Secret"
+    client_secret_secret: str = (
+        "SP-CFA-To-EDAV-DataShare-Batch-Pipeline-Secret"
+    )
     resource_group: str = "ocio-dav-prd"
     factory_name: str = "edav-cfa-prd-factory"
     poll_interval_seconds: float = Field(default=15, gt=0)
@@ -89,10 +91,13 @@ class ADFDatalakeToMUSTResource(ADFResource):
             ("base_destination_directory", self.base_destination_directory),
         ):
             if not isinstance(value, str) or not value.strip():
-                raise dg.Failure(f"ADF {name} cannot be empty.", allow_retries=False)
+                raise dg.Failure(
+                    f"ADF {name} cannot be empty.", allow_retries=False
+                )
         if not isinstance(should_delete_after_copy, bool):
             raise dg.Failure(
-                "ADF should_delete_after_copy must be a boolean.", allow_retries=False
+                "ADF should_delete_after_copy must be a boolean.",
+                allow_retries=False,
             )
         destination = (
             self.base_destination_directory.rstrip("\\")
@@ -119,7 +124,9 @@ def _request_json(
 ) -> dict[str, Any]:
     request = Request(
         url,
-        data=json.dumps(parameters).encode() if parameters is not None else None,
+        data=json.dumps(parameters).encode()
+        if parameters is not None
+        else None,
         headers={
             "Authorization": f"Bearer {credential.get_token(ARM_SCOPE).token}",
             "Content-Type": "application/json",
@@ -149,15 +156,15 @@ def _redact_error_text(text: str, client_secret: str) -> str:
     )
 
 
-def _error_details(error: Exception, client_secret: str) -> tuple[str, dict[str, Any]]:
+def _error_details(
+    error: Exception, client_secret: str
+) -> tuple[str, dict[str, Any]]:
     """Preserve Azure diagnostics without logging request headers or credentials."""
     summary = _redact_error_text(str(error), client_secret)
     metadata: dict[str, Any] = {"adf_error_type": type(error).__name__}
     if isinstance(error, HTTPError):
         metadata["adf_http_status"] = error.code
-        summary = (
-            f"HTTP {error.code}: {_redact_error_text(str(error.reason), client_secret)}"
-        )
+        summary = f"HTTP {error.code}: {_redact_error_text(str(error.reason), client_secret)}"
         if error.headers:
             for header in ("x-ms-request-id", "x-ms-correlation-request-id"):
                 value = error.headers.get(header)
@@ -203,13 +210,16 @@ def run_adf_pipeline(
 ) -> ADFPipelineRun:
     """Trigger once, then poll to completion without automatically cancelling ADF."""
     if not isinstance(pipeline_name, str) or not pipeline_name.strip():
-        raise dg.Failure("ADF pipeline name cannot be empty.", allow_retries=False)
+        raise dg.Failure(
+            "ADF pipeline name cannot be empty.", allow_retries=False
+        )
     if parameters is not None and (
         not isinstance(parameters, Mapping)
         or any(not isinstance(key, str) for key in parameters)
     ):
         raise dg.Failure(
-            "ADF parameters must be a mapping with string keys.", allow_retries=False
+            "ADF parameters must be a mapping with string keys.",
+            allow_retries=False,
         )
     parameters = dict(parameters) if parameters is not None else {}
     try:
@@ -217,12 +227,15 @@ def run_adf_pipeline(
     except (TypeError, ValueError, OverflowError, RecursionError):
         # Do not include parameter values or serialization exceptions in diagnostics.
         raise dg.Failure(
-            "ADF parameters must contain JSON-serializable values.", allow_retries=False
+            "ADF parameters must contain JSON-serializable values.",
+            allow_retries=False,
         ) from None
 
     with (
         DefaultAzureCredential() as vault_credential,
-        SecretClient(vault_url=config.vault_url, credential=vault_credential) as vault,
+        SecretClient(
+            vault_url=config.vault_url, credential=vault_credential
+        ) as vault,
     ):
         secrets = {}
         for key, name in (
@@ -263,7 +276,9 @@ def run_adf_pipeline(
             if not isinstance(run_id, str) or not run_id:
                 raise ValueError("ADF response has no run ID")
         except (HTTPError, URLError, OSError, ValueError, AzureError) as error:
-            details, error_metadata = _error_details(error, secrets["client_secret"])
+            details, error_metadata = _error_details(
+                error, secrets["client_secret"]
+            )
             log.error(f"ADF trigger failed: {details}")
             raise dg.Failure(
                 f"ADF trigger did not return a valid run ID. {details}. The request may have been "
@@ -279,7 +294,9 @@ def run_adf_pipeline(
         )
         log.info(f"Started ADF pipeline {pipeline_name}; run ID: {run_id}")
         log.info(f"ADF run monitoring: {studio_url}")
-        run_url = f"{factory_url}/pipelineruns/{quote(run_id, safe='')}{api_query}"
+        run_url = (
+            f"{factory_url}/pipelineruns/{quote(run_id, safe='')}{api_query}"
+        )
         deadline = time.monotonic() + config.wait_timeout_seconds
         last_status = "Unknown"
         while True:
@@ -294,7 +311,9 @@ def run_adf_pipeline(
                 )
             try:
                 response = _request_json(
-                    run_url, credential, min(config.http_timeout_seconds, remaining)
+                    run_url,
+                    credential,
+                    min(config.http_timeout_seconds, remaining),
                 )
             except (URLError, OSError) as error:
                 # Only the read-only status request is eligible for retries.
@@ -352,12 +371,17 @@ def run_adf_pipeline(
                         response.get("message")
                         or "No pipeline-level error message was provided."
                     )
-                    message = _redact_error_text(message, secrets["client_secret"])
+                    message = _redact_error_text(
+                        message, secrets["client_secret"]
+                    )
                     raise dg.Failure(
                         f"ADF run {run_id} {status}: {message}",
                         metadata=run.metadata() | {"adf_message": message},
                         allow_retries=False,
                     )
             time.sleep(
-                min(config.poll_interval_seconds, max(0, deadline - time.monotonic()))
+                min(
+                    config.poll_interval_seconds,
+                    max(0, deadline - time.monotonic()),
+                )
             )
