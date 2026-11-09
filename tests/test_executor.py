@@ -1,7 +1,9 @@
+import json
 import os
 from unittest.mock import Mock, patch
 
 import pytest
+from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
 from dagster import (
     DagsterInvalidConfigError,
     in_process_executor,
@@ -18,6 +20,7 @@ from cfa_dagster import (
     azure_container_instance_executor,
     docker_executor,
 )
+from cfa_dagster.azure_batch.executor import AzureBatchStepHandler
 from cfa_dagster.azure_container_app_job.launcher import (
     AzureContainerAppJobRunLauncher,
 )
@@ -423,6 +426,212 @@ def test_azure_container_instance_step_handler_wraps_command_and_env():
     assert env["CFA_DAGSTER_REQUESTED_CPU_CORES"] == "1.5"
     assert env["CFA_DAGSTER_REQUESTED_MEMORY_GIB"] == "3.0"
     assert env["EXISTING"] == "value"
+
+
+@pytest.mark.parametrize("include_password", [False, True])
+def test_azure_batch_launch_redacts_password_in_metadata_only(
+    include_password,
+):
+    env_vars = ["VISIBLE=value"]
+    if include_password:
+        env_vars.append("CFA_DG_PG_PASSWORD=test-password")
+    handler = AzureBatchStepHandler.__new__(AzureBatchStepHandler)
+    handler._batch_client = Mock()
+    handler._batch_client.create_task.return_value = 201
+    handler._pool_id = "pool-id"
+    handler._subscription_id = "subscription-id"
+    handler._profiling = Mock(enabled=False)
+    handler._get_docker_container_context = Mock(
+        return_value=DockerContainerContext(env_vars=env_vars)
+    )
+    handler._get_image = Mock(return_value="test-image")
+    handler._get_job_id = Mock(return_value="job-id")
+    handler._get_task_id = Mock(return_value="task-id")
+    handler._get_or_create_job = Mock()
+    context = Mock()
+    context.execute_step_args.step_keys_to_execute = ["some_step"]
+    context.execute_step_args.get_command_args.return_value = [
+        "dagster",
+        "api",
+        "execute_step",
+    ]
+    context.execute_step_args.get_command_env.return_value = []
+    context.dagster_run.job_name = "test-job"
+    context.dagster_run.run_id = "run-id"
+
+    with (
+        patch(
+            "cfa_dagster.azure_batch.executor."
+            "get_profile_asset_observation_env",
+            return_value={},
+        ),
+        patch("cfa_dagster.azure_batch.executor.DagsterEvent") as events,
+    ):
+        list(handler.launch_step(context))
+
+    launch = events.engine_event.call_args_list[0].kwargs
+    metadata = launch["event_specific_data"].metadata
+    logged_env = metadata["env_vars"].value
+    task = handler._batch_client.create_task.call_args.kwargs["task"]
+    actual_env = {
+        setting["name"]: setting["value"]
+        for setting in task.environment_settings
+    }
+    expected_logged_env = dict(actual_env)
+    if include_password:
+        assert actual_env["CFA_DG_PG_PASSWORD"] == "test-password"
+        expected_logged_env["CFA_DG_PG_PASSWORD"] = "[REDACTED]"
+    assert logged_env == expected_logged_env
+    assert logged_env["VISIBLE"] == "value"
+    assert "test-password" not in repr(metadata)
+
+
+@pytest.mark.parametrize(
+    "http_status,error_code",
+    [
+        (400, "InvalidPropertyValue"),
+        (403, "AuthorizationFailure"),
+        (500, None),
+        (None, None),
+    ],
+)
+def test_azure_batch_launch_reports_step_failure_before_reraising(
+    http_status, error_code
+):
+    handler = AzureBatchStepHandler.__new__(AzureBatchStepHandler)
+    handler._batch_client = Mock()
+    handler._pool_id = "pool-id"
+    handler._subscription_id = "subscription-id"
+    handler._profiling = Mock(enabled=False)
+    handler._get_docker_container_context = Mock(
+        return_value=DockerContainerContext()
+    )
+    handler._get_image = Mock(return_value="test-image")
+    handler._get_job_id = Mock(return_value="job-id")
+    handler._get_task_id = Mock(return_value="task-id")
+    handler._get_or_create_job = Mock()
+    context = Mock()
+    context.execute_step_args.step_keys_to_execute = ["some_step"]
+    context.execute_step_args.get_command_args.return_value = [
+        "dagster",
+        "api",
+        "execute_step",
+    ]
+    context.execute_step_args.get_command_env.return_value = []
+    context.dagster_run.job_name = "test-job"
+    context.dagster_run.run_id = "run-id"
+    if http_status is None:
+        error = RuntimeError("submission failed")
+    else:
+        response = Mock(status_code=http_status, reason="submission failed")
+        response.text.return_value = json.dumps(
+            {"code": error_code, "message": "submission failed"}
+        )
+        error = HttpResponseError(response=response)
+    handler._batch_client.create_task.side_effect = error
+
+    with (
+        patch(
+            "cfa_dagster.azure_batch.executor."
+            "get_profile_asset_observation_env",
+            return_value={},
+        ),
+        patch("cfa_dagster.azure_batch.executor.DagsterEvent") as events,
+    ):
+        emitted = []
+        with pytest.raises(type(error)) as raised:
+            emitted.extend(handler.launch_step(context))
+
+    assert raised.value is error
+    assert len(emitted) == 3
+    events.engine_event.assert_called_once()
+    assert (
+        events.engine_event.call_args.kwargs["message"]
+        == "Azure Batch launch details."
+    )
+    events.step_failure_event.assert_called_once()
+    assert emitted[-1] is events.step_failure_event.return_value
+    assert (
+        events.step_failure_event.call_args.args[0]
+        is context.get_step_context.return_value
+    )
+    failure = events.step_failure_event.call_args.kwargs
+    assert "some_step" in failure["message"]
+    assert "task-id" in failure["message"]
+    assert "job-id" in failure["message"]
+    details = failure["step_failure_data"]
+    assert "submission failed" in details.error.message
+    assert details.error.stack
+    assert details.error_source.value == "FRAMEWORK_ERROR"
+    assert (
+        details.user_failure_data.label == "Azure Batch task submission failed"
+    )
+    metadata = details.user_failure_data.metadata
+    assert metadata["operation"].value == "create_task"
+    assert metadata["status_code"].value == http_status
+    assert metadata["error_code"].value == error_code
+    assert metadata["Azure Batch Task ID"].value == "task-id"
+    assert metadata["Azure Batch Job ID"].value == "job-id"
+    assert metadata["Azure Batch Pool ID"].value == "pool-id"
+    handler._batch_client.terminate_task.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "status_code,error_code,ignored",
+    [
+        (404, "TaskNotFound", True),
+        (404, "JobNotFound", False),
+        (404, None, False),
+        (403, "AuthorizationFailure", False),
+        (500, "InternalError", False),
+        (500, "TaskNotFound", False),
+        (None, None, False),
+    ],
+)
+def test_azure_batch_termination_only_ignores_task_not_found(
+    status_code, error_code, ignored
+):
+    handler = AzureBatchStepHandler.__new__(AzureBatchStepHandler)
+    handler._batch_client = Mock()
+    handler._get_job_id = Mock(return_value="job-id")
+    handler._get_task_id = Mock(return_value="task-id")
+    context = Mock()
+    context.execute_step_args.step_keys_to_execute = ["some_step"]
+
+    if status_code is None:
+        error = RuntimeError("termination failed")
+    else:
+        response = Mock(status_code=status_code, reason="termination failed")
+        response.text.return_value = json.dumps(
+            {
+                "code": error_code,
+                "message": {"lang": "en-US", "value": "termination failed"},
+            }
+        )
+        error_type = (
+            ResourceNotFoundError if status_code == 404 else HttpResponseError
+        )
+        error = error_type(response=response)
+    handler._batch_client.terminate_task.side_effect = error
+
+    with patch("cfa_dagster.azure_batch.executor.DagsterEvent") as events:
+        if ignored:
+            emitted = list(handler.terminate_step(context))
+            assert len(emitted) == 2
+            result = events.engine_event.call_args.kwargs
+            assert "nothing to terminate" in result["message"]
+            metadata = result["event_specific_data"].metadata
+            assert metadata["status_code"].value == 404
+            assert metadata["error_code"].value == "TaskNotFound"
+        else:
+            with pytest.raises(type(error)) as raised:
+                list(handler.terminate_step(context))
+            assert raised.value is error
+            assert (
+                "Could NOT gracefully terminate"
+                in events.engine_event.call_args.kwargs["message"]
+            )
+    handler._batch_client.terminate_task.assert_called_once()
 
 
 def test_create_executor_invalid_class():
