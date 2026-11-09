@@ -11,11 +11,10 @@ A Dagster [asset](https://docs.dagster.io/dagster-basics-tutorial/assets) is a p
 Once an asset is created, Dagster does not automatically run the code for the asset, it must be [materialized](https://docs.dagster.io/guides/build/assets/configuring-assets) first. When an asset is materialized, Dagster runs the asset’s function and creates the asset. When a materialization begins, it kicks off a run.
 
 ```python
-
 @dg.asset()
 def meaning_of_life():
-  the_meaning = calculate_meaning_of_life()
-  return the_meaning  # 42
+    the_meaning = calculate_meaning_of_life()
+    return the_meaning  # 42
 ```
 
 ## Resources
@@ -100,11 +99,12 @@ Use an `op` over an asset for tasks that don't produce tracked artifacts e.g.:
 ```python
 @dg.op
 def build_image():
-  subprocess.run(["docker", "build", "-t", "my_image", "."], check=True)
+    subprocess.run(["docker", "build", "-t", "my_image", "."], check=True)
+
 
 @dg.job()
 def build_image_job():
-  build_image()
+    build_image()
 ```
 
 ## Sensors
@@ -150,12 +150,12 @@ daily_partitions_def = dg.DailyPartitionsDefinition(
     timezone=tz,
 )
 
+
 @dg.asset(partitions_def=daily_partitions_def)
 def daily_reports(context: dg.AssetExecutionContext):
-  # daily partitions are represented as YYYY-mm-dd
-  report_date = context.partition_key
-  context.log.info(f"Generating a report for date: {report_date}")
-
+    # daily partitions are represented as YYYY-mm-dd
+    report_date = context.partition_key
+    context.log.info(f"Generating a report for date: {report_date}")
 ```
 
 ## Dynamic Graph Assets
@@ -163,9 +163,10 @@ def daily_reports(context: dg.AssetExecutionContext):
 [Dynamic graph assets](../api.md#cfa_dagster.dynamic_graph.asset.dynamic_graph_asset) combine two existing Dagster concepts, [graph assets](https://docs.dagster.io/guides/build/assets/graph-backed-assets#defining-graph-backed-assets) and [dynamic outputs](https://docs.dagster.io/guides/build/ops/dynamic-graphs#a-dynamic-job), into one decorator to provide easy, runtime-configurable parallelism. Unlike normal Dagster partitions, dynamic graph assets allows you to parallelize logic against more than two dimensions.
 
 ```python
-
 class ParallelAssetConfig(dg.ConfigurableResource):
-    ingredient: GraphDimension[str] = GraphDimension(["sugar", "milk", "flour"])
+    ingredient: GraphDimension[str] = GraphDimension(
+        ["sugar", "milk", "flour"]
+    )
 
 
 @dynamic_graph_asset(
@@ -177,6 +178,7 @@ def parallel_asset(
 ):
     ingredient = parallel_asset_config.ingredient.current_value
     context.log.info(f"Running for ingredient: {ingredient}")
+
 
 defs = dg.Definitions(
     **collected_defs,

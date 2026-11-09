@@ -950,15 +950,16 @@ def dynamic_graph_asset(
 
                 # Map fanout while passing shared config to every isolated compute worker
                 res = dga_internal_fanout.map(
-                    lambda nothing,
-                    _shared=dga_internal_shared_config: compute(
-                        _=nothing,
-                        **(
-                            {"dga_internal_shared_config": _shared}
-                            if _shared is not None
-                            else {}
-                        ),
-                        **ins_kwargs,
+                    lambda nothing, _shared=dga_internal_shared_config: (
+                        compute(
+                            _=nothing,
+                            **(
+                                {"dga_internal_shared_config": _shared}
+                                if _shared is not None
+                                else {}
+                            ),
+                            **ins_kwargs,
+                        )
                     )
                 )
                 return output_op(
