@@ -428,6 +428,64 @@ def test_azure_container_instance_step_handler_wraps_command_and_env():
     assert env["EXISTING"] == "value"
 
 
+@pytest.mark.parametrize("include_password", [False, True])
+def test_azure_batch_launch_redacts_password_in_metadata_only(
+    include_password,
+):
+    env_vars = ["VISIBLE=value"]
+    if include_password:
+        env_vars.append("CFA_DG_PG_PASSWORD=test-password")
+    handler = AzureBatchStepHandler.__new__(AzureBatchStepHandler)
+    handler._batch_client = Mock()
+    handler._batch_client.create_task.return_value = 201
+    handler._pool_id = "pool-id"
+    handler._subscription_id = "subscription-id"
+    handler._profiling = Mock(enabled=False)
+    handler._get_docker_container_context = Mock(
+        return_value=DockerContainerContext(env_vars=env_vars)
+    )
+    handler._get_image = Mock(return_value="test-image")
+    handler._get_job_id = Mock(return_value="job-id")
+    handler._get_task_id = Mock(return_value="task-id")
+    handler._get_or_create_job = Mock()
+    context = Mock()
+    context.execute_step_args.step_keys_to_execute = ["some_step"]
+    context.execute_step_args.get_command_args.return_value = [
+        "dagster",
+        "api",
+        "execute_step",
+    ]
+    context.execute_step_args.get_command_env.return_value = []
+    context.dagster_run.job_name = "test-job"
+    context.dagster_run.run_id = "run-id"
+
+    with (
+        patch(
+            "cfa_dagster.azure_batch.executor."
+            "get_profile_asset_observation_env",
+            return_value={},
+        ),
+        patch("cfa_dagster.azure_batch.executor.DagsterEvent") as events,
+    ):
+        list(handler.launch_step(context))
+
+    launch = events.engine_event.call_args_list[0].kwargs
+    metadata = launch["event_specific_data"].metadata
+    logged_env = metadata["env_vars"].value
+    task = handler._batch_client.create_task.call_args.kwargs["task"]
+    actual_env = {
+        setting["name"]: setting["value"]
+        for setting in task.environment_settings
+    }
+    expected_logged_env = dict(actual_env)
+    if include_password:
+        assert actual_env["CFA_DG_PG_PASSWORD"] == "test-password"
+        expected_logged_env["CFA_DG_PG_PASSWORD"] = "[REDACTED]"
+    assert logged_env == expected_logged_env
+    assert logged_env["VISIBLE"] == "value"
+    assert "test-password" not in repr(metadata)
+
+
 @pytest.mark.parametrize(
     "status_code,error_code,ignored",
     [

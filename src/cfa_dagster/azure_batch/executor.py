@@ -523,7 +523,10 @@ class AzureBatchStepHandler(StepHandler):
         launch_metadata = {
             "length_of_command": len(command),
             "command": command,
-            "env_vars": env_vars,
+            "env_vars": {
+                name: "[REDACTED]" if name == "CFA_DG_PG_PASSWORD" else value
+                for name, value in env_vars.items()
+            },
         }
 
         # Event to log our command information, etc.
