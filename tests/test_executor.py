@@ -487,6 +487,84 @@ def test_azure_batch_launch_redacts_password_in_metadata_only(
 
 
 @pytest.mark.parametrize(
+    "http_status,error_code",
+    [
+        (400, "InvalidPropertyValue"),
+        (403, "AuthorizationFailure"),
+        (500, None),
+        (None, None),
+    ],
+)
+def test_azure_batch_launch_logs_error_on_step_before_reraising(
+    http_status, error_code
+):
+    handler = AzureBatchStepHandler.__new__(AzureBatchStepHandler)
+    handler._batch_client = Mock()
+    handler._pool_id = "pool-id"
+    handler._subscription_id = "subscription-id"
+    handler._profiling = Mock(enabled=False)
+    handler._get_docker_container_context = Mock(
+        return_value=DockerContainerContext()
+    )
+    handler._get_image = Mock(return_value="test-image")
+    handler._get_job_id = Mock(return_value="job-id")
+    handler._get_task_id = Mock(return_value="task-id")
+    handler._get_or_create_job = Mock()
+    context = Mock()
+    context.execute_step_args.step_keys_to_execute = ["some_step"]
+    context.execute_step_args.get_command_args.return_value = [
+        "dagster",
+        "api",
+        "execute_step",
+    ]
+    context.execute_step_args.get_command_env.return_value = []
+    context.dagster_run.job_name = "test-job"
+    context.dagster_run.run_id = "run-id"
+    if http_status is None:
+        error = RuntimeError("submission failed")
+    else:
+        response = Mock(status_code=http_status, reason="submission failed")
+        response.text.return_value = json.dumps(
+            {"code": error_code, "message": "submission failed"}
+        )
+        error = HttpResponseError(response=response)
+    handler._batch_client.create_task.side_effect = error
+
+    with (
+        patch(
+            "cfa_dagster.azure_batch.executor."
+            "get_profile_asset_observation_env",
+            return_value={},
+        ),
+        patch("cfa_dagster.azure_batch.executor.DagsterEvent") as events,
+    ):
+        emitted = []
+        with pytest.raises(type(error)) as raised:
+            emitted.extend(handler.launch_step(context))
+
+    assert raised.value is error
+    assert len(emitted) == 3
+    assert events.engine_event.call_count == 2
+    assert (
+        events.engine_event.call_args.args[0]
+        is context.get_step_context.return_value
+    )
+    failure = events.engine_event.call_args.kwargs
+    assert "some_step" in failure["message"]
+    details = failure["event_specific_data"]
+    assert "submission failed" in details.error.message
+    assert details.error.stack
+    assert details.metadata["operation"].value == "create_task"
+    assert details.metadata["status_code"].value == http_status
+    assert details.metadata["error_code"].value == error_code
+    assert details.metadata["Azure Batch Task ID"].value == "task-id"
+    assert details.metadata["Azure Batch Job ID"].value == "job-id"
+    assert details.metadata["Azure Batch Pool ID"].value == "pool-id"
+    events.step_failure_event.assert_not_called()
+    handler._batch_client.terminate_task.assert_not_called()
+
+
+@pytest.mark.parametrize(
     "status_code,error_code,ignored",
     [
         (404, "TaskNotFound", True),

@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import shlex
+import sys
 import uuid
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Optional, cast
@@ -27,6 +28,7 @@ from dagster._core.executor.step_delegating.step_handler.base import (
     StepHandlerContext,
 )
 from dagster._core.utils import parse_env_var
+from dagster._utils.error import serializable_error_info_from_exc_info
 from dagster._utils.merger import merge_dicts
 from dagster_docker import docker_executor as base_docker_executor
 from dagster_docker.container_context import DockerContainerContext
@@ -550,12 +552,27 @@ class AzureBatchStepHandler(StepHandler):
                 ),
             )
 
-        except Exception:
+        except Exception as err:
             yield DagsterEvent.engine_event(
                 step_handler_context.get_step_context(step_key),
                 message=(
                     f"Failed to submit Azure Batch task {task_id} "
                     f"in job {job_id} for step {step_key}."
+                ),
+                event_specific_data=EngineEventData(
+                    error=serializable_error_info_from_exc_info(
+                        sys.exc_info()
+                    ),
+                    metadata={
+                        "operation": "create_task",
+                        "status_code": getattr(err, "status_code", None),
+                        "error_code": getattr(
+                            getattr(err, "error", None), "code", None
+                        ),
+                        "Azure Batch Task ID": task_id,
+                        "Azure Batch Job ID": job_id,
+                        "Azure Batch Pool ID": self._pool_id,
+                    },
                 ),
             )
             raise
