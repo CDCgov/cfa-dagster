@@ -454,10 +454,12 @@ class AzureBatchStepHandler(StepHandler):
             }
         )
 
-        # Skipping the serialized namedtuple prevents commandLine space errors
-        raw_command_args = execute_step_args.get_command_args(
-            skip_serialized_namedtuple=True
-        )
+        # Report a terminal step failure if this worker starts after run failure.
+        raw_command_args = [
+            "python",
+            "-m",
+            "cfa_dagster.azure_batch.execute_step",
+        ]
 
         raw_command = wrap_command_for_profiling(
             raw_command_args,

@@ -480,6 +480,11 @@ def _execute_step_and_get_success(command: list[str]) -> bool | None:
     from dagster._utils.interrupts import capture_interrupts
 
     execute_step_args = deserialize_value(serialized_args, ExecuteStepArgs)
+    step_events = _execute_step_command_body
+    if "cfa_dagster.azure_batch.execute_step" in command:
+        from cfa_dagster.azure_batch.execute_step import execute_step_events
+
+        step_events = execute_step_events
     step_key = (
         execute_step_args.step_keys_to_execute[0]
         if execute_step_args.step_keys_to_execute
@@ -497,7 +502,7 @@ def _execute_step_and_get_success(command: list[str]) -> bool | None:
             instance.get_run_by_id(execute_step_args.run_id),
             f"Run with id '{execute_step_args.run_id}' not found for step execution",
         )
-        for event in _execute_step_command_body(
+        for event in step_events(
             execute_step_args,
             instance,
             dagster_run,
