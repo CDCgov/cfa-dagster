@@ -438,8 +438,21 @@ class AzureBatchStepHandler(StepHandler):
             step_handler_context.get_step_context(step_key)
         )
         env_vars.update(asset_observation_env)
+
+        # Update env_vars with the command args
+        # instead of sending them as a serialized namedtuple in the command directly
+        env_vars.update(
+            {
+                setting["name"]: setting["value"]
+                for setting in execute_step_args.get_command_env()
+            }
+        )
+        # Skipping the serialized namedtuple prevents commandLine space errors
+        raw_command_args = execute_step_args.get_command_args(
+            skip_serialized_namedtuple=True
+        )
         command = wrap_command_for_profiling(
-            execute_step_args.get_command_args(),
+            raw_command_args,
             self._profiling,
             track_step_status=bool(asset_observation_env),
         )

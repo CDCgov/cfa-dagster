@@ -45,6 +45,10 @@ concurrency:
   runs:
     max_concurrent_runs: 100
     tag_concurrency_limits:
+      - key: cfa_dagster/synchronous
+        value:
+          applyLimitPerUniqueValue: true
+        limit: 1
       - key: concurrency
         value: single
         limit: 1
