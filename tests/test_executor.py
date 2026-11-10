@@ -473,6 +473,7 @@ def test_azure_batch_launch_redacts_password_in_metadata_only(
     metadata = launch["event_specific_data"].metadata
     logged_env = metadata["env_vars"].value
     task = handler._batch_client.create_task.call_args.kwargs["task"]
+    assert "cfa_dagster.azure_batch.execute_step" in task.command_line
     actual_env = {
         setting["name"]: setting["value"]
         for setting in task.environment_settings
