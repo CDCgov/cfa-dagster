@@ -40,7 +40,9 @@ if not is_production():
                 ["az", "login", "--identity"],
                 check=True,
             )
-            subprocess.run(["az", "acr", "login", "-n", IMAGE_REGISTRY], check=True)
+            subprocess.run(
+                ["az", "acr", "login", "-n", IMAGE_REGISTRY], check=True
+            )
             build_command.append("--push")
         context.log.info(f"Running {' '.join(build_command)}")
         subprocess.run(build_command, check=True)
@@ -57,7 +59,8 @@ if not is_production():
         if should_deploy_to_prod:
             context.log.info(f"Deploying {image} to the dagster prod server.")
             subprocess.run(
-                ["uv", "run", update_script_url, "--registry_image", image], check=True
+                ["uv", "run", update_script_url, "--registry_image", image],
+                check=True,
             )
 
     @dg.job(
