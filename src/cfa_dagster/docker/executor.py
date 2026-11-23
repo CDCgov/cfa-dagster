@@ -1,5 +1,6 @@
 import os
 
+import docker.errors
 import dagster._check as check
 from dagster import executor
 from dagster._annotations import beta
@@ -39,6 +40,51 @@ class ProfiledDockerStepHandler(DockerStepHandler):
     ):
         super().__init__(image, container_context)
         self._profiling = profiling
+
+    def launch_step(self, step_handler_context):
+        """Launch a step while preserving useful Docker registry errors.
+
+        The upstream handler retries container creation after attempting to
+        pull a missing image.  In particular, an ACR 401 can otherwise be
+        obscured by the subsequent image/container-not-found errors.
+        """
+        try:
+            yield from super().launch_step(step_handler_context)
+        except docker.errors.APIError as exc:
+            status_code = getattr(exc, "status_code", None)
+            explanation = str(getattr(exc, "explanation", "") or exc)
+            explanation_lower = explanation.lower()
+
+            try:
+                image = self._get_image(step_handler_context)
+            except Exception:
+                image = self._image or "the configured Docker image"
+
+            if status_code in (401, 403) or any(
+                marker in explanation_lower
+                for marker in ("unauthorized", "authentication required", "forbidden")
+            ):
+                raise RuntimeError(
+                    f"Unable to pull Docker image {image!r}: the registry "
+                    "rejected authentication or authorization. Authenticate "
+                    "to the registry and ensure the identity has permission "
+                    "to pull this image."
+                ) from exc
+
+            if status_code == 404 or "not found" in explanation_lower:
+                raise RuntimeError(
+                    f"Unable to pull Docker image {image!r}: the image or tag "
+                    "was not found in the configured registry."
+                ) from exc
+
+            raise
+
+    def terminate_step(self, step_handler_context):
+        """Do not mask a launch failure when no container was created."""
+        try:
+            yield from super().terminate_step(step_handler_context)
+        except docker.errors.NotFound:
+            return
 
     def _create_step_container(
         self,
