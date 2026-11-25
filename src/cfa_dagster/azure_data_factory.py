@@ -275,7 +275,14 @@ def run_adf_pipeline(
             run_id = response.get("runId")
             if not isinstance(run_id, str) or not run_id:
                 raise ValueError("ADF response has no run ID")
-        except (HTTPError, URLError, OSError, ValueError, AzureError) as error:
+        except (
+            HTTPError,
+            URLError,
+            OSError,
+            TypeError,
+            ValueError,
+            AzureError,
+        ) as error:
             details, error_metadata = _error_details(
                 error, secrets["client_secret"]
             )
