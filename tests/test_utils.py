@@ -435,9 +435,9 @@ def test_run_cli_check_error_propagates():
     with (
         patch("cfa_dagster.cli.set_env_vars"),
         patch("cfa_dagster.cli.configure_dev_db"),
+        pytest.raises(CheckError, match="check failed"),
     ):
-        with pytest.raises(CheckError, match="check failed"):
-            _run_cli(mock_cli, "TEST", argv=["prog", "subcommand"])
+        _run_cli(mock_cli, "TEST", argv=["prog", "subcommand"])
 
 
 def test_run_cli_usage_error_propagates():
@@ -445,9 +445,9 @@ def test_run_cli_usage_error_propagates():
     with (
         patch("cfa_dagster.cli.set_env_vars"),
         patch("cfa_dagster.cli.configure_dev_db"),
+        pytest.raises(UsageError, match="bad usage"),
     ):
-        with pytest.raises(UsageError, match="bad usage"):
-            _run_cli(mock_cli, "TEST", argv=["prog", "subcommand"])
+        _run_cli(mock_cli, "TEST", argv=["prog", "subcommand"])
 
 
 def test_run_cli_no_args_is_help():

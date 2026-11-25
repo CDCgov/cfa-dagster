@@ -1,7 +1,7 @@
 import logging
 import os
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING, cast
 
 import dagster._check as check
 from azure.identity import DefaultAzureCredential
@@ -150,7 +150,7 @@ def azure_container_app_job_executor(
 class AzureContainerAppJobStepHandler(StepHandler):
     def __init__(
         self,
-        image: Optional[str],
+        image: str | None,
         container_context: DockerContainerContext,
         container_app_job_name: str,
         cpu: float,
@@ -199,7 +199,7 @@ class AzureContainerAppJobStepHandler(StepHandler):
             ).repository_origin.container_image
 
         if not image:
-            raise Exception(
+            raise RuntimeError(
                 "No docker image specified by the executor, run config, or code location"
             )
 

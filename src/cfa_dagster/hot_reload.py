@@ -2,7 +2,7 @@ import logging
 import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from dagster_graphql import DagsterGraphQLClient
 
@@ -31,8 +31,8 @@ def _collect_py_files(directory: Path) -> list[Path]:
 
 
 def resolve_target_paths(
-    entry_point: Optional[str | Path] = None,
-    pyproject_path: Optional[str | Path] = None,
+    entry_point: str | Path | None = None,
+    pyproject_path: str | Path | None = None,
 ) -> list[Path]:
     targets: set[Path] = set()
 
@@ -62,7 +62,7 @@ def resolve_target_paths(
     return sorted(targets)
 
 
-def _extract_python_file(args: list[str]) -> Optional[str]:
+def _extract_python_file(args: list[str]) -> str | None:
     for i, arg in enumerate(args):
         if arg in ("-f", "--python-file") and i + 1 < len(args):
             return args[i + 1]
@@ -79,8 +79,8 @@ def reload_via_graphql(host: str, port: int) -> bool:
             return True
         log.warning("Workspace reload returned: %s", result)
         return False
-    except Exception as e:
-        log.error("Failed to reload via GraphQL: %s", e)
+    except Exception:
+        log.exception("Failed to reload via GraphQL")
         return False
 
 
@@ -125,9 +125,9 @@ class HotReloader:
         self._host = host
         self._port = port
         self._debounce_seconds = debounce_seconds
-        self._observer: Optional[Observer] = None  # type: ignore[reportInvalidTypeForm]
+        self._observer: Observer | None = None  # type: ignore[reportInvalidTypeForm]
         self._server_ready = False
-        self._debounce_timer: Optional[threading.Timer] = None
+        self._debounce_timer: threading.Timer | None = None
         self._debounce_lock = threading.Lock()
         self._reload_lock = threading.Lock()
         self._pending_changed_paths: set[str] = set()
@@ -287,8 +287,8 @@ def start_hot_reloader_for_dev(
     defs_file: str,
     host: str,
     port: int,
-    pyproject_path: Optional[str | Path] = None,
-) -> Optional[HotReloader]:
+    pyproject_path: str | Path | None = None,
+) -> HotReloader | None:
     ep = _extract_python_file(args) or defs_file
     paths = resolve_target_paths(entry_point=ep, pyproject_path=pyproject_path)
     reloader = HotReloader(paths=paths, host=host, port=port)

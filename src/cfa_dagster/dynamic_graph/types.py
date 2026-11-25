@@ -1,10 +1,10 @@
 import inspect
 from dataclasses import dataclass
 from enum import Enum
-from typing import Generic, Optional, TypeVar, get_origin
+from typing import Generic, TypeVar, get_origin
 
 import dagster as dg
-from pydantic import PrivateAttr
+from pydantic import Field, PrivateAttr
 
 
 @dataclass
@@ -20,12 +20,12 @@ T = TypeVar("T", default=str)
 class GraphDimension(dg.Config, Generic[T]):
     values: list[T]
     inherit_values_from_upstream: bool = True
-    _current_value: Optional[T] = PrivateAttr(default=None)
+    _current_value: T | None = PrivateAttr(default=None)
 
     def __init__(
         self,
         values: list[T],
-        current_value: Optional[T] = None,
+        current_value: T | None = None,
         inherit_values_from_upstream: bool = True,
     ):
         super().__init__(
@@ -38,12 +38,12 @@ class GraphDimension(dg.Config, Generic[T]):
         self._current_value = value
 
     @property
-    def current_value(self) -> Optional[T]:
+    def current_value(self) -> T | None:
         return self._current_value
 
 
 class GraphDimensionExclusion(dg.Config, Generic[T]):
-    values: list[T] = []
+    values: list[T] = Field(default_factory=list)
 
     def __init__(self, values: list[str]):
         super().__init__(values=values)
@@ -85,7 +85,7 @@ def _is_exclusion_annotation(annotation) -> bool:
     )
 
 
-def _get_graph_dimension_value_type(annotation) -> Optional[type]:
+def _get_graph_dimension_value_type(annotation) -> type | None:
     metadata = getattr(
         annotation,
         "__pydantic_generic_metadata__",
@@ -98,7 +98,7 @@ def _get_graph_dimension_value_type(annotation) -> Optional[type]:
     return args[0] if args else None
 
 
-def _get_string_enum_values(value_type) -> Optional[list[str]]:
+def _get_string_enum_values(value_type) -> list[str] | None:
     if (
         inspect.isclass(value_type)
         and issubclass(value_type, Enum)

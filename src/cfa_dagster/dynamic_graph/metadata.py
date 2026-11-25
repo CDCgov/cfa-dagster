@@ -3,6 +3,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
 import dagster as dg
+from dagster._check import CheckError
 from dagster._core.definitions.partitions.utils.multi import (
     MULTIPARTITION_KEY_DELIMITER,
 )
@@ -85,18 +86,18 @@ def _decode_mapping_key(mapping_key: str) -> list[str]:
     ]
 
 
-def _get_mapping_key(context: dg.InputContext) -> Optional[str]:
+def _get_mapping_key(context: dg.InputContext) -> str | None:
     try:
         return context.step_context.step.get_mapping_key()
-    except Exception:
+    except (AttributeError, CheckError, dg.DagsterInvariantViolationError):
         return None
 
 
-def _get_asset_key_path(context: dg.InputContext) -> Optional[list[str]]:
+def _get_asset_key_path(context: dg.InputContext) -> list[str] | None:
     try:
         if context.has_asset_key:
             return list(context.asset_key.path)
-    except Exception:
+    except (AttributeError, CheckError, dg.DagsterInvariantViolationError):
         return None
     return None
 
@@ -105,17 +106,17 @@ def _get_asset_partition_keys(context: dg.InputContext) -> list[Any]:
     try:
         if context.has_asset_partitions:
             return list(context.asset_partition_keys)
-    except Exception:
+    except (AttributeError, CheckError, dg.DagsterInvariantViolationError):
         return []
     return []
 
 
 def _get_upstream_dynamic_graph_output_mode(
     context: dg.InputContext,
-) -> Optional[str]:
+) -> str | None:
     try:
         upstream_output = context.upstream_output
-    except Exception:
+    except (AttributeError, CheckError, dg.DagsterInvariantViolationError):
         return None
 
     if upstream_output is None:
@@ -125,7 +126,7 @@ def _get_upstream_dynamic_graph_output_mode(
         raw = upstream_output.definition_metadata.get(
             DYNAMIC_GRAPH_ASSET_METADATA_KEY
         )
-    except Exception:
+    except (AttributeError, CheckError, dg.DagsterInvariantViolationError):
         return None
 
     if isinstance(raw, dg.MetadataValue):
@@ -196,7 +197,7 @@ def patch_context_with_dynamic_graph_metadata(
 
 def get_inherited_graph_dimension_input_metadata(
     context: dg.InputContext,
-) -> Optional[DynamicGraphIOManagerMetadata]:
+) -> DynamicGraphIOManagerMetadata | None:
     """
     Build dynamic graph IO metadata for a @dynamic_graph_asset input that should inherit upstream graph dimensions.
 

@@ -5,7 +5,7 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 import psycopg2
 from azure.identity import DefaultAzureCredential
@@ -99,7 +99,7 @@ def set_env_vars():
         os.environ["DAGSTER_HOME"] = dagster_home
 
 
-def find_pyproject_toml(start_dir: Path) -> Optional[Path]:
+def find_pyproject_toml(start_dir: Path) -> Path | None:
     for parent in [start_dir, *start_dir.parents]:
         candidate = parent / "pyproject.toml"
         if candidate.is_file():
@@ -108,7 +108,7 @@ def find_pyproject_toml(start_dir: Path) -> Optional[Path]:
 
 
 def get_dg_project_config(
-    start_dir: Optional[Path] = None,
+    start_dir: Path | None = None,
 ) -> tuple[Path, dict] | None:
     pyproj = find_pyproject_toml(start_dir or Path.cwd())
     if not pyproj:
@@ -161,7 +161,7 @@ def resolve_project_module_path(
     if not spec:
         return None
     if spec.submodule_search_locations:
-        return Path(list(spec.submodule_search_locations)[0]).resolve()
+        return Path(next(iter(spec.submodule_search_locations))).resolve()
     if spec.origin:
         origin = Path(spec.origin)
         if origin.is_file():
@@ -170,8 +170,8 @@ def resolve_project_module_path(
 
 
 def get_defs_target(
-    start_dir: Optional[Path] = None,
-) -> Optional[str]:
+    start_dir: Path | None = None,
+) -> str | None:
     """Resolve a [tool.dg] definitions module to a relative Python file."""
     config = get_dg_project_config(start_dir)
     if not config:
@@ -513,7 +513,7 @@ def run_dagster():
 
 
 def run_dg(
-    argv: Optional[list[str]] | None = None,
+    argv: list[str] | None = None,
 ):
     """Wrapper for the `dg` cli."""
     from dagster_dg_cli.cli import ENV_PREFIX, cli

@@ -1,7 +1,8 @@
 import json
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Optional
 
 from dagster import (
     DagsterInvalidConfigError,
@@ -34,7 +35,7 @@ log = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class SelectorConfig:
     class_name: str
-    config: Dict[str, Any] = field(default_factory=dict)
+    config: dict[str, Any] = field(default_factory=dict)
 
     def __bool__(self) -> bool:
         """
@@ -44,7 +45,7 @@ class SelectorConfig:
 
     @classmethod
     def from_run_config(
-        cls, value: Optional[Mapping[str, Any]]
+        cls, value: Mapping[str, Any] | None
     ) -> Optional["SelectorConfig"]:
         if not value:
             return None
@@ -55,12 +56,12 @@ class SelectorConfig:
         class_name, config = next(iter(value.items()))
         return cls(class_name=class_name, config=dict(config or {}))
 
-    def to_run_config(self) -> Dict[str, Dict[str, Any]]:
+    def to_run_config(self) -> dict[str, dict[str, Any]]:
         return {self.class_name: self.config}
 
     @classmethod
     def from_json(
-        cls, value: Optional[Mapping[str, Any]]
+        cls, value: Mapping[str, Any] | None
     ) -> Optional["SelectorConfig"]:
         if not value:
             return None
@@ -69,8 +70,8 @@ class SelectorConfig:
 
 @dataclass(frozen=True)
 class ExecutionConfig:
-    launcher: Optional[SelectorConfig] = None
-    executor: Optional[SelectorConfig] = None
+    launcher: SelectorConfig | None = None
+    executor: SelectorConfig | None = None
 
     TAG_KEY = "cfa_dagster/execution"
 
@@ -78,7 +79,7 @@ class ExecutionConfig:
         self.validate(True)
 
     def validate(
-        self, use_full_schema: Optional[bool] = False
+        self, use_full_schema: bool | None = False
     ) -> "ExecutionConfig":
         """
         Validates the execution config against an environment-aware schema
@@ -196,7 +197,7 @@ class ExecutionConfig:
     @classmethod
     def from_metadata(
         cls,
-        metadata: Optional[dict[str, MetadataValue]],
+        metadata: dict[str, MetadataValue] | None,
         should_skip_executor: bool = False,
     ) -> "ExecutionConfig":
         if not metadata:
@@ -215,7 +216,7 @@ class ExecutionConfig:
             else SelectorConfig.from_json(value.get("executor")),
         )
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         payload = {
             # "v": self.TAG_VERSION,
             "launcher": self.launcher.to_run_config()
@@ -232,15 +233,15 @@ class ExecutionConfig:
     # -------------------------
     # To run tags
     # -------------------------
-    def to_run_tags(self) -> Dict[str, str]:
+    def to_run_tags(self) -> dict[str, str]:
         payload = self.to_dict()
         return {self.TAG_KEY: json.dumps(payload, separators=(",", ":"))}
 
-    def to_metadata(self) -> Dict[str, str]:
+    def to_metadata(self) -> dict[str, str]:
         payload = self.to_dict()
         return {self.TAG_KEY: MetadataValue.json(payload)}
 
-    def to_run_config(self) -> Dict[str, str]:
+    def to_run_config(self) -> dict[str, str]:
         return {"config": self.to_dict()}
 
 
@@ -250,7 +251,7 @@ class Executor:
     @staticmethod
     def _execution_config(
         class_name: str,
-        config: Optional[Mapping[str, Any]] = None,
+        config: Mapping[str, Any] | None = None,
     ) -> ExecutionConfig:
         return ExecutionConfig(
             executor=SelectorConfig(
@@ -261,19 +262,19 @@ class Executor:
 
     @classmethod
     def docker(
-        cls, config: Optional[Mapping[str, Any]] = None
+        cls, config: Mapping[str, Any] | None = None
     ) -> ExecutionConfig:
         return cls._execution_config(docker_executor.__name__, config)
 
     @classmethod
     def azure_batch(
-        cls, config: Optional[Mapping[str, Any]] = None
+        cls, config: Mapping[str, Any] | None = None
     ) -> ExecutionConfig:
         return cls._execution_config(azure_batch_executor.__name__, config)
 
     @classmethod
     def azure_container_app_job(
-        cls, config: Optional[Mapping[str, Any]] = None
+        cls, config: Mapping[str, Any] | None = None
     ) -> ExecutionConfig:
         return cls._execution_config(
             azure_container_app_job_executor.__name__, config
@@ -281,7 +282,7 @@ class Executor:
 
     @classmethod
     def azure_container_instance(
-        cls, config: Optional[Mapping[str, Any]] = None
+        cls, config: Mapping[str, Any] | None = None
     ) -> ExecutionConfig:
         return cls._execution_config(
             azure_container_instance_executor.__name__, config
@@ -289,13 +290,13 @@ class Executor:
 
     @classmethod
     def multiprocess(
-        cls, config: Optional[Mapping[str, Any]] = None
+        cls, config: Mapping[str, Any] | None = None
     ) -> ExecutionConfig:
         return cls._execution_config(multiprocess_executor.__name__, config)
 
     @classmethod
     def in_process(
-        cls, config: Optional[Mapping[str, Any]] = None
+        cls, config: Mapping[str, Any] | None = None
     ) -> ExecutionConfig:
         return cls._execution_config(in_process_executor.__name__, config)
 
@@ -349,9 +350,9 @@ def with_alternate_default(fields: dict, alternates: dict[str, dict]) -> dict:
 
 
 def get_dynamic_executor_config_schema(
-    default_config: Optional[ExecutionConfig] = None,
-    alternate_configs: Optional[list[ExecutionConfig]] = None,
-    use_full_schema: Optional[bool] = False,
+    default_config: ExecutionConfig | None = None,
+    alternate_configs: list[ExecutionConfig] | None = None,
+    use_full_schema: bool | None = False,
 ) -> dict:
     """
     Returns a config schema for the dynamic executor with parameters for

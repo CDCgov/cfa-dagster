@@ -143,8 +143,8 @@ class DynamicExecutor(Executor):
 
 
 def dynamic_executor(
-    default_config: Optional[ExecutionConfig] = None,
-    alternate_configs: Optional[list[ExecutionConfig]] = None,
+    default_config: ExecutionConfig | None = None,
+    alternate_configs: list[ExecutionConfig] | None = None,
 ):
     default_config = default_config or ExecutionConfig.default()
     default_config = default_config.validate()

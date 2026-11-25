@@ -1,7 +1,8 @@
 import logging
 import os
 import subprocess
-from typing import Iterator, Optional, cast
+from collections.abc import Iterator
+from typing import cast
 
 import dagster._check as check
 from dagster import (
@@ -99,7 +100,7 @@ class SynchronousStepHandler(StepHandler):
         result = subprocess.run(command, env=env, check=False)
 
         if result.returncode != 0:
-            raise Exception(
+            raise RuntimeError(
                 f"Synchronous step {step_key} failed with return code {result.returncode}"
             )
 
@@ -277,7 +278,7 @@ class RoutingStepHandler(StepHandler):
         # 1. Op-level executor tag
         step_tags = self._get_step_tags(step_handler_context)
         log.debug(f"step_tags: '{step_tags}'")
-        execution_config: Optional[ExecutionConfig] = None
+        execution_config: ExecutionConfig | None = None
         step_tag_config = ExecutionConfig.from_run_tags(step_tags)
         if step_tag_config and step_tag_config.executor:
             execution_config = step_tag_config

@@ -1,7 +1,6 @@
 #!/usr/bin/env -S uv run --script
 import os
 from datetime import datetime, timedelta, timezone
-from typing import List
 
 import dagster as dg
 import requests
@@ -41,8 +40,8 @@ GRAPHQL_URL = "http://dagster.apps.edav.ext.cdc.gov/graphql"
 def find_stale_dagster_jobs(
     batch_client: BatchClient,
     idle_threshold: timedelta,
-) -> List[str]:
-    stale_job_ids: List[str] = []
+) -> list[str]:
+    stale_job_ids: list[str] = []
 
     jobs = batch_client.list_jobs(
         filter="startswith(id,'dagster-') and state eq 'active'",

@@ -136,7 +136,7 @@ def _request_json(
     with urlopen(request, timeout=timeout) as response:
         result = json.load(response)
     if not isinstance(result, dict):
-        raise ValueError("ADF response is not a JSON object")
+        raise TypeError("ADF response is not a JSON object")
     return result
 
 
@@ -275,7 +275,14 @@ def run_adf_pipeline(
             run_id = response.get("runId")
             if not isinstance(run_id, str) or not run_id:
                 raise ValueError("ADF response has no run ID")
-        except (HTTPError, URLError, OSError, ValueError, AzureError) as error:
+        except (
+            HTTPError,
+            URLError,
+            OSError,
+            TypeError,
+            ValueError,
+            AzureError,
+        ) as error:
             details, error_metadata = _error_details(
                 error, secrets["client_secret"]
             )
@@ -315,7 +322,7 @@ def run_adf_pipeline(
                     credential,
                     min(config.http_timeout_seconds, remaining),
                 )
-            except (URLError, OSError) as error:
+            except (URLError, TypeError, OSError) as error:
                 # Only the read-only status request is eligible for retries.
                 details, error_metadata = _error_details(
                     error, secrets["client_secret"]

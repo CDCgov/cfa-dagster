@@ -4,7 +4,7 @@ import os
 import sys
 from collections.abc import Iterator
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING, cast
 
 import dagster._check as check
 from azure.core.exceptions import HttpResponseError, ResourceNotFoundError
@@ -187,8 +187,8 @@ def azure_container_instance_executor(
 class AzureContainerInstanceStepHandler(StepHandler):
     def __init__(
         self,
-        image: Optional[str],
-        identity_name: Optional[str],
+        image: str | None,
+        identity_name: str | None,
         container_context: DockerContainerContext,
         cpu: float,
         memory: float,
@@ -267,7 +267,7 @@ class AzureContainerInstanceStepHandler(StepHandler):
 
         log.info("Resolved image: %s", image)
         if not image:
-            raise Exception(
+            raise RuntimeError(
                 "No docker image specified by the executor, run config, or code location"
             )
 

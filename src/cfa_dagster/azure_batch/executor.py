@@ -5,7 +5,7 @@ import re
 import shlex
 import uuid
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING, cast
 
 import dagster._check as check
 from azure.batch import BatchClient
@@ -121,10 +121,8 @@ def azure_batch_executor(
     working_dir = container_kwargs.get("working_dir")
     if not working_dir:
         raise ValueError(
-            (
-                "Missing property 'container_kwargs.working_dir' "
-                "is required and must match your Dockerfile WORKDIR"
-            )
+            "Missing property 'container_kwargs.working_dir' "
+            "is required and must match your Dockerfile WORKDIR"
         )
     retries = check.dict_elem(config, "retries", key_type=str)
     max_concurrent = check.opt_int_elem(config, "max_concurrent")
@@ -172,9 +170,9 @@ def azure_batch_executor(
 class AzureBatchStepHandler(StepHandler):
     def __init__(
         self,
-        image: Optional[str],
+        image: str | None,
         container_context: DockerContainerContext,
-        pool_name: Optional[str],
+        pool_name: str | None,
         profiling: ProfilingConfig,
     ):
         super().__init__()
@@ -216,7 +214,7 @@ class AzureBatchStepHandler(StepHandler):
             ).repository_origin.container_image
 
         if not image:
-            raise Exception(
+            raise RuntimeError(
                 "No docker image specified by the executor, run config, or code location"
             )
 
@@ -305,14 +303,7 @@ class AzureBatchStepHandler(StepHandler):
         log.debug(f"run_creation_hour: '{run_creation_hour}'")
         base_id = uuid.uuid5(
             uuid.NAMESPACE_DNS,
-            ":".join(
-                [
-                    dagster_user,
-                    self._pool_id,
-                    location_name,
-                    run_creation_hour,
-                ]
-            ),
+            f"{dagster_user}:{self._pool_id}:{location_name}:{run_creation_hour}",
         )
 
         return f"dagster-{base_id}"
