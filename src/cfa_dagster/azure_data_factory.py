@@ -322,7 +322,7 @@ def run_adf_pipeline(
                     credential,
                     min(config.http_timeout_seconds, remaining),
                 )
-            except (URLError, OSError) as error:
+            except (URLError, TypeError, OSError) as error:
                 # Only the read-only status request is eligible for retries.
                 details, error_metadata = _error_details(
                     error, secrets["client_secret"]
