@@ -191,9 +191,12 @@ def _asset_materialization_metadata(result, asset_key: dg.AssetKey):
 def _engine_event(instance: dg.DagsterInstance, run_id: str, message: str):
     for record in instance.all_logs(run_id):
         event = record.dagster_event
-        if event and event.event_type_value == "ENGINE_EVENT":
-            if event.message == message:
-                return event
+        if (
+            event
+            and event.event_type_value == "ENGINE_EVENT"
+            and event.message == message
+        ):
+            return event
     raise AssertionError(f"No engine event found: {message}")
 
 

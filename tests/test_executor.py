@@ -4,9 +4,11 @@ from unittest.mock import Mock, patch
 import pytest
 from dagster import (
     DagsterInvalidConfigError,
+    DagsterInvariantViolationError,
     in_process_executor,
     multiprocess_executor,
 )
+from dagster._check import CheckError
 from dagster._config import process_config
 from dagster._core.execution.context.system import PlanOrchestrationContext
 from dagster._core.execution.plan.plan import ExecutionPlan
@@ -93,7 +95,7 @@ def test_create_executor_in_process():
         executor = create_executor(init_context, execution_config)
         # If it doesn't raise an exception, the test passes
         assert executor is not None
-    except Exception:
+    except (AttributeError, CheckError, DagsterInvariantViolationError):
         # Skip this test if we can't properly mock the dependencies
         pytest.skip("Skipping test due to complex executor dependencies")
 
@@ -125,13 +127,14 @@ def test_create_executor_multiprocess():
         executor = create_executor(init_context, execution_config)
         # If it doesn't raise an exception, the test passes
         assert executor is not None
-    except Exception:
+    except (AttributeError, CheckError, DagsterInvariantViolationError):
         # Skip this test if we can't properly mock the dependencies
         pytest.skip("Skipping test due to complex executor dependencies")
 
 
-def test_create_executor_docker():
+def test_create_executor_docker(monkeypatch):
     """Test creating docker_executor"""
+    monkeypatch.setenv("DAGSTER_USER", "test-user")
     init_context = Mock(spec=InitExecutorContext)
     init_context.executor_config = {}
     # Mock the _replace method to return a proper dict for executor_config
@@ -156,7 +159,7 @@ def test_create_executor_docker():
         executor = create_executor(init_context, execution_config)
         # If it doesn't raise an exception, the test passes
         assert executor is not None
-    except Exception:
+    except (AttributeError, CheckError, DagsterInvariantViolationError):
         # Skip this test if we can't properly mock the dependencies
         pytest.skip("Skipping test due to complex executor dependencies")
 
@@ -235,8 +238,9 @@ def test_profiled_docker_step_handler_wraps_command_and_env():
     assert "stop_timeout" not in kwargs
 
 
-def test_create_executor_azure_container_app():
+def test_create_executor_azure_container_app(monkeypatch):
     """Test creating azure_container_app_job_executor"""
+    monkeypatch.setenv("DAGSTER_USER", "test-user")
     init_context = Mock(spec=InitExecutorContext)
     init_context.executor_config = {}
     # Mock the _replace method to return a proper dict for executor_config
@@ -262,7 +266,7 @@ def test_create_executor_azure_container_app():
         executor = create_executor(init_context, execution_config)
         # If it doesn't raise an exception, the test passes
         assert executor is not None
-    except Exception:
+    except (AttributeError, CheckError, DagsterInvariantViolationError):
         # Skip this test if we can't properly mock the dependencies
         pytest.skip("Skipping test due to complex executor dependencies")
 
@@ -449,16 +453,18 @@ def test_create_executor_invalid_class():
 
 def test_create_executor_docker_in_production_raises_error():
     """Test that using docker executor in production raises an error"""
-    with patch.dict(os.environ, {"CFA_DAGSTER_ENV": "prod"}, clear=True):
-        with pytest.raises(
+    with (
+        patch.dict(os.environ, {"CFA_DAGSTER_ENV": "prod"}, clear=True),
+        pytest.raises(
             DagsterInvalidConfigError, match="Invalid execution config"
-        ):
-            ExecutionConfig(
-                executor=SelectorConfig(
-                    class_name=docker_executor.__name__,
-                    config={"image": "test-image", "retries": {"enabled": {}}},
-                )
-            ).validate()
+        ),
+    ):
+        ExecutionConfig(
+            executor=SelectorConfig(
+                class_name=docker_executor.__name__,
+                config={"image": "test-image", "retries": {"enabled": {}}},
+            )
+        ).validate()
 
 
 def test_dynamic_executor_initialization():
@@ -521,7 +527,7 @@ def test_dynamic_executor_execute_with_tags():
 
         # Verify that create_executor was called with the correct config
         assert mock_create_executor.called
-        args, kwargs = mock_create_executor.call_args
+        args, _kwargs = mock_create_executor.call_args
         execution_config = args[1]
         assert execution_config.executor.class_name == "in_process_executor"
 
@@ -608,7 +614,7 @@ def test_dynamic_executor_config_schema():
             executor = dynamic_executor(init_context)
             # If it doesn't raise an exception, the test passes
             assert executor is not None
-        except Exception:
+        except (AttributeError, CheckError, DagsterInvariantViolationError):
             # Skip this test if we can't properly mock the dependencies
             pytest.skip("Skipping test due to complex executor dependencies")
 
@@ -634,6 +640,6 @@ def test_dynamic_executor_with_specific_executor():
             executor = dynamic_executor(init_context)
             # If it doesn't raise an exception, the test passes
             assert executor is not None
-        except Exception:
+        except (AttributeError, CheckError, DagsterInvariantViolationError):
             # Skip this test if we can't properly mock the dependencies
             pytest.skip("Skipping test due to complex executor dependencies")

@@ -3,7 +3,7 @@ import logging
 import os
 from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import Any, Optional, Union
+from typing import Any
 
 import yaml
 from dagster import (
@@ -37,7 +37,7 @@ EXECUTION_CONFIG_KEY = "cfa_dagster/execution"
 class DynamicRunLauncher(RunLauncher, ConfigurableClass):
     """Launches a run using a runtime-configurable launcher"""
 
-    def __init__(self, inst_data: Optional[ConfigurableClassData] = None):
+    def __init__(self, inst_data: ConfigurableClassData | None = None):
         self._inst_data = inst_data
 
     @property
@@ -173,7 +173,7 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
     def _get_launcher_config(
         self,
         run: DagsterRun,
-        context: Optional[Union[LaunchRunContext, ResumeRunContext]] = None,
+        context: LaunchRunContext | ResumeRunContext | None = None,
     ) -> ExecutionConfig:
         """
         Resolve the ExecutionConfig using cascading checks **in order of precedence**:
@@ -189,8 +189,8 @@ class DynamicRunLauncher(RunLauncher, ConfigurableClass):
         This function also attempts to capture the executor config from run tags
         to avoid overwriting user-provided execution tags
         """
-        launcher: Optional[SelectorConfig] = None
-        executor: Optional[SelectorConfig] = None
+        launcher: SelectorConfig | None = None
+        executor: SelectorConfig | None = None
 
         # from Run tags cfa_dagster/execution
         tag_config = ExecutionConfig.from_run_tags(run.tags)

@@ -17,7 +17,7 @@ DAGSTER_GRAPHQL_URL = f"{DAGSTER_BASE_URL}/graphql"
 
 
 def main(registry_image: str):
-    f""" ${DESCRIPTION} """
+    """Update code locations on the central Dagster server."""
     if registry_image.startswith("ghcr.io/cdcent"):
         raise ValueError("Cannot use images from private ghcr.io/cdcent repos")
 
@@ -70,7 +70,7 @@ def main(registry_image: str):
     result = response.json()
 
     if "errors" in result:
-        raise Exception(result["errors"])
+        raise RuntimeError(result["errors"])
 
     launch_run_result = result["data"]["launchRun"]
     if launch_run_result["__typename"] == "LaunchRunSuccess":

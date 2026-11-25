@@ -136,7 +136,7 @@ def _request_json(
     with urlopen(request, timeout=timeout) as response:
         result = json.load(response)
     if not isinstance(result, dict):
-        raise ValueError("ADF response is not a JSON object")
+        raise TypeError("ADF response is not a JSON object")
     return result
 
 

@@ -54,7 +54,7 @@ def main():
     result = response.json()
 
     if "errors" in result:
-        raise Exception(result["errors"])
+        raise RuntimeError(result["errors"])
 
     launch_run_result = result["data"]["launchRun"]
     if launch_run_result["__typename"] == "LaunchRunSuccess":

@@ -1,7 +1,7 @@
 import logging
 import os
 from collections.abc import Mapping
-from typing import Any, Optional
+from typing import Any
 
 import dagster._check as check
 from azure.identity import DefaultAzureCredential
@@ -40,15 +40,15 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
 
     def __init__(
         self,
-        inst_data: Optional[ConfigurableClassData] = None,
+        inst_data: ConfigurableClassData | None = None,
         container_app_job_name="cfa-dagster",
-        cpu: float = None,
-        memory: float = None,
-        image: str = None,
-        registry: str = None,
-        env_vars: list[str] = None,
-        network: str = None,
-        networks: list[str] = None,
+        cpu: float | None = None,
+        memory: float | None = None,
+        image: str | None = None,
+        registry: str | None = None,
+        env_vars: list[str] | None = None,
+        network: str | None = None,
+        networks: list[str] | None = None,
         container_kwargs=None,
         **kwargs,
     ):
@@ -110,7 +110,7 @@ class AzureContainerAppJobRunLauncher(RunLauncher, ConfigurableClass):
             docker_image = job_code_origin.repository_origin.container_image
 
         if not docker_image:
-            raise Exception(
+            raise ValueError(
                 "No docker image specified by the instance config or repository"
             )
 

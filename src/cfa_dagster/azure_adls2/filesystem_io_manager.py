@@ -1,7 +1,7 @@
 import logging
 import tempfile
 from pathlib import Path
-from typing import Any, Union, cast
+from typing import Any, cast
 
 from azure.core.exceptions import ResourceNotFoundError
 from azure.storage.filedatalake import DataLakeServiceClient
@@ -142,7 +142,7 @@ class FilesystemADLS2IOManager(UPathIOManager):
 
         super().handle_output(context, obj)
 
-    def load_input(self, context: InputContext) -> Union[Any, dict[str, Any]]:
+    def load_input(self, context: InputContext) -> Any | dict[str, Any]:
         input_metadata = context.definition_metadata
         log.debug(f"input_metadata: '{input_metadata}'")
         dynamic_graph_metadata = DynamicGraphIOManagerMetadata.from_metadata(
@@ -245,14 +245,14 @@ class FilesystemADLS2IOManager(UPathIOManager):
                     obj.rmdir()
                     context.log.debug(f"Deleted local directory: {obj}")
 
-            except Exception as e:
+            except OSError as e:
                 context.log.warning(
                     f"Failed to delete local path {obj} after upload: {e}"
                 )
 
     def load_from_path(
         self, context: InputContext, path: UPath
-    ) -> Union[ADLS2Path, Path, str]:
+    ) -> ADLS2Path | Path | str:
         """Download a directory from ADLS2 to the local filesystem.
 
         If the downstream asset's type annotation is ``str``, returns the ADLS2

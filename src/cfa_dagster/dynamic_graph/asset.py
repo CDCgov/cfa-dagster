@@ -5,20 +5,17 @@ import logging
 import sys
 import textwrap
 import warnings
+from collections.abc import Callable, Mapping
+from collections.abc import Sequence as TypeSequence
+from collections.abc import Set as AbstractSet
 from types import GeneratorType
 from typing import (
-    AbstractSet,
     Any,
-    Callable,
     Literal,
-    Mapping,
-    Optional,
     TypedDict,
-    Union,
     cast,
     get_type_hints,
 )
-from typing import Sequence as TypeSequence
 
 import dagster as dg
 from dagster._core.definitions.events import (
@@ -60,24 +57,24 @@ _INTERNAL_CONFIG_IO_MANAGER = ADLS2PickleIOManager().get_resource_definition()
 
 
 class GraphAssetKwargs(TypedDict, total=False):
-    name: Optional[str] = (None,)
-    description: Optional[str] = (None,)
+    name: str | None = (None,)
+    description: str | None = (None,)
     # ins: Optional[Mapping[str, dg.AssetIn]] = None,
-    config: Optional[Union[dg.ConfigMapping, Mapping[str, Any]]] = (None,)
-    key_prefix: Optional[CoercibleToAssetKeyPrefix] = (None,)
-    group_name: Optional[str] = (None,)
-    partitions_def: Optional[dg.PartitionsDefinition] = (None,)
-    hooks: Optional[AbstractSet[dg.HookDefinition]] = (None,)
-    metadata: Optional[RawMetadataMapping] = (None,)
-    tags: Optional[Mapping[str, str]] = (None,)
-    owners: Optional[TypeSequence[str]] = (None,)
-    automation_condition: Optional[dg.AutomationCondition] = (None,)
-    backfill_policy: Optional[dg.BackfillPolicy] = (None,)
-    resource_defs: Optional[Mapping[str, dg.ResourceDefinition]] = (None,)
-    check_specs: Optional[TypeSequence[dg.AssetCheckSpec]] = (None,)
-    code_version: Optional[str] = (None,)
-    key: Optional[CoercibleToAssetKey] = (None,)
-    kinds: Optional[AbstractSet[str]] = (None,)
+    config: dg.ConfigMapping | Mapping[str, Any] | None = (None,)
+    key_prefix: CoercibleToAssetKeyPrefix | None = (None,)
+    group_name: str | None = (None,)
+    partitions_def: dg.PartitionsDefinition | None = (None,)
+    hooks: AbstractSet[dg.HookDefinition] | None = (None,)
+    metadata: RawMetadataMapping | None = (None,)
+    tags: Mapping[str, str] | None = (None,)
+    owners: TypeSequence[str] | None = (None,)
+    automation_condition: dg.AutomationCondition | None = (None,)
+    backfill_policy: dg.BackfillPolicy | None = (None,)
+    resource_defs: Mapping[str, dg.ResourceDefinition] | None = (None,)
+    check_specs: TypeSequence[dg.AssetCheckSpec] | None = (None,)
+    code_version: str | None = (None,)
+    key: CoercibleToAssetKey | None = (None,)
+    kinds: AbstractSet[str] | None = (None,)
 
 
 def _get_resource_params(hints) -> dict[str, type]:

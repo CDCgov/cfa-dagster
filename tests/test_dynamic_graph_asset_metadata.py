@@ -29,13 +29,16 @@ class _FakeStepContext:
         self.step = _FakeStep(mapping_key)
 
 
+_DEFAULT_ASSET_KEY = dg.AssetKey(["upstream"])
+
+
 class _FakeInputContext:
     def __init__(
         self,
         *,
         definition_metadata,
         mapping_key,
-        asset_key=dg.AssetKey(["upstream"]),
+        asset_key=_DEFAULT_ASSET_KEY,
         asset_partition_keys=None,
         upstream_definition_metadata=None,
     ):

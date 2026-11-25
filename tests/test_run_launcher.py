@@ -3,7 +3,12 @@ import os
 from unittest.mock import Mock, patch
 
 import pytest
-from dagster import DagsterInvalidConfigError, DagsterRun
+from dagster import (
+    DagsterInvalidConfigError,
+    DagsterInvariantViolationError,
+    DagsterRun,
+)
+from dagster._check import CheckError
 from dagster._core.launcher.base import LaunchRunContext
 from dagster._core.workspace.context import BaseWorkspaceRequestContext
 
@@ -80,8 +85,9 @@ def test_get_launcher_config_from_run_config():
 
     # Mock the _get_location_metadata method to return empty metadata
     # Also mock the default config to avoid validation issues
-    with patch.object(launcher, "_get_location_metadata", return_value={}):
-        with patch(
+    with (
+        patch.object(launcher, "_get_location_metadata", return_value={}),
+        patch(
             "cfa_dagster.execution.run_launcher.ExecutionConfig.default",
             return_value=ExecutionConfig(
                 launcher=SelectorConfig(
@@ -91,8 +97,9 @@ def test_get_launcher_config_from_run_config():
                     class_name="in_process_executor", config={}
                 ),
             ),
-        ):
-            config = launcher._get_launcher_config(run, None)
+        ),
+    ):
+        config = launcher._get_launcher_config(run, None)
 
     assert config.launcher.class_name == "DefaultRunLauncher"
     assert config.executor is None
@@ -116,8 +123,9 @@ def test_get_launcher_config_from_run_tags():
 
     # Mock the _get_location_metadata method to return empty metadata
     # Also mock the default config to avoid validation issues
-    with patch.object(launcher, "_get_location_metadata", return_value={}):
-        with patch(
+    with (
+        patch.object(launcher, "_get_location_metadata", return_value={}),
+        patch(
             "cfa_dagster.execution.run_launcher.ExecutionConfig.default",
             return_value=ExecutionConfig(
                 launcher=SelectorConfig(
@@ -127,8 +135,9 @@ def test_get_launcher_config_from_run_tags():
                     class_name="in_process_executor", config={}
                 ),
             ),
-        ):
-            config = launcher._get_launcher_config(run, None)
+        ),
+    ):
+        config = launcher._get_launcher_config(run, None)
 
     assert config.launcher.class_name == "DefaultRunLauncher"
     assert config.executor.class_name == "in_process_executor"
@@ -209,7 +218,7 @@ def test_create_launcher_default_dev():
                 created_launcher = launcher._create_launcher(execution_config)
 
                 assert created_launcher == mock_launcher
-        except Exception:
+        except (AttributeError, CheckError, DagsterInvariantViolationError):
             # Skip this test if we can't properly mock the dependencies
             pytest.skip("Skipping test due to complex launcher dependencies")
     finally:
@@ -218,8 +227,9 @@ def test_create_launcher_default_dev():
             del os.environ["DAGSTER_IS_DEV_CLI"]
 
 
-def test_create_launcher_production_with_azure():
+def test_create_launcher_production_with_azure(monkeypatch):
     """Test creating launcher with Azure Container App in production"""
+    monkeypatch.setenv("DAGSTER_USER", "test-user")
     # Unset DAGSTER_IS_DEV_CLI to simulate production environment
     if "DAGSTER_IS_DEV_CLI" in os.environ:
         del os.environ["DAGSTER_IS_DEV_CLI"]
@@ -251,23 +261,25 @@ def test_create_launcher_production_with_azure():
             created_launcher = launcher._create_launcher(execution_config)
 
             assert created_launcher == mock_launcher
-    except Exception:
+    except (AttributeError, CheckError, DagsterInvariantViolationError):
         # Skip this test if we can't properly mock the dependencies
         pytest.skip("Skipping test due to complex launcher dependencies")
 
 
 def test_create_launcher_docker_in_production_raises_error():
     """Test that using DockerRunLauncher in production raises an error"""
-    with patch.dict(os.environ, {"CFA_DAGSTER_ENV": "prod"}, clear=True):
-        with pytest.raises(
+    with (
+        patch.dict(os.environ, {"CFA_DAGSTER_ENV": "prod"}, clear=True),
+        pytest.raises(
             DagsterInvalidConfigError, match="Invalid execution config"
-        ):
-            ExecutionConfig(
-                SelectorConfig(
-                    class_name="DockerRunLauncher",
-                    config={"image": "test-image"},
-                ),
-            ).validate()
+        ),
+    ):
+        ExecutionConfig(
+            SelectorConfig(
+                class_name="DockerRunLauncher",
+                config={"image": "test-image"},
+            ),
+        ).validate()
 
 
 def test_create_launcher_invalid_class_raises_error():
@@ -290,7 +302,7 @@ def test_create_launcher_invalid_class_raises_error():
             RuntimeError, match="Invalid launcher class specified"
         ):
             launcher._create_launcher(execution_config)
-    except Exception:
+    except (AttributeError, CheckError, DagsterInvariantViolationError):
         # Skip this test if we can't properly mock the dependencies
         pytest.skip("Skipping test due to complex launcher dependencies")
 
@@ -336,24 +348,24 @@ def test_launch_run_integration(mock_context):
         execution_config = ExecutionConfig(
             launcher=SelectorConfig(class_name="DefaultRunLauncher", config={})
         )
-        with patch.object(
-            launcher, "_get_launcher_config", return_value=execution_config
+        with (
+            patch.object(
+                launcher, "_get_launcher_config", return_value=execution_config
+            ),
+            patch.object(launcher, "_create_launcher") as mock_create_launcher,
         ):
-            with patch.object(
-                launcher, "_create_launcher"
-            ) as mock_create_launcher:
-                mock_launcher = Mock()
-                mock_create_launcher.return_value = mock_launcher
+            mock_launcher = Mock()
+            mock_create_launcher.return_value = mock_launcher
 
-                # Call launch_run
-                launcher.launch_run(mock_context)
+            # Call launch_run
+            launcher.launch_run(mock_context)
 
-                # Verify that _create_launcher was called
-                mock_create_launcher.assert_called_once_with(execution_config)
+            # Verify that _create_launcher was called
+            mock_create_launcher.assert_called_once_with(execution_config)
 
-                # Verify that the mock launcher's launch_run was called
-                mock_launcher.launch_run.assert_called_once_with(mock_context)
-    except Exception:
+            # Verify that the mock launcher's launch_run was called
+            mock_launcher.launch_run.assert_called_once_with(mock_context)
+    except (AttributeError, CheckError, DagsterInvariantViolationError):
         # Skip this test if we can't properly mock the dependencies
         pytest.skip("Skipping test due to complex launcher dependencies")
 
@@ -393,29 +405,30 @@ def test_cascading_config_precedence():
     # Mock the _get_location_metadata method to return execution config in metadata
     # including both new and legacy metadata
     # Also mock the default config to avoid validation issues
-    with patch.object(
-        launcher,
-        "_get_location_metadata",
-        return_value={
-            "cfa_dagster/execution": Mock(
-                value={
-                    "launcher": {
-                        "AzureContainerAppJobRunLauncher": {
-                            "container_app_job_name": "test-job"
-                        }
-                    },
-                    "executor": {"in_process_executor": {}},
-                }
-            ),
-            "cfa_dagster/launcher": Mock(
-                value={
-                    "class": "DockerRunLauncher",
-                    "config": {"image": "legacy-metadata-image"},
-                }
-            ),
-        },
-    ):
-        with patch(
+    with (
+        patch.object(
+            launcher,
+            "_get_location_metadata",
+            return_value={
+                "cfa_dagster/execution": Mock(
+                    value={
+                        "launcher": {
+                            "AzureContainerAppJobRunLauncher": {
+                                "container_app_job_name": "test-job"
+                            }
+                        },
+                        "executor": {"in_process_executor": {}},
+                    }
+                ),
+                "cfa_dagster/launcher": Mock(
+                    value={
+                        "class": "DockerRunLauncher",
+                        "config": {"image": "legacy-metadata-image"},
+                    }
+                ),
+            },
+        ),
+        patch(
             "cfa_dagster.execution.run_launcher.ExecutionConfig.default",
             return_value=ExecutionConfig(
                 launcher=SelectorConfig(
@@ -425,8 +438,9 @@ def test_cascading_config_precedence():
                     class_name="in_process_executor", config={}
                 ),
             ),
-        ):
-            config = launcher._get_launcher_config(run, context)
+        ),
+    ):
+        config = launcher._get_launcher_config(run, context)
 
     # Run config should take precedence (highest priority)
     assert config.launcher.class_name == "DefaultRunLauncher"
@@ -458,19 +472,20 @@ def test_hierarchy_precedence_level_2_tags():
 
     # Mock the _get_location_metadata method to return execution config in metadata
     # Also mock the default config to avoid validation issues
-    with patch.object(
-        launcher,
-        "_get_location_metadata",
-        return_value={
-            "cfa_dagster/execution": Mock(
-                value={
-                    "launcher": {"DefaultRunLauncher": {}},
-                    "executor": {"in_process_executor": {}},
-                }
-            )
-        },
-    ):
-        with patch(
+    with (
+        patch.object(
+            launcher,
+            "_get_location_metadata",
+            return_value={
+                "cfa_dagster/execution": Mock(
+                    value={
+                        "launcher": {"DefaultRunLauncher": {}},
+                        "executor": {"in_process_executor": {}},
+                    }
+                )
+            },
+        ),
+        patch(
             "cfa_dagster.execution.run_launcher.ExecutionConfig.default",
             return_value=ExecutionConfig(
                 launcher=SelectorConfig(
@@ -480,8 +495,9 @@ def test_hierarchy_precedence_level_2_tags():
                     class_name="in_process_executor", config={}
                 ),
             ),
-        ):
-            config = launcher._get_launcher_config(run, context)
+        ),
+    ):
+        config = launcher._get_launcher_config(run, context)
 
     # Tags should take precedence when run config is absent
     assert config.launcher.class_name == "DefaultRunLauncher"
@@ -669,19 +685,20 @@ def test_partial_config_filling():
 
     # Mock the _get_location_metadata method to return execution config in metadata
     # Also mock the default config to avoid validation issues
-    with patch.object(
-        launcher,
-        "_get_location_metadata",
-        return_value={
-            "cfa_dagster/execution": Mock(
-                value={
-                    "launcher": {"DefaultRunLauncher": {}},
-                    "executor": {"in_process_executor": {}},
-                }
-            )
-        },
-    ):
-        with patch(
+    with (
+        patch.object(
+            launcher,
+            "_get_location_metadata",
+            return_value={
+                "cfa_dagster/execution": Mock(
+                    value={
+                        "launcher": {"DefaultRunLauncher": {}},
+                        "executor": {"in_process_executor": {}},
+                    }
+                )
+            },
+        ),
+        patch(
             "cfa_dagster.execution.run_launcher.ExecutionConfig.default",
             return_value=ExecutionConfig(
                 launcher=SelectorConfig(
@@ -691,8 +708,9 @@ def test_partial_config_filling():
                     class_name="in_process_executor", config={}
                 ),
             ),
-        ):
-            config = launcher._get_launcher_config(run, context)
+        ),
+    ):
+        config = launcher._get_launcher_config(run, context)
 
     # Should use launcher from tags and leave executor unset.
     assert config.launcher.class_name == "DefaultRunLauncher"

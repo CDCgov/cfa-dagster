@@ -1,6 +1,5 @@
 import hashlib
 import logging
-from typing import Optional
 
 from dagster import (
     DagsterInstance,
@@ -20,7 +19,7 @@ class CFAQueuedRunCoordinator(QueuedRunCoordinator):
         self,
         run: DagsterRun,
         instance: DagsterInstance,
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """
         Returns a 'cfa_dagster/target' tag identifying the assets
         and partitions for the run. Used with tag_concurrency_limits to prevent

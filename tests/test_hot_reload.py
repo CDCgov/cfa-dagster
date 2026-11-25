@@ -1,9 +1,11 @@
+from typing import ClassVar
+
 from cfa_dagster import hot_reload
 from cfa_dagster.hot_reload import HotReloader, resolve_target_paths
 
 
 class FakeTimer:
-    instances = []
+    instances: ClassVar[list] = []
 
     def __init__(self, interval, function):
         self.interval = interval

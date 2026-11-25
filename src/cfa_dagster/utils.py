@@ -134,15 +134,11 @@ def collect_definitions(namespace):
     sensors = []
 
     for obj in list(namespace.values()):
-        if isinstance(obj, dg.AssetsDefinition) or isinstance(
-            obj, dg.AssetSpec
-        ):
+        if isinstance(obj, (dg.AssetsDefinition, dg.AssetSpec)):
             assets.append(obj)
         if isinstance(obj, dg.AssetChecksDefinition):
             asset_checks.append(obj)
-        elif isinstance(obj, dg.JobDefinition) or isinstance(
-            obj, UnresolvedAssetJobDefinition
-        ):
+        elif isinstance(obj, (dg.JobDefinition, UnresolvedAssetJobDefinition)):
             jobs.append(obj)
         elif isinstance(obj, dg.ScheduleDefinition):
             schedules.append(obj)
@@ -231,13 +227,17 @@ def update_code_location(
 def launch_asset_backfill(
     asset_keys: list[str],
     partition_keys: list[str],
-    tags: dict = {},
-    run_config: dg.RunConfig = dg.RunConfig(),
+    tags: dict | None = None,
+    run_config: dg.RunConfig | None = None,
 ):
-    tags["programmed_backfill"] = "true"
     """
     Function to launch an asset backfill via the GraphQL client
     """
+    if tags is None:
+        tags = {}
+    if run_config is None:
+        run_config = dg.RunConfig()
+    tags["programmed_backfill"] = "true"
     client = get_graphql_client()
 
     query = """
